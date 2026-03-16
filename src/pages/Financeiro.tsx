@@ -190,7 +190,49 @@ export default function Financeiro() {
         </div>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Exportar Relatório Financeiro</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo de Exportação</Label>
+              <Select value={exportMode} onValueChange={(v) => setExportMode(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os registros</SelectItem>
+                  <SelectItem value="month">Por mês</SelectItem>
+                  <SelectItem value="period">Por período (início e fim)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {exportMode === "month" && (
+              <div className="space-y-2">
+                <Label>Mês</Label>
+                <Input type="month" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)} />
+              </div>
+            )}
+            {exportMode === "period" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data Início</Label>
+                  <Input type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Fim</Label>
+                  <Input type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+            <Button onClick={handleExport}>
+              <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editItem ? "Editar Registro Financeiro" : "Novo Registro Financeiro"}</DialogTitle>
