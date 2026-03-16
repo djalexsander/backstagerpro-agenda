@@ -205,7 +205,7 @@ export default function Empresas() {
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome_empresa}>
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome_empresa || (!editItem && (!form.email || form.senha.length < 6))}>
               {saveMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
