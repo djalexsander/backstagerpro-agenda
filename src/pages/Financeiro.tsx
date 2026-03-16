@@ -41,12 +41,12 @@ export default function Financeiro() {
   const { data: financials = [] } = useQuery({
     queryKey: ["financials", empresaId],
     queryFn: async () => {
-      let query = supabase.from("financials").select("*, events(name, artist, date)").order("created_at", { ascending: false });
-      if (empresaId) query = query.eq("empresa_id", empresaId);
-      const { data, error } = await query;
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("financials").select("*, events(name, artist, date)").order("created_at", { ascending: false }).eq("empresa_id", empresaId);
       if (error) throw error;
       return data;
     },
+    enabled: !!empresaId,
   });
 
   const { data: events = [] } = useQuery({
