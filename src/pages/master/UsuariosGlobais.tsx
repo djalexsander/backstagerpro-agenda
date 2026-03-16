@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { Pencil, Shield, Users, Globe } from "lucide-react";
+import { Pencil, Shield, Users, Globe, Trash2 } from "lucide-react";
 
 const roleLabels: Record<string, string> = {
   master_admin: "Master Admin",
@@ -26,7 +28,9 @@ const roleIcons: Record<string, any> = {
 export default function UsuariosGlobais() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [editUser, setEditUser] = useState<any>(null);
+  const [deleteUser, setDeleteUser] = useState<any>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editEmpresaId, setEditEmpresaId] = useState("");
@@ -70,6 +74,22 @@ export default function UsuariosGlobais() {
       setEditUser(null);
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["master-users"] });
+      toast({ title: "Usuário excluído com sucesso!" });
+      setDeleteUser(null);
+    },
+    onError: (err: any) => toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" }),
   });
 
   const openEdit = (u: any) => {
@@ -122,6 +142,27 @@ export default function UsuariosGlobais() {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={!!deleteUser} onOpenChange={(o) => !o && setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deleteUser?.full_name}</strong>? Esta ação não pode ser desfeita. O usuário será removido completamente do sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.user_id)}
+              disabled={deleteUserMutation.isPending}
+            >
+              {deleteUserMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
@@ -146,9 +187,16 @@ export default function UsuariosGlobais() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
-                      <Pencil className="h-4 w-4 mr-1" /> Editar
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                        <Pencil className="h-4 w-4 mr-1" /> Editar
+                      </Button>
+                      {u.user_id !== user?.id && (
+                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteUser(u)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

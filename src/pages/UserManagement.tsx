@@ -8,16 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, User, Plus, Pencil } from "lucide-react";
+import { Shield, User, Plus, Pencil, Trash2 } from "lucide-react";
 
 export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId, isMasterAdmin } = useAuth();
+  const { empresaId, isMasterAdmin, user } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
+  const [deleteUser, setDeleteUser] = useState<any>(null);
 
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -81,6 +83,22 @@ export default function UserManagement() {
       setNewEmail(""); setNewPassword(""); setNewName(""); setNewRole("usuario");
     },
     onError: (err: any) => toast({ title: "Erro ao criar usuário", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-management"] });
+      toast({ title: "Usuário excluído com sucesso!" });
+      setDeleteUser(null);
+    },
+    onError: (err: any) => toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" }),
   });
 
   const openEdit = (u: any) => {
@@ -172,6 +190,27 @@ export default function UserManagement() {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={!!deleteUser} onOpenChange={(o) => !o && setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deleteUser?.full_name}</strong>? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.user_id)}
+              disabled={deleteUserMutation.isPending}
+            >
+              {deleteUserMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
@@ -192,9 +231,16 @@ export default function UserManagement() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
-                    <Pencil className="h-4 w-4 mr-1" /> Editar
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                      <Pencil className="h-4 w-4 mr-1" /> Editar
+                    </Button>
+                    {u.user_id !== user?.id && (
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteUser(u)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
