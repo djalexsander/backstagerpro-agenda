@@ -91,7 +91,7 @@ export default function Empresas() {
       toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
-      resetForm();
+      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
