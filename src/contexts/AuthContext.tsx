@@ -1,19 +1,21 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 
-type AppRole = Database["public"]["Enums"]["app_role"];
+type AppRole = "master_admin" | "admin_empresa" | "usuario";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  profile: { full_name: string; avatar_url: string | null } | null;
+  profile: { full_name: string; avatar_url: string | null; empresa_id: string | null } | null;
   role: AppRole | null;
-  isAdmin: boolean;
+  empresaId: string | null;
+  isMasterAdmin: boolean;
+  isAdminEmpresa: boolean;
+  isUsuario: boolean;
+  isAdmin: boolean; // backwards compat: master_admin or admin_empresa
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -22,17 +24,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<{ full_name: string; avatar_url: string | null } | null>(null);
+  const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
     const [profileRes, roleRes] = await Promise.all([
-      supabase.from("profiles").select("full_name, avatar_url").eq("user_id", userId).single(),
+      supabase.from("profiles").select("full_name, avatar_url, empresa_id").eq("user_id", userId).single(),
       supabase.from("user_roles").select("role").eq("user_id", userId).single(),
     ]);
-    if (profileRes.data) setProfile(profileRes.data);
-    if (roleRes.data) setRole(roleRes.data.role);
+    if (profileRes.data) setProfile(profileRes.data as any);
+    if (roleRes.data) setRole(roleRes.data.role as AppRole);
   };
 
   useEffect(() => {
@@ -67,21 +69,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin },
-    });
-    return { error: error as Error | null };
-  };
-
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
+  const isMasterAdmin = role === "master_admin";
+  const isAdminEmpresa = role === "admin_empresa";
+  const isUsuario = role === "usuario";
+  const empresaId = profile?.empresa_id ?? null;
+
   return (
-    <AuthContext.Provider value={{ user, session, profile, role, isAdmin: role === "admin", loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{
+      user, session, profile, role, empresaId,
+      isMasterAdmin, isAdminEmpresa, isUsuario,
+      isAdmin: isMasterAdmin || isAdminEmpresa,
+      loading, signIn, signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );
