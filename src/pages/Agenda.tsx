@@ -29,6 +29,12 @@ export default function Agenda() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
+  const [exportMonthVal, setExportMonthVal] = useState(format(new Date(), "MM"));
+  const [exportYearVal, setExportYearVal] = useState(format(new Date(), "yyyy"));
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
 
   const { data: events = [] } = useQuery({
     queryKey: ["events", empresaId],
