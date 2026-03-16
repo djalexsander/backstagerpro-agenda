@@ -63,7 +63,7 @@ export default function Agenda() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Agenda</h1>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => exportAgendaPDF(filtered)}>
+          <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
             <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
           </Button>
           {isAdmin && (
@@ -73,6 +73,83 @@ export default function Agenda() {
           )}
         </div>
       </div>
+
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Exportar Agenda em PDF</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo de Exportação</Label>
+              <Select value={exportMode} onValueChange={(v) => setExportMode(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os eventos</SelectItem>
+                  <SelectItem value="month">Por mês</SelectItem>
+                  <SelectItem value="period">Por período (início e fim)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {exportMode === "month" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Mês</Label>
+                  <Select value={exportMonthVal} onValueChange={setExportMonthVal}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"].map((m, i) => (
+                        <SelectItem key={i} value={String(i + 1).padStart(2, "0")}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ano</Label>
+                  <Select value={exportYearVal} onValueChange={setExportYearVal}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 2 + i)).map((y) => (
+                        <SelectItem key={y} value={y}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            {exportMode === "period" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data Início</Label>
+                  <Input type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Fim</Label>
+                  <Input type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+            <Button onClick={() => {
+              let toExport = filtered;
+              if (exportMode === "month") {
+                const ms = startOfMonth(new Date(parseInt(exportYearVal), parseInt(exportMonthVal) - 1));
+                const me = endOfMonth(ms);
+                toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: ms, end: me }));
+              } else if (exportMode === "period" && exportStart && exportEnd) {
+                toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: parseISO(exportStart), end: parseISO(exportEnd) }));
+              }
+              if (toExport.length === 0) {
+                return;
+              }
+              exportAgendaPDF(toExport);
+              setExportOpen(false);
+            }}>
+              <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
         <div className="rounded-lg border bg-card p-2">
