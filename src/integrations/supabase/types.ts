@@ -21,8 +21,10 @@ export type Database = {
           id: string
           nome_empresa: string
           plano: string | null
+          plano_bloqueado: boolean
           status: string | null
           telefone: string | null
+          trial_expires_at: string | null
         }
         Insert: {
           created_at?: string
@@ -30,8 +32,10 @@ export type Database = {
           id?: string
           nome_empresa: string
           plano?: string | null
+          plano_bloqueado?: boolean
           status?: string | null
           telefone?: string | null
+          trial_expires_at?: string | null
         }
         Update: {
           created_at?: string
@@ -39,8 +43,10 @@ export type Database = {
           id?: string
           nome_empresa?: string
           plano?: string | null
+          plano_bloqueado?: boolean
           status?: string | null
           telefone?: string | null
+          trial_expires_at?: string | null
         }
         Relationships: []
       }
@@ -214,6 +220,7 @@ export type Database = {
           max_eventos: number | null
           max_usuarios: number | null
           nome: string
+          trial_days: number
           updated_at: string
           valor: number
         }
@@ -225,6 +232,7 @@ export type Database = {
           max_eventos?: number | null
           max_usuarios?: number | null
           nome: string
+          trial_days?: number
           updated_at?: string
           valor?: number
         }
@@ -236,6 +244,7 @@ export type Database = {
           max_eventos?: number | null
           max_usuarios?: number | null
           nome?: string
+          trial_days?: number
           updated_at?: string
           valor?: number
         }

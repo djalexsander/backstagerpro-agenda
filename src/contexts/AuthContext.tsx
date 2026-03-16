@@ -10,10 +10,11 @@ interface AuthContextType {
   profile: { full_name: string; avatar_url: string | null; empresa_id: string | null } | null;
   role: AppRole | null;
   empresaId: string | null;
+  empresaBloqueada: boolean;
   isMasterAdmin: boolean;
   isAdminEmpresa: boolean;
   isUsuario: boolean;
-  isAdmin: boolean; // backwards compat: master_admin or admin_empresa
+  isAdmin: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [empresaBloqueada, setEmpresaBloqueada] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
@@ -33,7 +35,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabase.from("profiles").select("full_name, avatar_url, empresa_id").eq("user_id", userId).single(),
       supabase.from("user_roles").select("role").eq("user_id", userId).single(),
     ]);
-    if (profileRes.data) setProfile(profileRes.data as any);
+    if (profileRes.data) {
+      setProfile(profileRes.data as any);
+      // Check if empresa is blocked (trial expired)
+      if (profileRes.data.empresa_id) {
+        const { data: empresa } = await supabase
+          .from("empresas")
+          .select("plano_bloqueado, trial_expires_at")
+          .eq("id", profileRes.data.empresa_id)
+          .single();
+        if (empresa) {
+          const isExpired = empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date();
+          setEmpresaBloqueada(empresa.plano_bloqueado || isExpired);
+        } else {
+          setEmpresaBloqueada(false);
+        }
+      } else {
+        setEmpresaBloqueada(false);
+      }
+    }
     if (roleRes.data) setRole(roleRes.data.role as AppRole);
   };
 
@@ -47,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setProfile(null);
           setRole(null);
+          setEmpresaBloqueada(false);
         }
         setLoading(false);
       }
@@ -81,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, session, profile, role, empresaId,
+      empresaBloqueada: isMasterAdmin ? false : empresaBloqueada,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
       loading, signIn, signOut,
