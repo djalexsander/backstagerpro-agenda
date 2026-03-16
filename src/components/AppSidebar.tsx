@@ -1,34 +1,33 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarFooter,
-  useSidebar,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
-  const { isAdmin, profile, signOut } = useAuth();
+  const { isMasterAdmin, isAdminEmpresa, profile, signOut } = useAuth();
 
-  const items = [
+  const companyItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "Agenda", url: "/agenda", icon: Calendar },
-    ...(isAdmin ? [
+    ...(isAdminEmpresa || isMasterAdmin ? [
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
       { title: "Usuários", url: "/usuarios", icon: Users },
+      { title: "Configurações", url: "/configuracoes", icon: Settings },
     ] : []),
+  ];
+
+  const masterItems = [
+    { title: "Painel Master", url: "/master", icon: Globe },
+    { title: "Empresas", url: "/master/empresas", icon: Building2 },
+    { title: "Usuários Globais", url: "/master/usuarios", icon: Users },
+    { title: "Configurações", url: "/master/configuracoes", icon: Settings },
+    { title: "Logs do Sistema", url: "/master/logs", icon: ScrollText },
   ];
 
   return (
@@ -41,9 +40,29 @@ export function AppSidebar() {
               {!collapsed && <span className="font-bold text-base tracking-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>Backstage Pro</span>}
             </div>
           </SidebarGroupLabel>
-          <SidebarGroupContent className="mt-4">
+
+          {isMasterAdmin && (
+            <SidebarGroupContent className="mt-4">
+              {!collapsed && <p className="text-xs text-sidebar-foreground/40 px-3 mb-1 uppercase tracking-wider">Master</p>}
+              <SidebarMenu>
+                {masterItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink to={item.url} end={item.url === "/master"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                        <item.icon className="mr-2 h-4 w-4" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          )}
+
+          <SidebarGroupContent className={isMasterAdmin ? "mt-4" : "mt-4"}>
+            {!collapsed && isMasterAdmin && <p className="text-xs text-sidebar-foreground/40 px-3 mb-1 uppercase tracking-wider">Empresa</p>}
             <SidebarMenu>
-              {items.map((item) => (
+              {companyItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end={item.url === "/dashboard"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">

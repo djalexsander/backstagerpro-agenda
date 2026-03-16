@@ -22,24 +22,24 @@ const statusColors: Record<string, string> = {
 
 export default function Agenda() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, empresaId } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const { data: events = [] } = useQuery({
-    queryKey: ["events"],
+    queryKey: ["events", empresaId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("events").select("*").order("date", { ascending: true });
+      let query = supabase.from("events").select("*").order("date", { ascending: true });
+      if (empresaId) query = query.eq("empresa_id", empresaId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
   });
 
   const cities = [...new Set(events.map((e) => e.city))].sort();
-
-  // Dates that have events (for calendar highlighting)
   const eventDates = events.map((e) => parseISO(e.date));
 
   const filtered = events.filter((e) => {
@@ -67,31 +67,19 @@ export default function Agenda() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
-        {/* Calendar sidebar */}
         <div className="rounded-lg border bg-card p-2">
           <div className="flex items-center gap-2 px-2 pb-2 border-b border-border mb-2">
             <CalendarDays className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold">Calendário</span>
             {selectedDate && (
-              <Button variant="ghost" size="sm" className="ml-auto text-xs h-6 px-2" onClick={() => setSelectedDate(undefined)}>
-                Limpar
-              </Button>
+              <Button variant="ghost" size="sm" className="ml-auto text-xs h-6 px-2" onClick={() => setSelectedDate(undefined)}>Limpar</Button>
             )}
           </div>
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={setSelectedDate}
-            locale={ptBR}
-            modifiers={{ hasEvent: eventDates }}
-            modifiersClassNames={{ hasEvent: "bg-primary/20 text-primary font-bold" }}
-            className="w-full"
-          />
+          <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ptBR}
+            modifiers={{ hasEvent: eventDates }} modifiersClassNames={{ hasEvent: "bg-primary/20 text-primary font-bold" }} className="w-full" />
         </div>
 
-        {/* Table section */}
         <div className="space-y-4">
-          {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -115,7 +103,6 @@ export default function Agenda() {
             </Select>
           </div>
 
-          {/* Table */}
           <div className="rounded-lg border bg-card">
             <Table>
               <TableHeader>
@@ -130,9 +117,7 @@ export default function Agenda() {
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum evento encontrado.</TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum evento encontrado.</TableCell></TableRow>
                 ) : (
                   filtered.map((event) => (
                     <TableRow key={event.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate(`/evento/${event.id}`)}>

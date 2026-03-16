@@ -13,6 +13,12 @@ import EventDetail from "@/pages/EventDetail";
 import EventForm from "@/pages/EventForm";
 import Financeiro from "@/pages/Financeiro";
 import UserManagement from "@/pages/UserManagement";
+import Configuracoes from "@/pages/Configuracoes";
+import PainelMaster from "@/pages/master/PainelMaster";
+import Empresas from "@/pages/master/Empresas";
+import UsuariosGlobais from "@/pages/master/UsuariosGlobais";
+import ConfiguracoesSistema from "@/pages/master/ConfiguracoesSistema";
+import LogsSistema from "@/pages/master/LogsSistema";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +41,13 @@ const App = () => (
               <Route path="/evento/novo" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
               <Route path="/financeiro" element={<ProtectedRoute adminOnly><Financeiro /></ProtectedRoute>} />
               <Route path="/usuarios" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
+              <Route path="/configuracoes" element={<ProtectedRoute adminOnly><Configuracoes /></ProtectedRoute>} />
+              {/* Master Admin Routes */}
+              <Route path="/master" element={<ProtectedRoute masterOnly><PainelMaster /></ProtectedRoute>} />
+              <Route path="/master/empresas" element={<ProtectedRoute masterOnly><Empresas /></ProtectedRoute>} />
+              <Route path="/master/usuarios" element={<ProtectedRoute masterOnly><UsuariosGlobais /></ProtectedRoute>} />
+              <Route path="/master/configuracoes" element={<ProtectedRoute masterOnly><ConfiguracoesSistema /></ProtectedRoute>} />
+              <Route path="/master/logs" element={<ProtectedRoute masterOnly><LogsSistema /></ProtectedRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
