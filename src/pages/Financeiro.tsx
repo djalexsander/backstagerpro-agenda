@@ -206,9 +206,29 @@ export default function Financeiro() {
               </Select>
             </div>
             {exportMode === "month" && (
-              <div className="space-y-2">
-                <Label>Mês</Label>
-                <Input type="month" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Mês</Label>
+                  <Select value={exportMonth.split("-")[1] || "01"} onValueChange={(v) => setExportMonth((prev) => `${prev.split("-")[0]}-${v}`)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"].map((m, i) => (
+                        <SelectItem key={i} value={String(i + 1).padStart(2, "0")}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ano</Label>
+                  <Select value={exportMonth.split("-")[0] || "2026"} onValueChange={(v) => setExportMonth((prev) => `${v}-${prev.split("-")[1]}`)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 2 + i)).map((y) => (
+                        <SelectItem key={y} value={y}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
             {exportMode === "period" && (
