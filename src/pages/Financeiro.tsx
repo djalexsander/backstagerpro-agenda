@@ -135,14 +135,53 @@ export default function Financeiro() {
 
   const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0);
 
+  const getFilteredForExport = () => {
+    if (exportMode === "all") return financials;
+    if (exportMode === "month" && exportMonth) {
+      const [y, m] = exportMonth.split("-").map(Number);
+      const monthStart = startOfMonth(new Date(y, m - 1));
+      const monthEnd = endOfMonth(new Date(y, m - 1));
+      return financials.filter((f) => {
+        const eventDate = (f as any).events?.date;
+        if (!eventDate) return false;
+        return isWithinInterval(parseISO(eventDate), { start: monthStart, end: monthEnd });
+      });
+    }
+    if (exportMode === "period" && exportStart && exportEnd) {
+      return financials.filter((f) => {
+        const eventDate = (f as any).events?.date;
+        if (!eventDate) return false;
+        return isWithinInterval(parseISO(eventDate), { start: parseISO(exportStart), end: parseISO(exportEnd) });
+      });
+    }
+    return financials;
+  };
+
+  const handleExport = () => {
+    const filtered = getFilteredForExport();
+    if (filtered.length === 0) {
+      toast({ title: "Nenhum registro encontrado para o período selecionado.", variant: "destructive" });
+      return;
+    }
+    let title = "Consolidado";
+    if (exportMode === "month" && exportMonth) {
+      const [y, m] = exportMonth.split("-");
+      title = `Mês ${m}/${y}`;
+    } else if (exportMode === "period" && exportStart && exportEnd) {
+      title = `${exportStart.split("-").reverse().join("/")} a ${exportEnd.split("-").reverse().join("/")}`;
+    }
+    exportFinancialTotalPDF(filtered, title);
+    setExportOpen(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Financeiro</h1>
         <div className="flex gap-2">
           {financials.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => exportFinancialTotalPDF(financials)}>
-              <FileDown className="h-4 w-4 mr-1" /> Exportar Total
+            <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
+              <FileDown className="h-4 w-4 mr-1" /> Exportar
             </Button>
           )}
           <Button size="sm" onClick={openAdd}>
