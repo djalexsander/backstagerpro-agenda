@@ -40,7 +40,7 @@ export default function Agenda() {
   });
 
   const cities = [...new Set(events.map((e) => e.city))].sort();
-  const eventDates = events.map((e) => parseISO(e.date));
+  const eventDates = events.filter((e) => e.date).map((e) => parseISO(e.date));
 
   const filtered = events.filter((e) => {
     const matchesSearch = search === "" || e.name.toLowerCase().includes(search.toLowerCase()) || e.artist.toLowerCase().includes(search.toLowerCase());
