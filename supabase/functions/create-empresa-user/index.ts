@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
       throw new Error("Email, senha e empresa são obrigatórios");
     }
 
-    // Create auth user with metadata so the trigger creates profile + role
+    // Try to create auth user; if already exists, link to empresa
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -48,7 +48,33 @@ Deno.serve(async (req) => {
       },
     });
 
-    if (createError) throw createError;
+    if (createError) {
+      // If user already exists, find them and link to the new empresa
+      if (createError.message?.includes("already been registered")) {
+        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
+        if (listErr) throw listErr;
+        const existingUser = users.find((u: any) => u.email === email);
+        if (!existingUser) throw new Error("Usuário não encontrado");
+
+        // Update profile to link to new empresa
+        const { error: profileErr } = await supabaseAdmin
+          .from("profiles")
+          .update({ empresa_id, full_name: full_name || email })
+          .eq("user_id", existingUser.id);
+        if (profileErr) throw profileErr;
+
+        // Upsert role
+        const { error: roleErr } = await supabaseAdmin
+          .from("user_roles")
+          .upsert({ user_id: existingUser.id, role: role || "usuario" }, { onConflict: "user_id,role" });
+        if (roleErr) throw roleErr;
+
+        return new Response(JSON.stringify({ user: existingUser, linked: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw createError;
+    }
 
     return new Response(JSON.stringify({ user: newUser.user }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
