@@ -104,10 +104,10 @@ export default function UsuariosGlobais() {
             </div>
             <div className="space-y-2">
               <Label>Empresa</Label>
-              <Select value={editEmpresaId} onValueChange={setEditEmpresaId}>
+              <Select value={editEmpresaId || "none"} onValueChange={(v) => setEditEmpresaId(v === "none" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="Sem empresa" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sem empresa</SelectItem>
+                  <SelectItem value="none">Sem empresa</SelectItem>
                   {empresas.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.nome_empresa}</SelectItem>)}
                 </SelectContent>
               </Select>
