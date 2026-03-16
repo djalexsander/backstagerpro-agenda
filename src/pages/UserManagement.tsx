@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,41 +15,40 @@ import { Shield, User, Plus, Pencil } from "lucide-react";
 export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { empresaId, isMasterAdmin } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
 
-  // Add user form
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState<string>("user");
+  const [newRole, setNewRole] = useState<string>("usuario");
 
-  // Edit form
   const [editName, setEditName] = useState("");
-  const [editRole, setEditRole] = useState<string>("user");
+  const [editRole, setEditRole] = useState<string>("usuario");
 
   const { data: users = [] } = useQuery({
-    queryKey: ["users-management"],
+    queryKey: ["users-management", empresaId],
     queryFn: async () => {
-      const { data: profiles, error: pErr } = await supabase.from("profiles").select("*");
+      let profileQuery = supabase.from("profiles").select("*");
+      if (empresaId && !isMasterAdmin) profileQuery = profileQuery.eq("empresa_id", empresaId);
+      const { data: profiles, error: pErr } = await profileQuery;
       if (pErr) throw pErr;
       const { data: roles, error: rErr } = await supabase.from("user_roles").select("*");
       if (rErr) throw rErr;
-      return profiles.map((p) => ({
+      return profiles.map((p: any) => ({
         ...p,
-        role: roles.find((r) => r.user_id === p.user_id)?.role || "user",
-        roleId: roles.find((r) => r.user_id === p.user_id)?.id,
+        role: roles.find((r: any) => r.user_id === p.user_id)?.role || "usuario",
+        roleId: roles.find((r: any) => r.user_id === p.user_id)?.id,
       }));
     },
   });
 
   const updateRole = useMutation({
     mutationFn: async ({ roleId, newRole, userId, newName }: { roleId: string; newRole: string; userId: string; newName: string }) => {
-      const [roleRes, profileRes] = await Promise.all([
-        supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId),
-        supabase.from("profiles").update({ full_name: newName }).eq("user_id", userId),
-      ]);
+      const roleRes = await supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId);
       if (roleRes.error) throw roleRes.error;
+      const profileRes = await supabase.from("profiles").update({ full_name: newName } as any).eq("user_id", userId);
       if (profileRes.error) throw profileRes.error;
     },
     onSuccess: () => {
@@ -64,27 +64,21 @@ export default function UserManagement() {
       const { data, error } = await supabase.auth.signUp({
         email: newEmail,
         password: newPassword,
-        options: { data: { full_name: newName } },
+        options: {
+          data: {
+            full_name: newName,
+            empresa_id: empresaId,
+            role: newRole,
+          },
+        },
       });
       if (error) throw error;
-      // Wait briefly for the trigger to create profile/role, then update role if admin
-      if (data.user && newRole === "admin") {
-        // Small delay to let the trigger fire
-        await new Promise((r) => setTimeout(r, 1500));
-        const { data: roleRow } = await supabase.from("user_roles").select("id").eq("user_id", data.user.id).single();
-        if (roleRow) {
-          await supabase.from("user_roles").update({ role: "admin" as any }).eq("id", roleRow.id);
-        }
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
       toast({ title: "Usuário criado com sucesso!" });
       setAddOpen(false);
-      setNewEmail("");
-      setNewPassword("");
-      setNewName("");
-      setNewRole("user");
+      setNewEmail(""); setNewPassword(""); setNewName(""); setNewRole("usuario");
     },
     onError: (err: any) => toast({ title: "Erro ao criar usuário", description: err.message, variant: "destructive" }),
   });
@@ -93,6 +87,12 @@ export default function UserManagement() {
     setEditUser(u);
     setEditName(u.full_name);
     setEditRole(u.role);
+  };
+
+  const roleLabel = (r: string) => {
+    if (r === "admin_empresa") return "Admin Empresa";
+    if (r === "master_admin") return "Master Admin";
+    return "Usuário";
   };
 
   return (
@@ -123,8 +123,8 @@ export default function UserManagement() {
                 <Select value={newRole} onValueChange={setNewRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="user">Usuário</SelectItem>
+                    <SelectItem value="admin_empresa">Admin Empresa</SelectItem>
+                    <SelectItem value="usuario">Usuário</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -139,7 +139,6 @@ export default function UserManagement() {
         </Dialog>
       </div>
 
-      {/* Edit dialog */}
       <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar Usuário</DialogTitle></DialogHeader>
@@ -154,8 +153,8 @@ export default function UserManagement() {
                 <Select value={editRole} onValueChange={setEditRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="user">Usuário</SelectItem>
+                    <SelectItem value="admin_empresa">Admin Empresa</SelectItem>
+                    <SelectItem value="usuario">Usuário</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -183,15 +182,13 @@ export default function UserManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((u) => (
+            {users.map((u: any) => (
               <TableRow key={u.id}>
+                <TableCell><p className="font-medium">{u.full_name}</p></TableCell>
                 <TableCell>
-                  <p className="font-medium">{u.full_name}</p>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={u.role === "admin" ? "default" : "secondary"} className="gap-1">
-                    {u.role === "admin" ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
-                    {u.role === "admin" ? "Admin" : "Usuário"}
+                  <Badge variant={u.role === "admin_empresa" ? "default" : "secondary"} className="gap-1">
+                    {u.role === "admin_empresa" ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                    {roleLabel(u.role)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Upload } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Database } from "@/integrations/supabase/types";
 
 type EventStatus = Database["public"]["Enums"]["event_status"];
@@ -19,7 +20,7 @@ export default function EventForm() {
   const { id } = useParams<{ id: string }>();
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, empresaId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -57,13 +58,10 @@ export default function EventForm() {
     const path = `${eventId}/${fileType}_${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage.from("event-files").upload(path, file);
     if (uploadError) throw uploadError;
-
-    // Remove old file record
     await supabase.from("event_files").delete().eq("event_id", eventId).eq("file_type", fileType);
-
     const { error: insertError } = await supabase.from("event_files").insert({
-      event_id: eventId, file_type: fileType, file_path: path, file_name: file.name,
-    });
+      event_id: eventId, file_type: fileType, file_path: path, file_name: file.name, empresa_id: empresaId,
+    } as any);
     if (insertError) throw insertError;
   };
 
@@ -80,16 +78,17 @@ export default function EventForm() {
         observations: form.observations || null,
         material_list: form.material_list || null,
         created_by: user?.id,
+        empresa_id: empresaId,
       };
 
       let eventId: string;
 
       if (isEditing) {
-        const { error } = await supabase.from("events").update(payload).eq("id", id!);
+        const { error } = await supabase.from("events").update(payload as any).eq("id", id!);
         if (error) throw error;
         eventId = id!;
       } else {
-        const { data, error } = await supabase.from("events").insert(payload).select("id").single();
+        const { data, error } = await supabase.from("events").insert(payload as any).select("id").single();
         if (error) throw error;
         eventId = data.id;
       }
@@ -114,7 +113,6 @@ export default function EventForm() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{isEditing ? "Editar Evento" : "Novo Evento"}</h1>
-
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
@@ -150,7 +148,6 @@ export default function EventForm() {
           </Card>
         </div>
 
-        {/* File Uploads */}
         <Card>
           <CardHeader><CardTitle className="text-base">Arquivos PDF</CardTitle></CardHeader>
           <CardContent>

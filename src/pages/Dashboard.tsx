@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, MapPin, Music, CheckCircle, AlertCircle } from "lucide-react";
@@ -15,11 +16,14 @@ const statusColors: Record<string, string> = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { empresaId } = useAuth();
 
   const { data: events = [] } = useQuery({
-    queryKey: ["events"],
+    queryKey: ["events", empresaId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("events").select("*").order("date", { ascending: true });
+      let query = supabase.from("events").select("*").order("date", { ascending: true });
+      if (empresaId) query = query.eq("empresa_id", empresaId);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -52,51 +56,33 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
-
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{events.length}</p>
-                <p className="text-sm text-muted-foreground">Total de eventos</p>
-              </div>
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Calendar className="h-5 w-5 text-primary" /></div>
+              <div><p className="text-2xl font-bold">{events.length}</p><p className="text-sm text-muted-foreground">Total de eventos</p></div>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{confirmed}</p>
-                <p className="text-sm text-muted-foreground">Confirmados</p>
-              </div>
+              <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center"><CheckCircle className="h-5 w-5 text-accent" /></div>
+              <div><p className="text-2xl font-bold">{confirmed}</p><p className="text-sm text-muted-foreground">Confirmados</p></div>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-[hsl(var(--warning))]/10 flex items-center justify-center">
-                <AlertCircle className="h-5 w-5 text-[hsl(var(--warning))]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{pending}</p>
-                <p className="text-sm text-muted-foreground">Pendentes</p>
-              </div>
+              <div className="h-10 w-10 rounded-lg bg-[hsl(var(--warning))]/10 flex items-center justify-center"><AlertCircle className="h-5 w-5 text-[hsl(var(--warning))]" /></div>
+              <div><p className="text-2xl font-bold">{pending}</p><p className="text-sm text-muted-foreground">Pendentes</p></div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Next Event Hero */}
       {nextEvent && (
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/evento/${nextEvent.id}`)}>
           <CardHeader>
@@ -108,21 +94,14 @@ export default function Dashboard() {
           <CardContent>
             <h2 className="text-xl md:text-2xl font-bold mb-3">{nextEvent.name}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Music className="h-4 w-4" /> {nextEvent.artist}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Calendar className="h-4 w-4" /> {format(parseISO(nextEvent.date), "dd/MM/yyyy", { locale: ptBR })}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <MapPin className="h-4 w-4" /> {nextEvent.city} – {nextEvent.venue}
-              </div>
+              <div className="flex items-center gap-2 text-muted-foreground"><Music className="h-4 w-4" /> {nextEvent.artist}</div>
+              <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="h-4 w-4" /> {format(parseISO(nextEvent.date), "dd/MM/yyyy", { locale: ptBR })}</div>
+              <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {nextEvent.city} – {nextEvent.venue}</div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Week Events */}
       <div>
         <h2 className="text-lg font-semibold mb-3">Eventos da Semana</h2>
         {weekEvents.length === 0 ? (
