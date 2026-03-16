@@ -32,6 +32,11 @@ export default function Financeiro() {
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
+  const [exportMonth, setExportMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
 
   const { data: financials = [] } = useQuery({
     queryKey: ["financials", empresaId],
