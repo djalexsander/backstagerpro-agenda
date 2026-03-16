@@ -16,7 +16,7 @@ export default function Empresas() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo" });
+  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string });
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["master-empresas"],
@@ -41,9 +41,8 @@ export default function Empresas() {
       const plano = planos.find((p: any) => p.nome === form.plano);
       const trialDays = plano?.trial_days || 0;
 
-      const payload: any = { ...form };
+      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status };
 
-      // When creating a new empresa with a trial plan, set trial_expires_at
       if (!editItem && trialDays > 0) {
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + trialDays);
@@ -52,7 +51,6 @@ export default function Empresas() {
       }
 
       if (editItem) {
-        // If changing plan, recalculate trial or remove block
         if (editItem.plano !== form.plano) {
           if (trialDays > 0) {
             const expiresAt = new Date();
@@ -67,16 +65,33 @@ export default function Empresas() {
         const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("empresas").insert(payload);
+        // Create empresa first
+        const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
         if (error) throw error;
+
+        // Create user for this empresa if email and password provided
+        if (form.email && form.senha) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await supabase.functions.invoke("create-empresa-user", {
+            body: {
+              empresa_id: newEmpresa.id,
+              email: form.email,
+              password: form.senha,
+              full_name: form.nome_empresa,
+              role: form.papel,
+            },
+          });
+          if (res.error) throw new Error(res.error.message || "Erro ao criar usuário");
+          if (res.data?.error) throw new Error(res.data.error);
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
-      toast({ title: editItem ? "Empresa atualizada!" : "Empresa criada!" });
+      toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
-      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo" });
+      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -106,13 +121,13 @@ export default function Empresas() {
 
   const openEdit = (e: any) => {
     setEditItem(e);
-    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo" });
+    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa" });
     setAddOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo" });
+    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" });
     setAddOpen(true);
   };
 
@@ -144,6 +159,12 @@ export default function Empresas() {
               <Label>Telefone</Label>
               <Input value={form.telefone} onChange={(e) => setForm(p => ({ ...p, telefone: e.target.value }))} />
             </div>
+            {!editItem && (
+              <div className="space-y-2">
+                <Label>Senha de Acesso *</Label>
+                <Input type="password" value={form.senha} onChange={(e) => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mínimo 6 caracteres" />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Plano</Label>
@@ -159,6 +180,18 @@ export default function Empresas() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label>Papel do Usuário</Label>
+                <Select value={form.papel} onValueChange={(v) => setForm(p => ({ ...p, papel: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin_empresa">Admin da Empresa</SelectItem>
+                    <SelectItem value="usuario">Usuário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(v) => setForm(p => ({ ...p, status: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -172,7 +205,7 @@ export default function Empresas() {
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome_empresa}>
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome_empresa || (!editItem && (!form.email || form.senha.length < 6))}>
               {saveMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
