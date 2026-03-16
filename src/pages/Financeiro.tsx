@@ -233,6 +233,7 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editItem ? "Editar Registro Financeiro" : "Novo Registro Financeiro"}</DialogTitle>
