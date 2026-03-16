@@ -39,20 +39,30 @@ export default function PlanoAssinatura() {
     enabled: !!empresaId,
   });
 
-  // Fetch current plan details
+  // Fetch current plan details (by plano_id or by plano name fallback)
   const { data: planoAtual } = useQuery({
-    queryKey: ["plano-atual", empresa?.plano_id],
+    queryKey: ["plano-atual", empresa?.plano_id, empresa?.plano],
     queryFn: async () => {
-      if (!empresa?.plano_id) return null;
-      const { data, error } = await supabase
-        .from("planos")
-        .select("*")
-        .eq("id", empresa.plano_id)
-        .single();
-      if (error) throw error;
-      return data;
+      if (empresa?.plano_id) {
+        const { data, error } = await supabase
+          .from("planos")
+          .select("*")
+          .eq("id", empresa.plano_id)
+          .single();
+        if (!error && data) return data;
+      }
+      // Fallback: match by plan name
+      if (empresa?.plano) {
+        const { data, error } = await supabase
+          .from("planos")
+          .select("*")
+          .ilike("nome", empresa.plano)
+          .single();
+        if (!error && data) return data;
+      }
+      return null;
     },
-    enabled: !!empresa?.plano_id,
+    enabled: !!empresa,
   });
 
   // Fetch all active plans
