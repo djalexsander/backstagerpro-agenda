@@ -218,6 +218,55 @@ export default function ConfiguracoesSistema() {
           </CardContent>
         </Card>
 
+        {/* PIX */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Settings className="h-5 w-5 text-primary" />
+              Configuração PIX
+            </CardTitle>
+            <CardDescription>Dados para geração de QR Code PIX nas cobranças.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="pix_chave">Chave PIX</Label>
+              <Input
+                id="pix_chave"
+                value={form.pix_chave ?? ""}
+                onChange={(e) => updateField("pix_chave", e.target.value)}
+                placeholder="email@exemplo.com ou CPF/CNPJ"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pix_nome_recebedor">Nome do Recebedor</Label>
+              <Input
+                id="pix_nome_recebedor"
+                value={form.pix_nome_recebedor ?? ""}
+                onChange={(e) => updateField("pix_nome_recebedor", e.target.value)}
+                placeholder="Backstage Pro Sistemas"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pix_cidade">Cidade</Label>
+              <Input
+                id="pix_cidade"
+                value={form.pix_cidade ?? ""}
+                onChange={(e) => updateField("pix_cidade", e.target.value)}
+                placeholder="Maringá"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pix_banco">Banco</Label>
+              <Input
+                id="pix_banco"
+                value={form.pix_banco ?? ""}
+                onChange={(e) => updateField("pix_banco", e.target.value)}
+                placeholder="Nubank, Itaú, etc."
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Manutenção */}
         <Card>
           <CardHeader>
