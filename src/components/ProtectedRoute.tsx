@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { PlanoBloqueado } from "@/components/PlanoBloqueado";
 
 interface Props {
   children: React.ReactNode;
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function ProtectedRoute({ children, adminOnly = false, masterOnly = false }: Props) {
-  const { user, loading, isAdmin, isMasterAdmin } = useAuth();
+  const { user, loading, isAdmin, isMasterAdmin, empresaBloqueada } = useAuth();
 
   if (loading) {
     return (
@@ -19,6 +20,10 @@ export function ProtectedRoute({ children, adminOnly = false, masterOnly = false
   }
 
   if (!user) return <Navigate to="/login" replace />;
+  
+  // Block access if empresa trial expired (master_admin is never blocked)
+  if (empresaBloqueada && !isMasterAdmin) return <PlanoBloqueado />;
+
   if (masterOnly && !isMasterAdmin) return <Navigate to="/dashboard" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/dashboard" replace />;
 
