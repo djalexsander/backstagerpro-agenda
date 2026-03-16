@@ -32,18 +32,23 @@ export default function UserManagement() {
   const { data: users = [] } = useQuery({
     queryKey: ["users-management", empresaId],
     queryFn: async () => {
-      let profileQuery = supabase.from("profiles").select("*");
-      if (empresaId && !isMasterAdmin) profileQuery = profileQuery.eq("empresa_id", empresaId);
-      const { data: profiles, error: pErr } = await profileQuery;
+      if (!empresaId) return [];
+      const { data: profiles, error: pErr } = await supabase.from("profiles").select("*").eq("empresa_id", empresaId);
       if (pErr) throw pErr;
-      const { data: roles, error: rErr } = await supabase.from("user_roles").select("*");
+      const userIds = profiles.map((p: any) => p.user_id);
+      if (userIds.length === 0) return [];
+      const { data: roles, error: rErr } = await supabase.from("user_roles").select("*").in("user_id", userIds);
       if (rErr) throw rErr;
-      return profiles.map((p: any) => ({
-        ...p,
-        role: roles.find((r: any) => r.user_id === p.user_id)?.role || "usuario",
-        roleId: roles.find((r: any) => r.user_id === p.user_id)?.id,
-      }));
+      // Filter out master_admin users
+      return profiles
+        .map((p: any) => ({
+          ...p,
+          role: roles.find((r: any) => r.user_id === p.user_id)?.role || "usuario",
+          roleId: roles.find((r: any) => r.user_id === p.user_id)?.id,
+        }))
+        .filter((u: any) => u.role !== "master_admin");
     },
+    enabled: !!empresaId,
   });
 
   const updateRole = useMutation({
