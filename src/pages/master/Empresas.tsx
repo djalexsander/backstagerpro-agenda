@@ -325,12 +325,13 @@ export default function Empresas() {
                     <div className="rounded-lg border bg-card">
                       <Table>
                         <TableHeader>
-                          <TableRow>
+                           <TableRow>
                             <TableHead>Data</TableHead>
                             <TableHead>Descrição</TableHead>
                             <TableHead>Valor</TableHead>
                             <TableHead>Método</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Ação</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -344,6 +345,13 @@ export default function Empresas() {
                                 <Badge className={`${statusPagamento[p.status] || "bg-muted text-muted-foreground"} capitalize`}>
                                   {p.status}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {p.status === "pendente" && (
+                                  <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p.id)} disabled={marcarPago.isPending}>
+                                    <CheckCircle className="h-4 w-4 mr-1" /> Pago
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
