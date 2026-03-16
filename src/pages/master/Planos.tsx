@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, DollarSign } from "lucide-react";
+import { Plus, Pencil, Trash2, DollarSign, Clock } from "lucide-react";
 
 interface Plano {
   id: string;
@@ -19,6 +19,7 @@ interface Plano {
   descricao: string | null;
   max_usuarios: number;
   max_eventos: number;
+  trial_days: number;
   ativo: boolean;
 }
 
@@ -28,7 +29,7 @@ export default function Planos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<Plano | null>(null);
   const [form, setForm] = useState({
-    nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", ativo: true,
+    nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true,
   });
 
   const { data: planos = [] } = useQuery({
@@ -48,6 +49,7 @@ export default function Planos() {
         descricao: form.descricao || null,
         max_usuarios: parseInt(form.max_usuarios) || 5,
         max_eventos: parseInt(form.max_eventos) || 50,
+        trial_days: parseInt(form.trial_days) || 0,
         ativo: form.ativo,
       };
       if (editItem) {
@@ -83,14 +85,15 @@ export default function Planos() {
     setEditItem(p);
     setForm({
       nome: p.nome, valor: String(p.valor), descricao: p.descricao || "",
-      max_usuarios: String(p.max_usuarios), max_eventos: String(p.max_eventos), ativo: p.ativo,
+      max_usuarios: String(p.max_usuarios), max_eventos: String(p.max_eventos),
+      trial_days: String(p.trial_days), ativo: p.ativo,
     });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", ativo: true });
+    setForm({ nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true });
     setDialogOpen(true);
   };
 
@@ -105,7 +108,7 @@ export default function Planos() {
       </div>
 
       {/* Cards overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {planos.filter(p => p.ativo).map((p) => (
           <div key={p.id} className="rounded-xl border bg-card p-5 space-y-3">
             <div className="flex items-center justify-between">
@@ -114,9 +117,14 @@ export default function Planos() {
             </div>
             <p className="text-3xl font-bold text-primary">{formatCurrency(p.valor)}<span className="text-sm font-normal text-muted-foreground">/mês</span></p>
             {p.descricao && <p className="text-sm text-muted-foreground">{p.descricao}</p>}
-            <div className="flex gap-4 text-xs text-muted-foreground">
+            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               <span>Até {p.max_usuarios} usuários</span>
               <span>Até {p.max_eventos} eventos</span>
+              {p.trial_days > 0 && (
+                <span className="flex items-center gap-1 text-[hsl(var(--warning))]">
+                  <Clock className="h-3 w-3" /> Teste grátis: {p.trial_days} dias
+                </span>
+              )}
             </div>
             <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => openEdit(p)}>
               <Pencil className="h-4 w-4 mr-1" /> Editar
@@ -134,13 +142,14 @@ export default function Planos() {
               <TableHead>Valor Mensal</TableHead>
               <TableHead>Máx. Usuários</TableHead>
               <TableHead>Máx. Eventos</TableHead>
+              <TableHead>Trial (dias)</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {planos.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum plano cadastrado.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum plano cadastrado.</TableCell></TableRow>
             ) : (
               planos.map((p) => (
                 <TableRow key={p.id}>
@@ -148,6 +157,7 @@ export default function Planos() {
                   <TableCell className="font-semibold">{formatCurrency(p.valor)}</TableCell>
                   <TableCell>{p.max_usuarios}</TableCell>
                   <TableCell>{p.max_eventos}</TableCell>
+                  <TableCell>{p.trial_days > 0 ? `${p.trial_days} dias` : "—"}</TableCell>
                   <TableCell>
                     <Badge className={p.ativo ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"}>
                       {p.ativo ? "Ativo" : "Inativo"}
@@ -184,7 +194,7 @@ export default function Planos() {
               <Label>Descrição</Label>
               <Textarea value={form.descricao} onChange={(e) => setForm(p => ({ ...p, descricao: e.target.value }))} rows={2} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Máx. Usuários</Label>
                 <Input type="number" min="1" value={form.max_usuarios} onChange={(e) => setForm(p => ({ ...p, max_usuarios: e.target.value }))} />
@@ -192,6 +202,10 @@ export default function Planos() {
               <div className="space-y-2">
                 <Label>Máx. Eventos</Label>
                 <Input type="number" min="1" value={form.max_eventos} onChange={(e) => setForm(p => ({ ...p, max_eventos: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Trial (dias)</Label>
+                <Input type="number" min="0" value={form.trial_days} onChange={(e) => setForm(p => ({ ...p, trial_days: e.target.value }))} placeholder="0 = sem trial" />
               </div>
             </div>
             <div className="flex items-center gap-3">
