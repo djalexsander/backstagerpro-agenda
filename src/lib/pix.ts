@@ -32,9 +32,17 @@ interface PixParams {
 export function generatePixPayload(params: PixParams): string {
   const { chave, nomeRecebedor, cidade, valor, descricao } = params;
 
+  // Format key: phone numbers need +55 prefix
+  let formattedKey = chave.replace(/\D/g, "");
+  if (/^\d{10,11}$/.test(formattedKey)) {
+    formattedKey = "+55" + formattedKey;
+  } else {
+    formattedKey = chave; // email, CPF/CNPJ, or random key - use as-is
+  }
+
   // Merchant Account Info (ID 26)
   const gui = padTLV("00", "br.gov.bcb.pix");
-  const key = padTLV("01", chave);
+  const key = padTLV("01", formattedKey);
   const desc = descricao ? padTLV("02", descricao.substring(0, 25)) : "";
   const merchantAccountInfo = padTLV("26", gui + key + desc);
 
