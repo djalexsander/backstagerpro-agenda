@@ -41,9 +41,8 @@ export default function Empresas() {
       const plano = planos.find((p: any) => p.nome === form.plano);
       const trialDays = plano?.trial_days || 0;
 
-      const payload: any = { ...form };
+      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status };
 
-      // When creating a new empresa with a trial plan, set trial_expires_at
       if (!editItem && trialDays > 0) {
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + trialDays);
@@ -52,7 +51,6 @@ export default function Empresas() {
       }
 
       if (editItem) {
-        // If changing plan, recalculate trial or remove block
         if (editItem.plano !== form.plano) {
           if (trialDays > 0) {
             const expiresAt = new Date();
@@ -67,16 +65,33 @@ export default function Empresas() {
         const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("empresas").insert(payload);
+        // Create empresa first
+        const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
         if (error) throw error;
+
+        // Create user for this empresa if email and password provided
+        if (form.email && form.senha) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await supabase.functions.invoke("create-empresa-user", {
+            body: {
+              empresa_id: newEmpresa.id,
+              email: form.email,
+              password: form.senha,
+              full_name: form.nome_empresa,
+              role: form.papel,
+            },
+          });
+          if (res.error) throw new Error(res.error.message || "Erro ao criar usuário");
+          if (res.data?.error) throw new Error(res.data.error);
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
-      toast({ title: editItem ? "Empresa atualizada!" : "Empresa criada!" });
+      toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
-      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo" });
+      resetForm();
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
