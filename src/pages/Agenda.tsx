@@ -75,8 +75,15 @@ export default function Agenda() {
               <Button variant="ghost" size="sm" className="ml-auto text-xs h-6 px-2" onClick={() => setSelectedDate(undefined)}>Limpar</Button>
             )}
           </div>
-          <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} locale={ptBR}
+          <Calendar mode="single" selected={selectedDate} onSelect={(date) => { setSelectedDate(date); }} locale={ptBR}
             modifiers={{ hasEvent: eventDates }} modifiersClassNames={{ hasEvent: "bg-primary/20 text-primary font-bold" }} className="w-full" />
+          {selectedDate && isAdmin && (
+            <div className="px-2 pt-2 border-t border-border mt-2">
+              <Button size="sm" className="w-full" onClick={() => navigate(`/evento/novo?date=${format(selectedDate, "yyyy-MM-dd")}`)}>
+                <Plus className="h-4 w-4 mr-1" /> Criar Evento em {format(selectedDate, "dd/MM/yyyy")}
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
