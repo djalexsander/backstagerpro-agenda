@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -6,12 +6,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
+import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
 
 const fieldLabels: Record<string, string> = {
   cache: "Cachê",
@@ -31,6 +32,11 @@ export default function Financeiro() {
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
+  const [exportMonth, setExportMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
 
   const { data: financials = [] } = useQuery({
     queryKey: ["financials", empresaId],
@@ -129,14 +135,53 @@ export default function Financeiro() {
 
   const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0);
 
+  const getFilteredForExport = () => {
+    if (exportMode === "all") return financials;
+    if (exportMode === "month" && exportMonth) {
+      const [y, m] = exportMonth.split("-").map(Number);
+      const monthStart = startOfMonth(new Date(y, m - 1));
+      const monthEnd = endOfMonth(new Date(y, m - 1));
+      return financials.filter((f) => {
+        const eventDate = (f as any).events?.date;
+        if (!eventDate) return false;
+        return isWithinInterval(parseISO(eventDate), { start: monthStart, end: monthEnd });
+      });
+    }
+    if (exportMode === "period" && exportStart && exportEnd) {
+      return financials.filter((f) => {
+        const eventDate = (f as any).events?.date;
+        if (!eventDate) return false;
+        return isWithinInterval(parseISO(eventDate), { start: parseISO(exportStart), end: parseISO(exportEnd) });
+      });
+    }
+    return financials;
+  };
+
+  const handleExport = () => {
+    const filtered = getFilteredForExport();
+    if (filtered.length === 0) {
+      toast({ title: "Nenhum registro encontrado para o período selecionado.", variant: "destructive" });
+      return;
+    }
+    let title = "Consolidado";
+    if (exportMode === "month" && exportMonth) {
+      const [y, m] = exportMonth.split("-");
+      title = `Mês ${m}/${y}`;
+    } else if (exportMode === "period" && exportStart && exportEnd) {
+      title = `${exportStart.split("-").reverse().join("/")} a ${exportEnd.split("-").reverse().join("/")}`;
+    }
+    exportFinancialTotalPDF(filtered, title);
+    setExportOpen(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Financeiro</h1>
         <div className="flex gap-2">
           {financials.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => exportFinancialTotalPDF(financials)}>
-              <FileDown className="h-4 w-4 mr-1" /> Exportar Total
+            <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
+              <FileDown className="h-4 w-4 mr-1" /> Exportar
             </Button>
           )}
           <Button size="sm" onClick={openAdd}>
@@ -144,6 +189,49 @@ export default function Financeiro() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Exportar Relatório Financeiro</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo de Exportação</Label>
+              <Select value={exportMode} onValueChange={(v) => setExportMode(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os registros</SelectItem>
+                  <SelectItem value="month">Por mês</SelectItem>
+                  <SelectItem value="period">Por período (início e fim)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {exportMode === "month" && (
+              <div className="space-y-2">
+                <Label>Mês</Label>
+                <Input type="month" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)} />
+              </div>
+            )}
+            {exportMode === "period" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data Início</Label>
+                  <Input type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Fim</Label>
+                  <Input type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+            <Button onClick={handleExport}>
+              <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

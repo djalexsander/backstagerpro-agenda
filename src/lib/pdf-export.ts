@@ -98,11 +98,12 @@ export function exportFinancialPDF(financial: any) {
   doc.save(`financeiro-${eventName.toLowerCase().replace(/\s+/g, "-")}.pdf`);
 }
 
-export function exportFinancialTotalPDF(financials: any[]) {
+export function exportFinancialTotalPDF(financials: any[], periodTitle?: string) {
   const doc = new jsPDF("landscape");
+  const subtitle = periodTitle ? `Período: ${periodTitle}` : "Consolidado";
 
   doc.setFontSize(18);
-  doc.text("Relatório Financeiro — Consolidado", 14, 22);
+  doc.text(`Relatório Financeiro — ${subtitle}`, 14, 22);
   doc.setFontSize(10);
   doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 30);
 
