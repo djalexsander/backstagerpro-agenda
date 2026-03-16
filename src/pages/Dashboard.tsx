@@ -18,15 +18,18 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { empresaId } = useAuth();
 
+  const { isMasterAdmin } = useAuth();
+
   const { data: events = [] } = useQuery({
     queryKey: ["events", empresaId],
     queryFn: async () => {
-      let query = supabase.from("events").select("*").order("date", { ascending: true });
-      if (empresaId) query = query.eq("empresa_id", empresaId);
+      if (!empresaId) return [];
+      let query = supabase.from("events").select("*").order("date", { ascending: true }).eq("empresa_id", empresaId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
+    enabled: !!empresaId,
   });
 
   const today = startOfToday();
