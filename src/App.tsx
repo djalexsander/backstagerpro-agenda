@@ -13,7 +13,7 @@ import EventDetail from "@/pages/EventDetail";
 import EventForm from "@/pages/EventForm";
 import Financeiro from "@/pages/Financeiro";
 import UserManagement from "@/pages/UserManagement";
-import Configuracoes from "@/pages/Configuracoes";
+
 import PainelMaster from "@/pages/master/PainelMaster";
 import Empresas from "@/pages/master/Empresas";
 import UsuariosGlobais from "@/pages/master/UsuariosGlobais";
