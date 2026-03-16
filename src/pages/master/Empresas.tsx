@@ -159,6 +159,12 @@ export default function Empresas() {
               <Label>Telefone</Label>
               <Input value={form.telefone} onChange={(e) => setForm(p => ({ ...p, telefone: e.target.value }))} />
             </div>
+            {!editItem && (
+              <div className="space-y-2">
+                <Label>Senha de Acesso *</Label>
+                <Input type="password" value={form.senha} onChange={(e) => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mínimo 6 caracteres" />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Plano</Label>
@@ -173,6 +179,18 @@ export default function Empresas() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Papel do Usuário</Label>
+                <Select value={form.papel} onValueChange={(v) => setForm(p => ({ ...p, papel: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin_empresa">Admin da Empresa</SelectItem>
+                    <SelectItem value="usuario">Usuário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(v) => setForm(p => ({ ...p, status: v }))}>
