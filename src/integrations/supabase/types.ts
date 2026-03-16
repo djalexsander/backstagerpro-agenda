@@ -14,9 +14,40 @@ export type Database = {
   }
   public: {
     Tables: {
+      empresas: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          nome_empresa: string
+          plano: string | null
+          status: string | null
+          telefone: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome_empresa: string
+          plano?: string | null
+          status?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome_empresa?: string
+          plano?: string | null
+          status?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
+      }
       event_files: {
         Row: {
           created_at: string
+          empresa_id: string | null
           event_id: string
           file_name: string
           file_path: string
@@ -25,6 +56,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          empresa_id?: string | null
           event_id: string
           file_name: string
           file_path: string
@@ -33,6 +65,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          empresa_id?: string | null
           event_id?: string
           file_name?: string
           file_path?: string
@@ -40,6 +73,13 @@ export type Database = {
           id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "event_files_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "event_files_event_id_fkey"
             columns: ["event_id"]
@@ -56,6 +96,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           date: string
+          empresa_id: string | null
           id: string
           logistics_departure: string | null
           material_list: string | null
@@ -72,6 +113,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           date: string
+          empresa_id?: string | null
           id?: string
           logistics_departure?: string | null
           material_list?: string | null
@@ -88,6 +130,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           date?: string
+          empresa_id?: string | null
           id?: string
           logistics_departure?: string | null
           material_list?: string | null
@@ -98,12 +141,21 @@ export type Database = {
           updated_at?: string
           venue?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "events_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       financials: {
         Row: {
           cache: number | null
           created_at: string
+          empresa_id: string | null
           event_id: string
           food: number | null
           id: string
@@ -115,6 +167,7 @@ export type Database = {
         Insert: {
           cache?: number | null
           created_at?: string
+          empresa_id?: string | null
           event_id: string
           food?: number | null
           id?: string
@@ -126,6 +179,7 @@ export type Database = {
         Update: {
           cache?: number | null
           created_at?: string
+          empresa_id?: string | null
           event_id?: string
           food?: number | null
           id?: string
@@ -135,6 +189,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "financials_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "financials_event_id_fkey"
             columns: ["event_id"]
@@ -148,6 +209,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          empresa_id: string | null
           full_name: string
           id: string
           updated_at: string
@@ -156,6 +218,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          empresa_id?: string | null
           full_name?: string
           id?: string
           updated_at?: string
@@ -164,12 +227,21 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          empresa_id?: string | null
           full_name?: string
           id?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -194,6 +266,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_empresa_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -201,6 +274,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_master_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user" | "master_admin" | "admin_empresa" | "usuario"
