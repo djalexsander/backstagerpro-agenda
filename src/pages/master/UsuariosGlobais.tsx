@@ -57,15 +57,11 @@ export default function UsuariosGlobais() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const updates: Promise<any>[] = [
-        supabase.from("profiles").update({ full_name: editName, empresa_id: editEmpresaId || null } as any).eq("user_id", editUser.user_id),
-      ];
+      const profileRes = await supabase.from("profiles").update({ full_name: editName, empresa_id: editEmpresaId || null } as any).eq("user_id", editUser.user_id);
+      if (profileRes.error) throw profileRes.error;
       if (editUser.roleId) {
-        updates.push(supabase.from("user_roles").update({ role: editRole } as any).eq("id", editUser.roleId));
-      }
-      const results = await Promise.all(updates);
-      for (const r of results) {
-        if (r.error) throw r.error;
+        const roleRes = await supabase.from("user_roles").update({ role: editRole } as any).eq("id", editUser.roleId);
+        if (roleRes.error) throw roleRes.error;
       }
     },
     onSuccess: () => {
