@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +18,7 @@ type EventStatus = Database["public"]["Enums"]["event_status"];
 
 export default function EventForm() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
   const { user, empresaId } = useAuth();
@@ -25,7 +26,7 @@ export default function EventForm() {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState({
-    name: "", artist: "", date: "", status: "pendente" as EventStatus,
+    name: "", artist: "", date: searchParams.get("date") || "", status: "pendente" as EventStatus,
     city: "", venue: "", show_time: "", logistics_departure: "",
     observations: "", material_list: "",
   });
