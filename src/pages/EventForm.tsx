@@ -26,7 +26,7 @@ export default function EventForm() {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState({
-    name: "", artist: "", date: "", status: "pendente" as EventStatus,
+    name: "", artist: "", date: searchParams.get("date") || "", status: "pendente" as EventStatus,
     city: "", venue: "", show_time: "", logistics_departure: "",
     observations: "", material_list: "",
   });
