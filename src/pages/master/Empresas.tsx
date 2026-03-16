@@ -121,7 +121,7 @@ export default function Empresas() {
 
   const openEdit = (e: any) => {
     setEditItem(e);
-    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo" });
+    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa" });
     setAddOpen(true);
   };
 
