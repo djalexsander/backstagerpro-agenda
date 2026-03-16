@@ -39,12 +39,12 @@ export default function Agenda() {
   const { data: events = [] } = useQuery({
     queryKey: ["events", empresaId],
     queryFn: async () => {
-      let query = supabase.from("events").select("*").order("date", { ascending: true });
-      if (empresaId) query = query.eq("empresa_id", empresaId);
-      const { data, error } = await query;
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("events").select("*").order("date", { ascending: true }).eq("empresa_id", empresaId);
       if (error) throw error;
       return data;
     },
+    enabled: !!empresaId,
   });
 
   const cities = [...new Set(events.map((e) => e.city))].sort();
