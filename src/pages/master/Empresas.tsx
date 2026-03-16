@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -130,6 +130,18 @@ export default function Empresas() {
       queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
       toast({ title: "Status atualizado!" });
     },
+  });
+
+  const marcarPago = useMutation({
+    mutationFn: async (pagamentoId: string) => {
+      const { error } = await supabase.from("pagamentos").update({ status: "pago" } as any).eq("id", pagamentoId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["empresa-pagamentos"] });
+      toast({ title: "Pagamento marcado como pago!" });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
   const openEdit = (e: any) => {
@@ -313,12 +325,13 @@ export default function Empresas() {
                     <div className="rounded-lg border bg-card">
                       <Table>
                         <TableHeader>
-                          <TableRow>
+                           <TableRow>
                             <TableHead>Data</TableHead>
                             <TableHead>Descrição</TableHead>
                             <TableHead>Valor</TableHead>
                             <TableHead>Método</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Ação</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -332,6 +345,13 @@ export default function Empresas() {
                                 <Badge className={`${statusPagamento[p.status] || "bg-muted text-muted-foreground"} capitalize`}>
                                   {p.status}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {p.status === "pendente" && (
+                                  <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p.id)} disabled={marcarPago.isPending}>
+                                    <CheckCircle className="h-4 w-4 mr-1" /> Pago
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
