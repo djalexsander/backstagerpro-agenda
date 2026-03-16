@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -25,6 +25,7 @@ export function AppSidebar() {
   const masterItems = [
     { title: "Painel Master", url: "/master", icon: Globe },
     { title: "Empresas", url: "/master/empresas", icon: Building2 },
+    { title: "Planos", url: "/master/planos", icon: CreditCard },
     { title: "Usuários Globais", url: "/master/usuarios", icon: Users },
     { title: "Configurações", url: "/master/configuracoes", icon: Settings },
     { title: "Logs do Sistema", url: "/master/logs", icon: ScrollText },
