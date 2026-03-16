@@ -18,7 +18,6 @@ export function AppSidebar() {
     ...(isAdminEmpresa || isMasterAdmin ? [
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
       { title: "Usuários", url: "/usuarios", icon: Users },
-      { title: "Configurações", url: "/configuracoes", icon: Settings },
     ] : []),
   ];
 
