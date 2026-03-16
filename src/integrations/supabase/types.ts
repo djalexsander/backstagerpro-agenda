@@ -14,16 +14,198 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      event_files: {
+        Row: {
+          created_at: string
+          event_id: string
+          file_name: string
+          file_path: string
+          file_type: Database["public"]["Enums"]["file_type"]
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          file_name: string
+          file_path: string
+          file_type: Database["public"]["Enums"]["file_type"]
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          file_name?: string
+          file_path?: string
+          file_type?: Database["public"]["Enums"]["file_type"]
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_files_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          artist: string
+          city: string
+          created_at: string
+          created_by: string | null
+          date: string
+          id: string
+          logistics_departure: string | null
+          material_list: string | null
+          name: string
+          observations: string | null
+          show_time: string | null
+          status: Database["public"]["Enums"]["event_status"]
+          updated_at: string
+          venue: string
+        }
+        Insert: {
+          artist: string
+          city: string
+          created_at?: string
+          created_by?: string | null
+          date: string
+          id?: string
+          logistics_departure?: string | null
+          material_list?: string | null
+          name: string
+          observations?: string | null
+          show_time?: string | null
+          status?: Database["public"]["Enums"]["event_status"]
+          updated_at?: string
+          venue: string
+        }
+        Update: {
+          artist?: string
+          city?: string
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          logistics_departure?: string | null
+          material_list?: string | null
+          name?: string
+          observations?: string | null
+          show_time?: string | null
+          status?: Database["public"]["Enums"]["event_status"]
+          updated_at?: string
+          venue?: string
+        }
+        Relationships: []
+      }
+      financials: {
+        Row: {
+          cache: number | null
+          created_at: string
+          event_id: string
+          food: number | null
+          id: string
+          lodging: number | null
+          other_costs: number | null
+          transport: number | null
+          updated_at: string
+        }
+        Insert: {
+          cache?: number | null
+          created_at?: string
+          event_id: string
+          food?: number | null
+          id?: string
+          lodging?: number | null
+          other_costs?: number | null
+          transport?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cache?: number | null
+          created_at?: string
+          event_id?: string
+          food?: number | null
+          id?: string
+          lodging?: number | null
+          other_costs?: number | null
+          transport?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financials_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
+      event_status: "confirmado" | "pendente" | "cancelado"
+      file_type: "artist_rider" | "event_rider"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +332,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+      event_status: ["confirmado", "pendente", "cancelado"],
+      file_type: ["artist_rider", "event_rider"],
+    },
   },
 } as const
