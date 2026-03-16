@@ -18,6 +18,7 @@ type EventStatus = Database["public"]["Enums"]["event_status"];
 
 export default function EventForm() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
   const { user, empresaId } = useAuth();
