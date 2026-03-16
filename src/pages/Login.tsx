@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Music } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -11,14 +12,32 @@ import { useToast } from "@/hooks/use-toast";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  useEffect(() => {
+    const saved = localStorage.getItem("backstage_saved_login");
+    if (saved) {
+      const { email, password } = JSON.parse(saved);
+      setEmail(email);
+      setPassword(password);
+      setRemember(true);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    if (remember) {
+      localStorage.setItem("backstage_saved_login", JSON.stringify({ email, password }));
+    } else {
+      localStorage.removeItem("backstage_saved_login");
+    }
+
     const { error } = await signIn(email, password);
     if (error) {
       toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
@@ -53,6 +72,10 @@ export default function Login() {
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="remember" checked={remember} onCheckedChange={(v) => setRemember(!!v)} />
+                <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">Lembrar meus dados</Label>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Carregando..." : "Entrar"}
