@@ -8,14 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function Empresas() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
+  const [detailEmpresa, setDetailEmpresa] = useState<any>(null);
   const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string });
 
   const { data: empresas = [] } = useQuery({
@@ -30,10 +35,21 @@ export default function Empresas() {
   const { data: planos = [] } = useQuery({
     queryKey: ["master-planos-list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("planos").select("nome, trial_days").eq("ativo", true);
+      const { data, error } = await supabase.from("planos").select("*").eq("ativo", true);
       if (error) throw error;
       return data;
     },
+  });
+
+  const { data: detailPagamentos = [] } = useQuery({
+    queryKey: ["empresa-pagamentos", detailEmpresa?.id],
+    queryFn: async () => {
+      if (!detailEmpresa?.id) return [];
+      const { data, error } = await supabase.from("pagamentos").select("*").eq("empresa_id", detailEmpresa.id).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!detailEmpresa?.id,
   });
 
   const saveMutation = useMutation({
@@ -65,13 +81,10 @@ export default function Empresas() {
         const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
         if (error) throw error;
       } else {
-        // Create empresa first
         const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
         if (error) throw error;
 
-        // Create user for this empresa if email and password provided
         if (form.email && form.senha) {
-          const { data: { session } } = await supabase.auth.getSession();
           const res = await supabase.functions.invoke("create-empresa-user", {
             body: {
               empresa_id: newEmpresa.id,
@@ -136,6 +149,16 @@ export default function Empresas() {
     return new Date(e.trial_expires_at) < new Date();
   };
 
+  const getPlanoInfo = (empresa: any) => {
+    return planos.find((p: any) => p.nome === empresa?.plano || p.id === empresa?.plano_id);
+  };
+
+  const statusPagamento: Record<string, string> = {
+    pendente: "bg-[hsl(var(--warning))] text-[hsl(var(--warning-foreground))]",
+    pago: "bg-accent text-accent-foreground",
+    cancelado: "bg-destructive text-destructive-foreground",
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -143,6 +166,7 @@ export default function Empresas() {
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" /> Nova Empresa</Button>
       </div>
 
+      {/* Form Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editItem ? "Editar Empresa" : "Nova Empresa"}</DialogTitle></DialogHeader>
@@ -212,6 +236,117 @@ export default function Empresas() {
         </DialogContent>
       </Dialog>
 
+      {/* Detail Dialog */}
+      <Dialog open={!!detailEmpresa} onOpenChange={(o) => !o && setDetailEmpresa(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl">{detailEmpresa?.nome_empresa}</DialogTitle>
+          </DialogHeader>
+          {detailEmpresa && (() => {
+            const planoInfo = getPlanoInfo(detailEmpresa);
+            const expired = isTrialExpired(detailEmpresa);
+            return (
+              <div className="space-y-6">
+                {/* Info da empresa */}
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{detailEmpresa.email || "—"}</span></div>
+                  <div><span className="text-muted-foreground">Telefone:</span> <span className="font-medium">{detailEmpresa.telefone || "—"}</span></div>
+                  <div><span className="text-muted-foreground">Status:</span>{" "}
+                    <Badge className={detailEmpresa.status === "ativo" ? "bg-accent text-accent-foreground" : "bg-destructive text-destructive-foreground"}>
+                      {detailEmpresa.plano_bloqueado ? "Bloqueado" : detailEmpresa.status}
+                    </Badge>
+                  </div>
+                  <div><span className="text-muted-foreground">Criado em:</span> <span className="font-medium">{format(new Date(detailEmpresa.created_at), "dd/MM/yyyy", { locale: ptBR })}</span></div>
+                </div>
+
+                <Separator />
+
+                {/* Plano Atual */}
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Package className="h-4 w-4 text-primary" /> Plano Atual</h3>
+                  <Card>
+                    <CardContent className="pt-4">
+                      {planoInfo ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground text-xs">Plano</p>
+                            <p className="font-bold capitalize text-lg">{planoInfo.nome}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Valor</p>
+                            <p className="font-bold text-lg">R$ {Number(planoInfo.valor).toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Máx. Eventos</p>
+                            <p className="font-bold">{planoInfo.max_eventos ?? "Ilimitado"}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Máx. Usuários</p>
+                            <p className="font-bold">{planoInfo.max_usuarios ?? "Ilimitado"}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground text-sm">Plano: <span className="capitalize font-medium">{detailEmpresa.plano || "—"}</span></p>
+                      )}
+                      {detailEmpresa.trial_expires_at && (
+                        <div className="mt-3 pt-3 border-t border-border">
+                          <div className="flex items-center gap-2 text-sm">
+                            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                            <span className={expired ? "text-destructive font-semibold" : "text-muted-foreground"}>
+                              Trial {expired ? "expirado em" : "expira em"} {format(new Date(detailEmpresa.trial_expires_at), "dd/MM/yyyy", { locale: ptBR })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Separator />
+
+                {/* Histórico de Pagamentos */}
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><CreditCard className="h-4 w-4 text-primary" /> Histórico de Pagamentos</h3>
+                  {detailPagamentos.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">Nenhum pagamento registrado.</p>
+                  ) : (
+                    <div className="rounded-lg border bg-card">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Valor</TableHead>
+                            <TableHead>Método</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {detailPagamentos.map((p: any) => (
+                            <TableRow key={p.id}>
+                              <TableCell className="text-sm">{format(new Date(p.created_at), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                              <TableCell className="text-sm">{p.descricao || "—"}</TableCell>
+                              <TableCell className="font-medium">R$ {Number(p.valor).toFixed(2)}</TableCell>
+                              <TableCell className="text-sm uppercase">{p.metodo || "—"}</TableCell>
+                              <TableCell>
+                                <Badge className={`${statusPagamento[p.status] || "bg-muted text-muted-foreground"} capitalize`}>
+                                  {p.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Table */}
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
@@ -232,7 +367,7 @@ export default function Empresas() {
                 const expired = isTrialExpired(e);
                 const blocked = e.plano_bloqueado;
                 return (
-                  <TableRow key={e.id} className={blocked ? "opacity-60" : ""}>
+                  <TableRow key={e.id} className={`${blocked ? "opacity-60" : ""} cursor-pointer hover:bg-muted/50`} onClick={() => setDetailEmpresa(e)}>
                     <TableCell className="font-medium">{e.nome_empresa}</TableCell>
                     <TableCell>{e.email || "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{e.plano}</Badge></TableCell>
@@ -254,15 +389,18 @@ export default function Empresas() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-right space-x-1">
+                    <TableCell className="text-right space-x-1" onClick={(ev) => ev.stopPropagation()}>
+                      <Button variant="ghost" size="sm" onClick={() => setDetailEmpresa(e)}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       {expired && !blocked && (
                         <Button variant="ghost" size="sm" className="text-destructive" onClick={() => toggleBlock.mutate({ id: e.id, blocked: true })}>
-                          <Lock className="h-4 w-4 mr-1" /> Bloquear
+                          <Lock className="h-4 w-4" />
                         </Button>
                       )}
                       {blocked && (
                         <Button variant="ghost" size="sm" className="text-accent" onClick={() => toggleBlock.mutate({ id: e.id, blocked: false })}>
-                          <Unlock className="h-4 w-4 mr-1" /> Desbloquear
+                          <Unlock className="h-4 w-4" />
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => openEdit(e)}><Pencil className="h-4 w-4" /></Button>
