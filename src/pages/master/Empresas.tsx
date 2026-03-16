@@ -16,7 +16,7 @@ export default function Empresas() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo" });
+  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string });
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["master-empresas"],
