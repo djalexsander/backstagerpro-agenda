@@ -22,9 +22,12 @@ export type Database = {
           nome_empresa: string
           plano: string | null
           plano_bloqueado: boolean
+          plano_id: string | null
           status: string | null
+          status_pagamento: string | null
           telefone: string | null
           trial_expires_at: string | null
+          vencimento: string | null
         }
         Insert: {
           created_at?: string
@@ -33,9 +36,12 @@ export type Database = {
           nome_empresa: string
           plano?: string | null
           plano_bloqueado?: boolean
+          plano_id?: string | null
           status?: string | null
+          status_pagamento?: string | null
           telefone?: string | null
           trial_expires_at?: string | null
+          vencimento?: string | null
         }
         Update: {
           created_at?: string
@@ -44,11 +50,22 @@ export type Database = {
           nome_empresa?: string
           plano?: string | null
           plano_bloqueado?: boolean
+          plano_id?: string | null
           status?: string | null
+          status_pagamento?: string | null
           telefone?: string | null
           trial_expires_at?: string | null
+          vencimento?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "empresas_plano_id_fkey"
+            columns: ["plano_id"]
+            isOneToOne: false
+            referencedRelation: "planos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_files: {
         Row: {
@@ -211,6 +228,57 @@ export type Database = {
           },
         ]
       }
+      pagamentos: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          empresa_id: string
+          id: string
+          metodo: string | null
+          plano_id: string | null
+          status: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          empresa_id: string
+          id?: string
+          metodo?: string | null
+          plano_id?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          empresa_id?: string
+          id?: string
+          metodo?: string | null
+          plano_id?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagamentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pagamentos_plano_id_fkey"
+            columns: ["plano_id"]
+            isOneToOne: false
+            referencedRelation: "planos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planos: {
         Row: {
           ativo: boolean
@@ -220,6 +288,7 @@ export type Database = {
           max_eventos: number | null
           max_usuarios: number | null
           nome: string
+          storage_limit: number | null
           trial_days: number
           updated_at: string
           valor: number
@@ -232,6 +301,7 @@ export type Database = {
           max_eventos?: number | null
           max_usuarios?: number | null
           nome: string
+          storage_limit?: number | null
           trial_days?: number
           updated_at?: string
           valor?: number
@@ -244,6 +314,7 @@ export type Database = {
           max_eventos?: number | null
           max_usuarios?: number | null
           nome?: string
+          storage_limit?: number | null
           trial_days?: number
           updated_at?: string
           valor?: number
