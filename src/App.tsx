@@ -24,6 +24,7 @@ import UsuariosGlobais from "@/pages/master/UsuariosGlobais";
 import ConfiguracoesSistema from "@/pages/master/ConfiguracoesSistema";
 import LogsSistema from "@/pages/master/LogsSistema";
 import Planos from "@/pages/master/Planos";
+import FinanceiroMaster from "@/pages/master/FinanceiroMaster";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
