@@ -1,15 +1,35 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
-import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3, FileDown, FilterX } from "lucide-react";
 import { format, subMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { exportMasterFinanceiroPDF } from "@/lib/pdf-export-master";
+
+const MONTHS = [
+  { value: "0", label: "Janeiro" }, { value: "1", label: "Fevereiro" },
+  { value: "2", label: "Março" }, { value: "3", label: "Abril" },
+  { value: "4", label: "Maio" }, { value: "5", label: "Junho" },
+  { value: "6", label: "Julho" }, { value: "7", label: "Agosto" },
+  { value: "8", label: "Setembro" }, { value: "9", label: "Outubro" },
+  { value: "10", label: "Novembro" }, { value: "11", label: "Dezembro" },
+];
+
+function getYearOptions() {
+  const current = new Date().getFullYear();
+  return Array.from({ length: 5 }, (_, i) => current - i).map((y) => ({ value: String(y), label: String(y) }));
+}
 
 export default function FinanceiroMaster() {
+  const [filterMonth, setFilterMonth] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>(String(new Date().getFullYear()));
+
   const { data: pagamentos = [] } = useQuery({
     queryKey: ["master-pagamentos"],
     queryFn: async () => {
@@ -33,18 +53,31 @@ export default function FinanceiroMaster() {
     },
   });
 
-  const totalRecebido = pagamentos
+  // Filtered payments
+  const filteredPagamentos = useMemo(() => {
+    return pagamentos.filter((p: any) => {
+      const d = new Date(p.created_at);
+      if (filterYear !== "all" && d.getFullYear() !== Number(filterYear)) return false;
+      if (filterMonth !== "all" && d.getMonth() !== Number(filterMonth)) return false;
+      return true;
+    });
+  }, [pagamentos, filterMonth, filterYear]);
+
+  const isFiltered = filterMonth !== "all" || filterYear !== String(new Date().getFullYear());
+  const filterLabel = useMemo(() => {
+    if (filterMonth === "all" && filterYear === "all") return "Geral";
+    const mLabel = filterMonth !== "all" ? MONTHS[Number(filterMonth)]?.label : "";
+    const yLabel = filterYear !== "all" ? filterYear : "";
+    return [mLabel, yLabel].filter(Boolean).join("/");
+  }, [filterMonth, filterYear]);
+
+  const totalRecebido = filteredPagamentos
     .filter((p: any) => p.status === "pago")
     .reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0);
 
-  const totalPendente = pagamentos
+  const totalPendente = filteredPagamentos
     .filter((p: any) => p.status === "pendente")
     .reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0);
-
-  const totalGeral = pagamentos.reduce(
-    (acc: number, p: any) => acc + Number(p.valor || 0),
-    0
-  );
 
   const empresasAtivas = empresas.filter((e: any) => e.status === "ativo").length;
 
@@ -89,9 +122,59 @@ export default function FinanceiroMaster() {
     cancelado: { label: "Cancelado", variant: "destructive" },
   };
 
+  const clearFilters = () => {
+    setFilterMonth("all");
+    setFilterYear(String(new Date().getFullYear()));
+  };
+
+  const handleExportPDF = (type: "filtered" | "all") => {
+    const data = type === "all" ? pagamentos : filteredPagamentos;
+    const title = type === "all" ? "Geral" : filterLabel;
+    exportMasterFinanceiroPDF(data, empresas, title);
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Financeiro Master</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Financeiro Master</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={filterMonth} onValueChange={setFilterMonth}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Mês" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os meses</SelectItem>
+              {MONTHS.map((m) => (
+                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterYear} onValueChange={setFilterYear}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {getYearOptions().map((y) => (
+                <SelectItem key={y.value} value={y.value}>{y.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isFiltered && (
+            <Button variant="ghost" size="icon" onClick={clearFilters} title="Limpar filtros">
+              <FilterX className="h-4 w-4" />
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => handleExportPDF("filtered")}>
+            <FileDown className="h-4 w-4 mr-1" />
+            PDF {filterLabel}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExportPDF("all")}>
+            <FileDown className="h-4 w-4 mr-1" />
+            PDF Geral
+          </Button>
+        </div>
+      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -111,8 +194,8 @@ export default function FinanceiroMaster() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-yellow-500" />
+              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                <Clock className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatCurrency(totalPendente)}</p>
@@ -129,7 +212,7 @@ export default function FinanceiroMaster() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatCurrency(receitaMes)}</p>
-                <p className="text-sm text-muted-foreground">Receita do Mês</p>
+                <p className="text-sm text-muted-foreground">Receita do Mês Atual</p>
               </div>
             </div>
           </CardContent>
@@ -177,11 +260,12 @@ export default function FinanceiroMaster() {
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5" />
             Histórico de Pagamentos
+            {isFiltered && <Badge variant="secondary" className="ml-2 text-xs">{filterLabel}</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {pagamentos.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Nenhum pagamento registrado.</p>
+          {filteredPagamentos.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Nenhum pagamento encontrado para o período selecionado.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -196,7 +280,7 @@ export default function FinanceiroMaster() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagamentos.map((p: any) => {
+                  {filteredPagamentos.map((p: any) => {
                     const sc = statusConfig[p.status] || { label: p.status, variant: "outline" as const };
                     return (
                       <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
@@ -226,6 +310,7 @@ export default function FinanceiroMaster() {
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
             Receita por Empresa
+            {isFiltered && <Badge variant="secondary" className="ml-2 text-xs">{filterLabel}</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -234,13 +319,15 @@ export default function FinanceiroMaster() {
           ) : (
             <div className="space-y-3">
               {empresas.map((e: any) => {
-                const pagosEmpresa = pagamentos
+                const pagosEmpresa = filteredPagamentos
                   .filter((p: any) => p.empresa_id === e.id && p.status === "pago")
                   .reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0);
-                const pendentesEmpresa = pagamentos
+                const pendentesEmpresa = filteredPagamentos
                   .filter((p: any) => p.empresa_id === e.id && p.status === "pendente")
                   .reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0);
                 const percentual = totalRecebido > 0 ? (pagosEmpresa / totalRecebido) * 100 : 0;
+
+                if (pagosEmpresa === 0 && pendentesEmpresa === 0) return null;
 
                 return (
                   <div key={e.id} className="p-4 rounded-lg bg-muted/50 space-y-2">
@@ -252,7 +339,7 @@ export default function FinanceiroMaster() {
                       <div className="text-right">
                         <p className="font-semibold text-accent">{formatCurrency(pagosEmpresa)}</p>
                         {pendentesEmpresa > 0 && (
-                          <p className="text-xs text-yellow-500">+ {formatCurrency(pendentesEmpresa)} pendente</p>
+                          <p className="text-xs text-muted-foreground">+ {formatCurrency(pendentesEmpresa)} pendente</p>
                         )}
                       </div>
                     </div>
