@@ -8,6 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
+const APP_VERSION = __APP_VERSION__;
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
