@@ -68,7 +68,7 @@ export default function Financeiro() {
   const [form, setForm] = useState({ cache: "", transport: "", lodging: "" });
   const [transportDetail, setTransportDetail] = useState({ km: "", valorGasto: "" });
   const [transportOpen, setTransportOpen] = useState(false);
-  const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "" });
+  const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
   const [lodgingOpen, setLodgingOpen] = useState(false);
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<EmployeeExpense[]>([]);
