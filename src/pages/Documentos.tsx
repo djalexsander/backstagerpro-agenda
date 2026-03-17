@@ -548,8 +548,11 @@ export default function Documentos() {
                       }}>
                         <Eye className="h-3 w-3 mr-1" /> Visualizar
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => exportPDF(doc.nome, doc.conteudo_final)}>
+                      <Button size="sm" variant="outline" onClick={() => exportPDF(doc.nome, doc.conteudo_final)} title="Exportar PDF">
                         <Download className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => exportDOCX(doc.nome, doc.conteudo_final)} title="Exportar Word">
+                        <FileDown className="h-3 w-3" />
                       </Button>
                       <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteDocConfirm(doc.id)}>
                         <Trash2 className="h-3 w-3" />
