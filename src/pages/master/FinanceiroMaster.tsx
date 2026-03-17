@@ -149,6 +149,28 @@ export default function FinanceiroMaster() {
         </Card>
       </div>
 
+      {/* Gráfico Receita Mensal */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Receita Mensal (últimos 12 meses)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
+              <YAxis tick={{ fontSize: 12 }} className="fill-muted-foreground" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+              <Bar dataKey="recebido" fill="var(--color-recebido)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pendente" fill="var(--color-pendente)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
       {/* Histórico de Pagamentos */}
       <Card>
         <CardHeader>
