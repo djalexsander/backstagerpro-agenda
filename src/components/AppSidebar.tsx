@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
-const APP_VERSION = __APP_VERSION__;
+const APP_VERSION = (typeof __APP_VERSION__ !== "undefined") ? __APP_VERSION__ : "1.0.0";
 
 export function AppSidebar() {
   const { state } = useSidebar();
