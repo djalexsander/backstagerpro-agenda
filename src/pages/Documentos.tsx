@@ -416,6 +416,7 @@ export default function Documentos() {
 
     const blob = await Packer.toBlob(doc);
     saveAs(blob, `${nome}.docx`);
+  };
 
   const tipoLabel = (tipo: string) => TIPOS_DOCUMENTO.find((t) => t.value === tipo)?.label || tipo;
 
