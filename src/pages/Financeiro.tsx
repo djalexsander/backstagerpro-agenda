@@ -66,6 +66,8 @@ export default function Financeiro() {
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [form, setForm] = useState({ cache: "", transport: "", lodging: "" });
+  const [transportDetail, setTransportDetail] = useState({ km: "", valorGasto: "" });
+  const [transportOpen, setTransportOpen] = useState(false);
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<EmployeeExpense[]>([]);
   const [funcDialogOpen, setFuncDialogOpen] = useState(false);
@@ -116,6 +118,8 @@ export default function Financeiro() {
     setEditItem(null);
     setSelectedEvent("");
     setForm({ cache: "", transport: "", lodging: "" });
+    setTransportDetail({ km: "", valorGasto: "" });
+    setTransportOpen(false);
     setExtraCosts([]);
     setSelectedEmployees([]);
     setOpen(true);
@@ -129,6 +133,15 @@ export default function Financeiro() {
       transport: String(f.transport || 0),
       lodging: String(f.lodging || 0),
     });
+    // Try to parse transport detail from extra metadata if available
+    const savedDetail = (f as any).transport_detail;
+    if (savedDetail) {
+      setTransportDetail({ km: String(savedDetail.km || ""), valorGasto: String(savedDetail.valorGasto || "") });
+      setTransportOpen(true);
+    } else {
+      setTransportDetail({ km: "", valorGasto: "" });
+      setTransportOpen(Number(f.transport || 0) > 0);
+    }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
     setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
     setOpen(true);
@@ -393,7 +406,7 @@ export default function Financeiro() {
                   </SelectContent>
                 </Select>
               </div>
-              {fieldKeys.map((key, idx) => (
+              {fieldKeys.filter(k => k !== 'transport').map((key, idx) => (
                 <div key={key} className="space-y-2">
                   <Label>{fieldLabels[key]}</Label>
                   <Input
@@ -422,6 +435,58 @@ export default function Financeiro() {
                   />
                 </div>
               ))}
+
+              {/* Transporte - clicável com detalhes */}
+              <div className="space-y-2">
+                <Label
+                  className="cursor-pointer flex items-center justify-between hover:text-primary transition-colors"
+                  onClick={() => setTransportOpen(!transportOpen)}
+                >
+                  <span>Transporte {form.transport && Number(form.transport) > 0 ? `— ${fmt(Number(form.transport))}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">{transportOpen ? "▲ Fechar" : "▼ Detalhar"}</span>
+                </Label>
+                {!transportOpen && (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.transport}
+                    onChange={(e) => setForm((p) => ({ ...p, transport: e.target.value }))}
+                    placeholder="0.00"
+                    onFocus={() => setTransportOpen(true)}
+                  />
+                )}
+                {transportOpen && (
+                  <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">KM Rodados</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={transportDetail.km}
+                          onChange={(e) => setTransportDetail(p => ({ ...p, km: e.target.value }))}
+                          placeholder="0" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Valor Gasto</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={transportDetail.valorGasto}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTransportDetail(p => ({ ...p, valorGasto: val }));
+                            setForm(p => ({ ...p, transport: val }));
+                          }}
+                          placeholder="0.00" className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total Transporte: <span className="font-semibold text-foreground">{fmt(Number(form.transport) || 0)}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Funcionários do Evento */}
               <div className="space-y-3 pt-2 border-t border-border">
