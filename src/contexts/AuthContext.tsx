@@ -86,7 +86,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error && data.user) {
+      // Log login action asynchronously
+      supabase.from("system_logs").insert({
+        tipo: "auth",
+        acao: "login",
+        descricao: `Login realizado: ${data.user.email}`,
+        user_id: data.user.id,
+        user_name: data.user.user_metadata?.full_name || data.user.email,
+      } as any).then(() => {});
+    }
     return { error: error as Error | null };
   };
 

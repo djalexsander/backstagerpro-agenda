@@ -616,6 +616,53 @@ export type Database = {
           },
         ]
       }
+      system_logs: {
+        Row: {
+          acao: string
+          created_at: string
+          dados: Json | null
+          descricao: string
+          empresa_id: string | null
+          empresa_nome: string | null
+          id: string
+          tipo: string
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          dados?: Json | null
+          descricao: string
+          empresa_id?: string | null
+          empresa_nome?: string | null
+          id?: string
+          tipo?: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          dados?: Json | null
+          descricao?: string
+          empresa_id?: string | null
+          empresa_nome?: string | null
+          id?: string
+          tipo?: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_logs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           created_at: string
