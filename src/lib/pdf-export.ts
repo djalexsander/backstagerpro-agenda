@@ -42,7 +42,7 @@ export function exportEventPDF(event: Event, eventDays?: any[]) {
     ["Cidade", event.city],
     ["Local", event.venue],
     ["Dias", String(event.num_days || 1)],
-    ["Saída Logística", event.logistics_departure ? format(parseISO(event.logistics_departure), "dd/MM/yyyy HH:mm") : "—"],
+    ["Saída Logística", event.logistics_departure ? format(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy HH:mm") : "—"],
     ["Observações", event.observations || "—"],
     ["Material", event.material_list || "—"],
   ];

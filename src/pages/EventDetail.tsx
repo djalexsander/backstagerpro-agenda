@@ -124,7 +124,7 @@ export default function EventDetail() {
           <CardHeader><CardTitle className="text-base">Logística</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             {event.logistics_departure && (
-              <div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Saída:</span> {format(parseISO(event.logistics_departure), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</div>
+              <div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Saída:</span> {format(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</div>
             )}
             {event.observations && (
               <div><p className="text-muted-foreground mb-1">Observações:</p><p className="whitespace-pre-wrap">{event.observations}</p></div>
