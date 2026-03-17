@@ -77,6 +77,20 @@ function NotificacoesMaster() {
                 <p className="text-xs text-muted-foreground mt-1">
                   {format(new Date(n.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                 </p>
+                {n.tipo === "comprovante_pagamento" && n.dados?.comprovante_path && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const { data } = supabase.storage.from("comprovantes").getPublicUrl(n.dados.comprovante_path);
+                      window.open(data.publicUrl, "_blank");
+                    }}
+                  >
+                    <Eye className="h-3 w-3 mr-1" /> Ver Comprovante
+                  </Button>
+                )}
               </div>
             ))
           )}
