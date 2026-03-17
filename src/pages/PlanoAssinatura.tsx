@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package, Users, Calendar, HardDrive } from "lucide-react";
@@ -21,6 +22,7 @@ export default function PlanoAssinatura() {
   const [showPix, setShowPix] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
 
@@ -112,16 +114,26 @@ export default function PlanoAssinatura() {
   // Upgrade plan mutation
   const upgradeMutation = useMutation({
     mutationFn: async (planoId: string) => {
+      const selectedPlano = planos?.find((p) => p.id === planoId);
       const { error } = await supabase
         .from("empresas")
         .update({ plano_id: planoId })
         .eq("id", empresaId!);
       if (error) throw error;
+
+      // Notify master admin
+      await supabase.from("notificacoes_master").insert({
+        empresa_id: empresaId!,
+        tipo: "upgrade_plano",
+        mensagem: `${empresa?.nome_empresa} solicitou upgrade para o plano ${selectedPlano?.nome || ""}`,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["empresa-plano"] });
       queryClient.invalidateQueries({ queryKey: ["plano-atual"] });
       setShowUpgrade(false);
+      setShowConfirm(false);
+      setSelectedPlanoId(null);
       toast.success("Plano atualizado com sucesso!");
     },
     onError: () => toast.error("Erro ao atualizar plano."),
@@ -325,15 +337,37 @@ export default function PlanoAssinatura() {
           </div>
           <DialogFooter>
             <Button
-              disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id || upgradeMutation.isPending}
-              onClick={() => selectedPlanoId && upgradeMutation.mutate(selectedPlanoId)}
+              disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id}
+              onClick={() => setShowConfirm(true)}
             >
               <CheckCircle className="h-4 w-4 mr-2" />
-              {upgradeMutation.isPending ? "Atualizando..." : "Confirmar Plano"}
+              Confirmar Plano
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Upgrade Confirmation Dialog */}
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Upgrade de Plano?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja alterar seu plano para <strong>{planos?.find(p => p.id === selectedPlanoId)?.nome}</strong>? 
+              O administrador será notificado sobre esta alteração.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              disabled={upgradeMutation.isPending}
+              onClick={() => selectedPlanoId && upgradeMutation.mutate(selectedPlanoId)}
+            >
+              {upgradeMutation.isPending ? "Atualizando..." : "Sim, confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Payment History Dialog */}
       <Dialog open={showHistory} onOpenChange={setShowHistory}>
