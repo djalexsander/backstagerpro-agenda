@@ -108,9 +108,9 @@ export default function Financeiro() {
       transport: String(f.transport || 0),
       food: String(f.food || 0),
       lodging: String(f.lodging || 0),
-      other_costs: String(f.other_costs || 0),
     });
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
+    setFuncionarios(parseFuncionarios((f as any).funcionarios_cache));
     setOpen(true);
   };
 
