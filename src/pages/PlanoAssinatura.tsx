@@ -337,15 +337,37 @@ export default function PlanoAssinatura() {
           </div>
           <DialogFooter>
             <Button
-              disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id || upgradeMutation.isPending}
-              onClick={() => selectedPlanoId && upgradeMutation.mutate(selectedPlanoId)}
+              disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id}
+              onClick={() => setShowConfirm(true)}
             >
               <CheckCircle className="h-4 w-4 mr-2" />
-              {upgradeMutation.isPending ? "Atualizando..." : "Confirmar Plano"}
+              Confirmar Plano
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Upgrade Confirmation Dialog */}
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Upgrade de Plano?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja alterar seu plano para <strong>{planos?.find(p => p.id === selectedPlanoId)?.nome}</strong>? 
+              O administrador será notificado sobre esta alteração.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              disabled={upgradeMutation.isPending}
+              onClick={() => selectedPlanoId && upgradeMutation.mutate(selectedPlanoId)}
+            >
+              {upgradeMutation.isPending ? "Atualizando..." : "Sim, confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Payment History Dialog */}
       <Dialog open={showHistory} onOpenChange={setShowHistory}>
