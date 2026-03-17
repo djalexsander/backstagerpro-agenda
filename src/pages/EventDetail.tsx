@@ -76,9 +76,16 @@ export default function EventDetail() {
     a.click();
   };
 
-  const viewFile = (filePath: string) => {
+  const downloadFile = async (filePath: string, fileName: string) => {
     const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    window.open(data.publicUrl, "_blank");
+    const response = await fetch(data.publicUrl);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
