@@ -144,6 +144,18 @@ export default function Empresas() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  const deletePagamento = useMutation({
+    mutationFn: async (pagamentoId: string) => {
+      const { error } = await supabase.from("pagamentos").delete().eq("id", pagamentoId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["empresa-pagamentos"] });
+      toast({ title: "Pagamento excluído!" });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
   const openEdit = (e: any) => {
     setEditItem(e);
     setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa" });
