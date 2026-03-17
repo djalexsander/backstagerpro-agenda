@@ -415,7 +415,7 @@ export default function PlanoAssinatura() {
                               const path = `${empresaId}/${p.id}-${file.name}`;
                               const { error: uploadError } = await supabase.storage
                                 .from("comprovantes")
-                                .upload(path, file);
+                                .upload(path, file, { upsert: true });
                               if (uploadError) {
                                 toast.error("Erro ao enviar comprovante");
                                 return;
