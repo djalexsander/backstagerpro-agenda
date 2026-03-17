@@ -68,7 +68,7 @@ export default function Financeiro() {
   const [form, setForm] = useState({ cache: "", transport: "", lodging: "" });
   const [transportDetail, setTransportDetail] = useState({ km: "", valorGasto: "" });
   const [transportOpen, setTransportOpen] = useState(false);
-  const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "" });
+  const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
   const [lodgingOpen, setLodgingOpen] = useState(false);
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<EmployeeExpense[]>([]);
@@ -122,7 +122,7 @@ export default function Financeiro() {
     setForm({ cache: "", transport: "", lodging: "" });
     setTransportDetail({ km: "", valorGasto: "" });
     setTransportOpen(false);
-    setLodgingDetail({ qtdFuncionarios: "", valorDia: "" });
+    setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
     setLodgingOpen(false);
     setExtraCosts([]);
     setSelectedEmployees([]);
@@ -148,10 +148,10 @@ export default function Financeiro() {
     }
     const savedLodging = (f as any).lodging_detail;
     if (savedLodging) {
-      setLodgingDetail({ qtdFuncionarios: String(savedLodging.qtdFuncionarios || ""), valorDia: String(savedLodging.valorDia || "") });
+      setLodgingDetail({ qtdFuncionarios: String(savedLodging.qtdFuncionarios || ""), valorDia: String(savedLodging.valorDia || ""), qtdDias: String(savedLodging.qtdDias || "") });
       setLodgingOpen(true);
     } else {
-      setLodgingDetail({ qtdFuncionarios: "", valorDia: "" });
+      setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
       setLodgingOpen(Number(f.lodging || 0) > 0);
     }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
@@ -463,7 +463,7 @@ export default function Financeiro() {
                 )}
                 {lodgingOpen && (
                   <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">Qtd. Funcionários</Label>
                         <Input
@@ -472,10 +472,24 @@ export default function Financeiro() {
                           onChange={(e) => {
                             const qtd = e.target.value;
                             setLodgingDetail(p => ({ ...p, qtdFuncionarios: qtd }));
-                            const total = (parseFloat(qtd) || 0) * (parseFloat(lodgingDetail.valorDia) || 0);
+                            const total = (parseFloat(qtd) || 0) * (parseFloat(lodgingDetail.valorDia) || 0) * (parseFloat(lodgingDetail.qtdDias) || 1);
                             setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
                           }}
                           placeholder="0" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Qtd. Dias</Label>
+                        <Input
+                          type="number" step="1"
+                          value={lodgingDetail.qtdDias}
+                          onChange={(e) => {
+                            const dias = e.target.value;
+                            setLodgingDetail(p => ({ ...p, qtdDias: dias }));
+                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(lodgingDetail.valorDia) || 0) * (parseFloat(dias) || 1);
+                            setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
+                          }}
+                          placeholder="1" className="h-8 text-sm"
                         />
                       </div>
                       <div className="space-y-1">
@@ -486,7 +500,7 @@ export default function Financeiro() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setLodgingDetail(p => ({ ...p, valorDia: val }));
-                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(val) || 0);
+                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(val) || 0) * (parseFloat(lodgingDetail.qtdDias) || 1);
                             setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
                           }}
                           placeholder="0.00" className="h-8 text-sm"
