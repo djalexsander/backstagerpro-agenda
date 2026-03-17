@@ -108,9 +108,9 @@ export default function Financeiro() {
   const openAdd = () => {
     setEditItem(null);
     setSelectedEvent("");
-    setForm({ cache: "", transport: "", food: "", lodging: "" });
+    setForm({ cache: "", transport: "", lodging: "" });
     setExtraCosts([]);
-    setFuncionarios([]);
+    setSelectedEmployees([]);
     setOpen(true);
   };
 
@@ -120,11 +120,10 @@ export default function Financeiro() {
     setForm({
       cache: String(f.cache || 0),
       transport: String(f.transport || 0),
-      food: String(f.food || 0),
       lodging: String(f.lodging || 0),
     });
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
-    setFuncionarios(parseFuncionarios((f as any).funcionarios_cache));
+    setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
     setOpen(true);
   };
 
