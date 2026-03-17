@@ -249,6 +249,7 @@ export type Database = {
           event_id: string
           extra_costs: Json | null
           food: number | null
+          funcionarios_cache: Json | null
           id: string
           lodging: number | null
           other_costs: number | null
@@ -262,6 +263,7 @@ export type Database = {
           event_id: string
           extra_costs?: Json | null
           food?: number | null
+          funcionarios_cache?: Json | null
           id?: string
           lodging?: number | null
           other_costs?: number | null
@@ -275,6 +277,7 @@ export type Database = {
           event_id?: string
           extra_costs?: Json | null
           food?: number | null
+          funcionarios_cache?: Json | null
           id?: string
           lodging?: number | null
           other_costs?: number | null
