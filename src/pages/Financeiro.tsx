@@ -23,15 +23,12 @@ const fieldLabels: Record<string, string> = {
 const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
-type EmployeeTransport = { km: number; combustivel: number; total: number };
 type EmployeeExpense = {
   employeeId: string;
   name: string;
   funcao: string;
   cache: number;
   food: number;
-  hospedagem: number;
-  transporte: EmployeeTransport;
 };
 
 function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
@@ -40,21 +37,15 @@ function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
     if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
       return raw.map((f: any) => ({
         employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0,
-        hospedagem: 0, transporte: { km: 0, combustivel: 0, total: 0 },
       }));
     }
-    return raw.map((e: any) => ({
-      ...e,
-      hospedagem: e.hospedagem || 0,
-      transporte: e.transporte || { km: 0, combustivel: 0, total: 0 },
-    }));
+    return raw;
   }
   try { return JSON.parse(raw); } catch { return []; }
 }
 
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
-  return emps.reduce((s, e) =>
-    s + (e.cache || 0) + (e.food || 0) + (e.hospedagem || 0) + (e.transporte?.total || 0), 0);
+  return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
 
 function parseExtraCosts(raw: any): ExtraCost[] {
@@ -172,8 +163,6 @@ export default function Financeiro() {
         funcao: (emp as any).funcao || "",
         cache: Number((emp as any).cache_padrao) || 0,
         food: 0,
-        hospedagem: 0,
-        transporte: { km: 0, combustivel: 0, total: 0 },
       },
     ]);
   };
@@ -184,14 +173,6 @@ export default function Financeiro() {
 
   const updateEmployeeFood = (index: number, value: number) => {
     setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, food: value } : e)));
-  };
-
-  const updateEmployeeHospedagem = (index: number, value: number) => {
-    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, hospedagem: value } : e)));
-  };
-
-  const updateEmployeeTransporte = (index: number, field: keyof EmployeeTransport, value: number) => {
-    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, transporte: { ...e.transporte, [field]: value } } : e)));
   };
 
   const removeEmployee = (index: number) => {
@@ -484,7 +465,7 @@ export default function Financeiro() {
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Cachê</Label>
                         <Input
@@ -502,47 +483,6 @@ export default function Financeiro() {
                           onChange={(e) => updateEmployeeFood(i, parseFloat(e.target.value) || 0)}
                           className="h-8 text-sm" placeholder="0.00"
                         />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Hospedagem</Label>
-                        <Input
-                          type="number" step="0.01"
-                          value={emp.hospedagem || ""}
-                          onChange={(e) => updateEmployeeHospedagem(i, parseFloat(e.target.value) || 0)}
-                          className="h-8 text-sm" placeholder="0.00"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Transporte</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">KM</Label>
-                          <Input
-                            type="number" step="0.01"
-                            value={emp.transporte?.km || ""}
-                            onChange={(e) => updateEmployeeTransporte(i, 'km', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm" placeholder="0"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Combustível</Label>
-                          <Input
-                            type="number" step="0.01"
-                            value={emp.transporte?.combustivel || ""}
-                            onChange={(e) => updateEmployeeTransporte(i, 'combustivel', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm" placeholder="0.00"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Total Gasto</Label>
-                          <Input
-                            type="number" step="0.01"
-                            value={emp.transporte?.total || ""}
-                            onChange={(e) => updateEmployeeTransporte(i, 'total', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm" placeholder="0.00"
-                          />
-                        </div>
                       </div>
                     </div>
                   </div>
