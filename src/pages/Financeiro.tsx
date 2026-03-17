@@ -463,7 +463,7 @@ export default function Financeiro() {
                 )}
                 {lodgingOpen && (
                   <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">Qtd. Funcionários</Label>
                         <Input
@@ -472,10 +472,24 @@ export default function Financeiro() {
                           onChange={(e) => {
                             const qtd = e.target.value;
                             setLodgingDetail(p => ({ ...p, qtdFuncionarios: qtd }));
-                            const total = (parseFloat(qtd) || 0) * (parseFloat(lodgingDetail.valorDia) || 0);
+                            const total = (parseFloat(qtd) || 0) * (parseFloat(lodgingDetail.valorDia) || 0) * (parseFloat(lodgingDetail.qtdDias) || 1);
                             setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
                           }}
                           placeholder="0" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Qtd. Dias</Label>
+                        <Input
+                          type="number" step="1"
+                          value={lodgingDetail.qtdDias}
+                          onChange={(e) => {
+                            const dias = e.target.value;
+                            setLodgingDetail(p => ({ ...p, qtdDias: dias }));
+                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(lodgingDetail.valorDia) || 0) * (parseFloat(dias) || 1);
+                            setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
+                          }}
+                          placeholder="1" className="h-8 text-sm"
                         />
                       </div>
                       <div className="space-y-1">
@@ -486,7 +500,7 @@ export default function Financeiro() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setLodgingDetail(p => ({ ...p, valorDia: val }));
-                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(val) || 0);
+                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(val) || 0) * (parseFloat(lodgingDetail.qtdDias) || 1);
                             setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
                           }}
                           placeholder="0.00" className="h-8 text-sm"
