@@ -175,6 +175,14 @@ export default function Financeiro() {
       setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
       setLodgingOpen(Number(f.lodging || 0) > 0);
     }
+    const savedCache = (f as any).cache_detail;
+    if (savedCache) {
+      setCacheDetail(savedCache);
+      setCacheOpen(true);
+    } else {
+      setCacheDetail({ ...defaultCacheDetail, valorTotal: Number(f.cache || 0) });
+      setCacheOpen(Number(f.cache || 0) > 0);
+    }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
     setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
     setOpen(true);
