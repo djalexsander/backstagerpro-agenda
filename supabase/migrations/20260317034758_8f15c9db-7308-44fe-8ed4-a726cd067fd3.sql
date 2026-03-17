@@ -1,0 +1,1 @@
+ALTER TABLE public.financials ADD COLUMN extra_costs jsonb DEFAULT '[]'::jsonb;

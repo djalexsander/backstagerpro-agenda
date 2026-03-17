@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, Filter } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
@@ -24,6 +24,18 @@ const fieldLabels: Record<string, string> = {
 
 const fieldKeys = ["cache", "transport", "food", "lodging", "other_costs"] as const;
 
+type ExtraCost = { name: string; value: number };
+
+function parseExtraCosts(raw: any): ExtraCost[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function sumExtraCosts(extras: ExtraCost[]): number {
+  return extras.reduce((s, e) => s + (e.value || 0), 0);
+}
+
 export default function Financeiro() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -32,6 +44,7 @@ export default function Financeiro() {
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+  const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
   const [exportMonth, setExportMonth] = useState(format(new Date(), "yyyy-MM"));
@@ -68,6 +81,7 @@ export default function Financeiro() {
     setEditItem(null);
     setSelectedEvent("");
     setForm({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+    setExtraCosts([]);
     setOpen(true);
   };
 
@@ -81,11 +95,29 @@ export default function Financeiro() {
       lodging: String(f.lodging || 0),
       other_costs: String(f.other_costs || 0),
     });
+    setExtraCosts(parseExtraCosts((f as any).extra_costs));
     setOpen(true);
+  };
+
+  const addExtraCost = () => {
+    setExtraCosts((prev) => [...prev, { name: "", value: 0 }]);
+  };
+
+  const updateExtraCost = (index: number, field: "name" | "value", val: string) => {
+    setExtraCosts((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, [field]: field === "value" ? parseFloat(val) || 0 : val } : item
+      )
+    );
+  };
+
+  const removeExtraCost = (index: number) => {
+    setExtraCosts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const validExtras = extraCosts.filter((e) => e.name.trim() !== "");
       const payload = {
         event_id: selectedEvent,
         empresa_id: empresaId,
@@ -94,6 +126,7 @@ export default function Financeiro() {
         food: parseFloat(form.food) || 0,
         lodging: parseFloat(form.lodging) || 0,
         other_costs: parseFloat(form.other_costs) || 0,
+        extra_costs: validExtras,
       };
 
       if (editItem) {
@@ -109,6 +142,7 @@ export default function Financeiro() {
       setOpen(false);
       setEditItem(null);
       setForm({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+      setExtraCosts([]);
       setSelectedEvent("");
       toast({ title: editItem ? "Registro atualizado!" : "Dados financeiros salvos!" });
     },
@@ -129,11 +163,15 @@ export default function Financeiro() {
 
   const fmt = (n: number | null) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
+  const getExtraCostsTotal = (f: any) => sumExtraCosts(parseExtraCosts((f as any).extra_costs));
+
   const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
-  const totalCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0), 0);
+  const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0), 0);
+  const totalExtraCosts = financials.reduce((s, f) => s + getExtraCostsTotal(f), 0);
+  const totalCosts = totalFixedCosts + totalExtraCosts;
   const totalProfit = totalCache - totalCosts;
 
-  const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0);
+  const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0) - getExtraCostsTotal(f);
 
   const getFilteredForExport = () => {
     if (exportMode === "all") return financials;
@@ -190,6 +228,7 @@ export default function Financeiro() {
         </div>
       </div>
 
+      {/* Export Dialog */}
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Exportar Relatório Financeiro</DialogTitle></DialogHeader>
@@ -253,8 +292,9 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
+      {/* Add/Edit Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem ? "Editar Registro Financeiro" : "Novo Registro Financeiro"}</DialogTitle>
           </DialogHeader>
@@ -284,6 +324,38 @@ export default function Financeiro() {
                 />
               </div>
             ))}
+
+            {/* Extra costs */}
+            {extraCosts.length > 0 && (
+              <div className="space-y-3 pt-2 border-t border-border">
+                <Label className="text-sm font-semibold">Despesas Extras</Label>
+                {extraCosts.map((extra, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Nome da despesa"
+                      value={extra.name}
+                      onChange={(e) => updateExtraCost(i, "name", e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={extra.value || ""}
+                      onChange={(e) => updateExtraCost(i, "value", e.target.value)}
+                      className="w-28"
+                    />
+                    <Button variant="ghost" size="icon" onClick={() => removeExtraCost(i)} className="shrink-0 text-destructive hover:text-destructive">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Button type="button" variant="outline" size="sm" onClick={addExtraCost} className="w-full">
+              <Plus className="h-4 w-4 mr-1" /> Adicionar Despesa Extra
+            </Button>
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
@@ -346,6 +418,7 @@ export default function Financeiro() {
               <TableHead className="text-right hidden sm:table-cell">Alimentação</TableHead>
               <TableHead className="text-right hidden md:table-cell">Hospedagem</TableHead>
               <TableHead className="text-right hidden md:table-cell">Outros</TableHead>
+              <TableHead className="text-right hidden lg:table-cell">Extras</TableHead>
               <TableHead className="text-right">Lucro/Prejuízo</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -353,21 +426,31 @@ export default function Financeiro() {
           <TableBody>
             {financials.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                   Nenhum registro financeiro.
                 </TableCell>
               </TableRow>
             ) : (
               financials.map((f) => {
                 const profit = getProfit(f);
+                const extras = parseExtraCosts((f as any).extra_costs);
+                const extrasTotal = sumExtraCosts(extras);
                 return (
                   <TableRow key={f.id}>
-                    <TableCell className="font-medium">{(f as any).events?.name || "—"}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>{(f as any).events?.name || "—"}</div>
+                      {extras.length > 0 && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {extras.map((e) => e.name).join(", ")}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">{fmt(f.cache)}</TableCell>
                     <TableCell className="text-right hidden sm:table-cell">{fmt(f.transport)}</TableCell>
                     <TableCell className="text-right hidden sm:table-cell">{fmt(f.food)}</TableCell>
                     <TableCell className="text-right hidden md:table-cell">{fmt(f.lodging)}</TableCell>
                     <TableCell className="text-right hidden md:table-cell">{fmt(f.other_costs)}</TableCell>
+                    <TableCell className="text-right hidden lg:table-cell">{fmt(extrasTotal)}</TableCell>
                     <TableCell className={`text-right font-semibold ${profit >= 0 ? "text-accent" : "text-destructive"}`}>
                       {fmt(profit)}
                     </TableCell>
@@ -398,6 +481,7 @@ export default function Financeiro() {
                 <TableCell className="text-right font-bold hidden sm:table-cell">{fmt(financials.reduce((s, f) => s + (f.food || 0), 0))}</TableCell>
                 <TableCell className="text-right font-bold hidden md:table-cell">{fmt(financials.reduce((s, f) => s + (f.lodging || 0), 0))}</TableCell>
                 <TableCell className="text-right font-bold hidden md:table-cell">{fmt(financials.reduce((s, f) => s + (f.other_costs || 0), 0))}</TableCell>
+                <TableCell className="text-right font-bold hidden lg:table-cell">{fmt(totalExtraCosts)}</TableCell>
                 <TableCell className={`text-right font-bold ${totalProfit >= 0 ? "text-accent" : "text-destructive"}`}>{fmt(totalProfit)}</TableCell>
                 <TableCell />
               </TableRow>
