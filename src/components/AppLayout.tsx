@@ -103,6 +103,7 @@ function NotificacoesMaster() {
 
 export function AppLayout() {
   const { isMasterAdmin } = useAuth();
+  useAutoBackup();
 
   return (
     <SidebarProvider>
