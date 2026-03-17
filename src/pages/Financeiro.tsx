@@ -318,7 +318,7 @@ export default function Financeiro() {
   const totalCosts = totalFixedCosts + totalExtraCosts;
   const totalProfit = totalCachePago - totalCosts;
 
-  const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0) - getExtraCostsTotal(f);
+  const getProfit = (f: any) => getCachePago(f) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0) - getExtraCostsTotal(f);
 
   const getFilteredForExport = () => {
     if (exportMode === "all") return financials;
