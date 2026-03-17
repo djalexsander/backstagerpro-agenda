@@ -418,7 +418,7 @@ export default function Financeiro() {
                   </SelectContent>
                 </Select>
               </div>
-              {fieldKeys.filter(k => k !== 'transport').map((key, idx) => (
+              {fieldKeys.filter(k => k !== 'transport' && k !== 'lodging').map((key, idx) => (
                 <div key={key} className="space-y-2">
                   <Label>{fieldLabels[key]}</Label>
                   <Input
@@ -431,16 +431,11 @@ export default function Financeiro() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        const nextFixed = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>(`[data-field-index="${idx + 1}"]`);
-                        if (nextFixed) {
-                          nextFixed.focus();
-                        } else {
-                          const firstExtra = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>('[data-extra-name="0"]');
-                          if (firstExtra) {
-                            firstExtra.focus();
-                          } else if (selectedEvent && !saveMutation.isPending) {
-                            saveMutation.mutate();
-                          }
+                        const firstExtra = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>('[data-extra-name="0"]');
+                        if (firstExtra) {
+                          firstExtra.focus();
+                        } else if (selectedEvent && !saveMutation.isPending) {
+                          saveMutation.mutate();
                         }
                       }
                     }}
@@ -448,7 +443,68 @@ export default function Financeiro() {
                 </div>
               ))}
 
-              {/* Transporte - clicável com detalhes */}
+              {/* Hospedagem - clicável com detalhes */}
+              <div className="space-y-2">
+                <Label
+                  className="cursor-pointer flex items-center justify-between hover:text-primary transition-colors"
+                  onClick={() => setLodgingOpen(!lodgingOpen)}
+                >
+                  <span>Hospedagem {form.lodging && Number(form.lodging) > 0 ? `— ${fmt(Number(form.lodging))}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">{lodgingOpen ? "▲ Fechar" : "▼ Detalhar"}</span>
+                </Label>
+                {!lodgingOpen && (
+                  <Input
+                    type="number" step="0.01"
+                    value={form.lodging}
+                    onChange={(e) => setForm((p) => ({ ...p, lodging: e.target.value }))}
+                    placeholder="0.00"
+                    onFocus={() => setLodgingOpen(true)}
+                  />
+                )}
+                {lodgingOpen && (
+                  <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Qtd. Funcionários</Label>
+                        <Input
+                          type="number" step="1"
+                          value={lodgingDetail.qtdFuncionarios}
+                          onChange={(e) => {
+                            const qtd = e.target.value;
+                            setLodgingDetail(p => ({ ...p, qtdFuncionarios: qtd }));
+                            const total = (parseFloat(qtd) || 0) * (parseFloat(lodgingDetail.valorDia) || 0);
+                            setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
+                          }}
+                          placeholder="0" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Valor/Dia</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={lodgingDetail.valorDia}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setLodgingDetail(p => ({ ...p, valorDia: val }));
+                            const total = (parseFloat(lodgingDetail.qtdFuncionarios) || 0) * (parseFloat(val) || 0);
+                            setForm(p => ({ ...p, lodging: total ? String(total) : "" }));
+                          }}
+                          placeholder="0.00" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Total</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={form.lodging}
+                          onChange={(e) => setForm(p => ({ ...p, lodging: e.target.value }))}
+                          placeholder="0.00" className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 <Label
                   className="cursor-pointer flex items-center justify-between hover:text-primary transition-colors"
