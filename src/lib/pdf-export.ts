@@ -118,7 +118,7 @@ export function exportFinancialPDF(financial: any) {
     ["Transporte", fmtBRL(financial.transport)],
     ["Alimentação", fmtBRL(financial.food)],
     ["Hospedagem", fmtBRL(financial.lodging)],
-    ["Outros Custos", fmtBRL(financial.other_costs)],
+    ["Cachê de Funcionários", fmtBRL(financial.other_costs)],
   ];
 
   extras.forEach((e) => {
