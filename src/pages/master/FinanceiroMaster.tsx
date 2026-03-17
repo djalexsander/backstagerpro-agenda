@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
-import { format } from "date-fns";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3 } from "lucide-react";
+import { format, subMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function FinanceiroMaster() {
