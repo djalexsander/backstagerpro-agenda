@@ -227,7 +227,7 @@ export default function Backups() {
 
       {/* Last backup warning */}
       {lastBackup && (Date.now() - new Date(lastBackup.created_at).getTime() > 3 * 24 * 60 * 60 * 1000) && (
-        <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
           <span>Seu último backup foi há mais de 3 dias. Considere gerar um novo backup.</span>
         </div>
