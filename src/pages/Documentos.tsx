@@ -318,10 +318,10 @@ export default function Documentos() {
 
       let content = replaceVariables(selectedTemplate.conteudo, selectedEventId);
       if (fin) {
-        content = content.replaceAll("{{cache}}", fmtCurrency(fin.cache));
-        content = content.replaceAll("{{transporte}}", fmtCurrency(fin.transport));
-        content = content.replaceAll("{{alimentacao}}", fmtCurrency(fin.food));
-        content = content.replaceAll("{{hospedagem}}", fmtCurrency(fin.lodging));
+        content = content.split("{{cache}}").join(fmtCurrency(fin.cache));
+        content = content.split("{{transporte}}").join(fmtCurrency(fin.transport));
+        content = content.split("{{alimentacao}}").join(fmtCurrency(fin.food));
+        content = content.split("{{hospedagem}}").join(fmtCurrency(fin.lodging));
       }
 
       const event = events.find((e) => e.id === selectedEventId);
