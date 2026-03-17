@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { NotificacoesEmpresa } from "@/components/NotificacoesEmpresa";
 import { Bell, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -113,6 +114,7 @@ export function AppLayout() {
           <header className="h-14 flex items-center justify-between border-b bg-card px-4 shrink-0">
             <SidebarTrigger className="mr-4" />
             <div className="flex items-center gap-2">
+              {!isMasterAdmin && <NotificacoesEmpresa />}
               {isMasterAdmin && <NotificacoesMaster />}
             </div>
           </header>
