@@ -12,11 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, FileText, Pencil, Trash2, Copy, Download, Eye, FilePlus } from "lucide-react";
+import { Plus, FileText, Pencil, Trash2, Copy, Download, Eye, FilePlus, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
+import { saveAs } from "file-saver";
 
 const TIPOS_DOCUMENTO = [
   { value: "contrato", label: "Contrato de Show" },
@@ -390,6 +392,32 @@ export default function Documentos() {
     doc.save(`${nome}.pdf`);
   };
 
+  const exportDOCX = async (nome: string, conteudo: string) => {
+    const lines = conteudo.split("\n");
+    const paragraphs = lines.map((line) => {
+      const isHeading =
+        /^[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ\s\-:]{5,}$/.test(line.trim()) ||
+        /^CLÁUSULA/.test(line.trim());
+      if (isHeading && line.trim().length > 0) {
+        return new Paragraph({
+          children: [new TextRun({ text: line, bold: true, size: 24 })],
+          spacing: { after: 120 },
+        });
+      }
+      return new Paragraph({
+        children: [new TextRun({ text: line, size: 22 })],
+        spacing: { after: 80 },
+      });
+    });
+
+    const doc = new Document({
+      sections: [{ children: paragraphs }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `${nome}.docx`);
+  };
+
   const tipoLabel = (tipo: string) => TIPOS_DOCUMENTO.find((t) => t.value === tipo)?.label || tipo;
 
   const tipoBadgeClass = (tipo: string) => {
@@ -520,8 +548,11 @@ export default function Documentos() {
                       }}>
                         <Eye className="h-3 w-3 mr-1" /> Visualizar
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => exportPDF(doc.nome, doc.conteudo_final)}>
+                      <Button size="sm" variant="outline" onClick={() => exportPDF(doc.nome, doc.conteudo_final)} title="Exportar PDF">
                         <Download className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => exportDOCX(doc.nome, doc.conteudo_final)} title="Exportar Word">
+                        <FileDown className="h-3 w-3" />
                       </Button>
                       <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteDocConfirm(doc.id)}>
                         <Trash2 className="h-3 w-3" />
