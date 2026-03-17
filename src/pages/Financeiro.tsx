@@ -146,6 +146,14 @@ export default function Financeiro() {
       setTransportDetail({ km: "", valorGasto: "" });
       setTransportOpen(Number(f.transport || 0) > 0);
     }
+    const savedLodging = (f as any).lodging_detail;
+    if (savedLodging) {
+      setLodgingDetail({ qtdFuncionarios: String(savedLodging.qtdFuncionarios || ""), valorDia: String(savedLodging.valorDia || "") });
+      setLodgingOpen(true);
+    } else {
+      setLodgingDetail({ qtdFuncionarios: "", valorDia: "" });
+      setLodgingOpen(Number(f.lodging || 0) > 0);
+    }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
     setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
     setOpen(true);
