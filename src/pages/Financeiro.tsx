@@ -148,7 +148,7 @@ export default function Financeiro() {
     }
     const savedLodging = (f as any).lodging_detail;
     if (savedLodging) {
-      setLodgingDetail({ qtdFuncionarios: String(savedLodging.qtdFuncionarios || ""), valorDia: String(savedLodging.valorDia || "") });
+      setLodgingDetail({ qtdFuncionarios: String(savedLodging.qtdFuncionarios || ""), valorDia: String(savedLodging.valorDia || ""), qtdDias: String(savedLodging.qtdDias || "") });
       setLodgingOpen(true);
     } else {
       setLodgingDetail({ qtdFuncionarios: "", valorDia: "" });
