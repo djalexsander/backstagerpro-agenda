@@ -168,6 +168,7 @@ export default function ConfiguracoesSistema() {
             )}
             <div className="flex gap-2">
               <Input
+                ref={logoInputRef}
                 type="file"
                 accept="image/*"
                 onChange={(e) => {
@@ -182,9 +183,10 @@ export default function ConfiguracoesSistema() {
                 variant="outline"
                 size="sm"
                 onClick={handleLogoUpload}
-                disabled={!logoFile}
+                disabled={!logoFile || isUploadingLogo}
               >
-                <Upload className="h-4 w-4 mr-1" /> Enviar
+                <Upload className="h-4 w-4 mr-1" />
+                {isUploadingLogo ? "Enviando..." : "Enviar"}
               </Button>
             </div>
           </CardContent>

@@ -6,11 +6,13 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { isMasterAdmin, isAdminEmpresa, profile, signOut } = useAuth();
+  const { platformLogoUrl, platformName } = usePlatformBranding();
 
   const companyItems = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -38,9 +40,21 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/70">
-            <div className="flex items-center gap-2">
-              <Music className="h-5 w-5 text-sidebar-primary" />
-              {!collapsed && <span className="font-bold text-base tracking-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>Backstage Pro</span>}
+            <div className="flex items-center gap-2 min-w-0">
+              {platformLogoUrl ? (
+                <img
+                  src={platformLogoUrl}
+                  alt={`Logo ${platformName}`}
+                  className="h-7 w-7 rounded-md object-contain bg-sidebar-accent/40 p-0.5"
+                />
+              ) : (
+                <Music className="h-5 w-5 text-sidebar-primary" />
+              )}
+              {!collapsed && (
+                <span className="font-bold text-base tracking-tight truncate" style={{ fontFamily: "Montserrat, sans-serif" }}>
+                  {platformName}
+                </span>
+              )}
             </div>
           </SidebarGroupLabel>
 
