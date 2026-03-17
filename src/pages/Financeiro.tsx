@@ -37,14 +37,9 @@ function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
     if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
       return raw.map((f: any) => ({
         employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0,
-        hospedagem: 0, transporte: { km: 0, combustivel: 0, total: 0 },
       }));
     }
-    return raw.map((e: any) => ({
-      ...e,
-      hospedagem: e.hospedagem || 0,
-      transporte: e.transporte || { km: 0, combustivel: 0, total: 0 },
-    }));
+    return raw;
   }
   try { return JSON.parse(raw); } catch { return []; }
 }
