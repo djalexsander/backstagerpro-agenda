@@ -247,6 +247,7 @@ export type Database = {
           created_at: string
           empresa_id: string | null
           event_id: string
+          extra_costs: Json | null
           food: number | null
           id: string
           lodging: number | null
@@ -259,6 +260,7 @@ export type Database = {
           created_at?: string
           empresa_id?: string | null
           event_id: string
+          extra_costs?: Json | null
           food?: number | null
           id?: string
           lodging?: number | null
@@ -271,6 +273,7 @@ export type Database = {
           created_at?: string
           empresa_id?: string | null
           event_id?: string
+          extra_costs?: Json | null
           food?: number | null
           id?: string
           lodging?: number | null
