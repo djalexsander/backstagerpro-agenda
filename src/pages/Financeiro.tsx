@@ -406,7 +406,7 @@ export default function Financeiro() {
                   </SelectContent>
                 </Select>
               </div>
-              {fieldKeys.map((key, idx) => (
+              {fieldKeys.filter(k => k !== 'transport').map((key, idx) => (
                 <div key={key} className="space-y-2">
                   <Label>{fieldLabels[key]}</Label>
                   <Input
@@ -435,6 +435,58 @@ export default function Financeiro() {
                   />
                 </div>
               ))}
+
+              {/* Transporte - clicável com detalhes */}
+              <div className="space-y-2">
+                <Label
+                  className="cursor-pointer flex items-center justify-between hover:text-primary transition-colors"
+                  onClick={() => setTransportOpen(!transportOpen)}
+                >
+                  <span>Transporte {form.transport && Number(form.transport) > 0 ? `— ${fmt(Number(form.transport))}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">{transportOpen ? "▲ Fechar" : "▼ Detalhar"}</span>
+                </Label>
+                {!transportOpen && (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.transport}
+                    onChange={(e) => setForm((p) => ({ ...p, transport: e.target.value }))}
+                    placeholder="0.00"
+                    onFocus={() => setTransportOpen(true)}
+                  />
+                )}
+                {transportOpen && (
+                  <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">KM Rodados</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={transportDetail.km}
+                          onChange={(e) => setTransportDetail(p => ({ ...p, km: e.target.value }))}
+                          placeholder="0" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Valor Gasto</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={transportDetail.valorGasto}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTransportDetail(p => ({ ...p, valorGasto: val }));
+                            setForm(p => ({ ...p, transport: val }));
+                          }}
+                          placeholder="0.00" className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total Transporte: <span className="font-semibold text-foreground">{fmt(Number(form.transport) || 0)}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Funcionários do Evento */}
               <div className="space-y-3 pt-2 border-t border-border">
