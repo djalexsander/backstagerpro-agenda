@@ -38,15 +38,23 @@ function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
     if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
-      return raw.map((f: any) => ({ employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0 }));
+      return raw.map((f: any) => ({
+        employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0,
+        hospedagem: 0, transporte: { km: 0, combustivel: 0, total: 0 },
+      }));
     }
-    return raw;
+    return raw.map((e: any) => ({
+      ...e,
+      hospedagem: e.hospedagem || 0,
+      transporte: e.transporte || { km: 0, combustivel: 0, total: 0 },
+    }));
   }
   try { return JSON.parse(raw); } catch { return []; }
 }
 
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
-  return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
+  return emps.reduce((s, e) =>
+    s + (e.cache || 0) + (e.food || 0) + (e.hospedagem || 0) + (e.transporte?.total || 0), 0);
 }
 
 function parseExtraCosts(raw: any): ExtraCost[] {
