@@ -465,7 +465,7 @@ export default function Financeiro() {
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Cachê</Label>
                         <Input
@@ -483,47 +483,6 @@ export default function Financeiro() {
                           onChange={(e) => updateEmployeeFood(i, parseFloat(e.target.value) || 0)}
                           className="h-8 text-sm" placeholder="0.00"
                         />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Hospedagem</Label>
-                        <Input
-                          type="number" step="0.01"
-                          value={emp.hospedagem || ""}
-                          onChange={(e) => updateEmployeeHospedagem(i, parseFloat(e.target.value) || 0)}
-                          className="h-8 text-sm" placeholder="0.00"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Transporte</Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">KM</Label>
-                          <Input
-                            type="number" step="0.01"
-                            value={emp.transporte?.km || ""}
-                            onChange={(e) => updateEmployeeTransporte(i, 'km', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm" placeholder="0"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Combustível</Label>
-                          <Input
-                            type="number" step="0.01"
-                            value={emp.transporte?.combustivel || ""}
-                            onChange={(e) => updateEmployeeTransporte(i, 'combustivel', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm" placeholder="0.00"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Total Gasto</Label>
-                          <Input
-                            type="number" step="0.01"
-                            value={emp.transporte?.total || ""}
-                            onChange={(e) => updateEmployeeTransporte(i, 'total', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-sm" placeholder="0.00"
-                          />
-                        </div>
                       </div>
                     </div>
                   </div>
