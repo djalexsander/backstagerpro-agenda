@@ -16,22 +16,18 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
-  Database, Download, Upload, Trash2, RotateCcw, Plus, CalendarDays, Shield, Clock
+  Database, Download, Upload, Trash2, RotateCcw, Plus, CalendarDays, Shield, Clock, AlertTriangle, FileCheck
 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
-const MAX_AUTO_BACKUPS = 10;
-
-interface BackupPayload {
-  empresa_id: string;
-  data_backup: string;
-  eventos: any[];
-  event_days: any[];
-  event_files: any[];
-  financials: any[];
-}
+import { createBackup, restoreBackup } from "@/lib/backup-service";
+import {
+  normalizeBackup,
+  validateBackup,
+  getBackupSummary,
+  type BackupPayload,
+} from "@/lib/backup-utils";
 
 interface BackupRow {
   id: string;
@@ -53,6 +49,7 @@ export default function Backups() {
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<{ payload: BackupPayload; summary: ReturnType<typeof getBackupSummary> } | null>(null);
 
   const { data: backups = [], isLoading } = useQuery({
     queryKey: ["backups", empresaId],
@@ -69,72 +66,19 @@ export default function Backups() {
     enabled: !!empresaId,
   });
 
-  async function gatherPayload(empresaId: string, dateStart?: string, dateEnd?: string): Promise<BackupPayload> {
-    let eventsQuery = supabase.from("events").select("*").eq("empresa_id", empresaId);
-    if (dateStart) eventsQuery = eventsQuery.gte("date", dateStart);
-    if (dateEnd) eventsQuery = eventsQuery.lte("date", dateEnd);
-    const { data: eventos } = await eventsQuery;
-
-    const eventIds = (eventos || []).map((e: any) => e.id);
-
-    let eventDays: any[] = [];
-    let eventFiles: any[] = [];
-    let financials: any[] = [];
-
-    if (eventIds.length > 0) {
-      const [daysRes, filesRes, finRes] = await Promise.all([
-        supabase.from("event_days").select("*").in("event_id", eventIds),
-        supabase.from("event_files").select("*").in("event_id", eventIds),
-        supabase.from("financials").select("*").in("event_id", eventIds),
-      ]);
-      eventDays = daysRes.data || [];
-      eventFiles = filesRes.data || [];
-      financials = finRes.data || [];
-    }
-
-    return {
-      empresa_id: empresaId,
-      data_backup: new Date().toISOString(),
-      eventos: eventos || [],
-      event_days: eventDays,
-      event_files: eventFiles,
-      financials: financials,
-    };
-  }
-
-  async function cleanupAutoBackups(empresaId: string) {
-    const { data } = await supabase
-      .from("backups")
-      .select("id, created_at")
-      .eq("empresa_id", empresaId)
-      .eq("tipo", "auto")
-      .order("created_at", { ascending: false });
-
-    if (data && data.length > MAX_AUTO_BACKUPS) {
-      const toDelete = data.slice(MAX_AUTO_BACKUPS).map((b: any) => b.id);
-      await supabase.from("backups").delete().in("id", toDelete);
-    }
-  }
+  // Stats
+  const totalBackups = backups.length;
+  const autoCount = backups.filter(b => b.tipo === "auto").length;
+  const manualCount = backups.filter(b => b.tipo === "manual").length;
+  const lastBackup = backups[0];
+  const lastBackupAgo = lastBackup
+    ? formatDistanceToNow(new Date(lastBackup.created_at), { locale: ptBR, addSuffix: true })
+    : null;
 
   const createBackupMutation = useMutation({
-    mutationFn: async (opts: { tipo: string; dateStart?: string; dateEnd?: string }) => {
+    mutationFn: async (opts: { tipo: "auto" | "manual"; dateStart?: string; dateEnd?: string }) => {
       if (!empresaId) throw new Error("Empresa não encontrada");
-      const payload = await gatherPayload(empresaId, opts.dateStart, opts.dateEnd);
-      const nome = `Backup ${format(new Date(), "dd-MM-yyyy HH:mm")}`;
-
-      const { error } = await supabase.from("backups").insert({
-        empresa_id: empresaId,
-        nome,
-        tipo: opts.tipo,
-        periodo_inicio: opts.dateStart || null,
-        periodo_fim: opts.dateEnd || null,
-        payload,
-      } as any);
-      if (error) throw error;
-
-      if (opts.tipo === "auto") {
-        await cleanupAutoBackups(empresaId);
-      }
+      await createBackup(empresaId, opts.tipo, opts.dateStart, opts.dateEnd);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["backups"] });
@@ -156,55 +100,29 @@ export default function Backups() {
   });
 
   const restoreMutation = useMutation({
-    mutationFn: async (payload: BackupPayload) => {
+    mutationFn: async (rawPayload: any) => {
       if (!empresaId) throw new Error("Empresa não encontrada");
-
-      // Delete current data in order (files → days → financials → events)
-      const { data: currentEvents } = await supabase.from("events").select("id").eq("empresa_id", empresaId);
-      const currentIds = (currentEvents || []).map((e: any) => e.id);
-
-      if (currentIds.length > 0) {
-        await supabase.from("event_files").delete().in("event_id", currentIds);
-        await supabase.from("event_days").delete().in("event_id", currentIds);
-        await supabase.from("financials").delete().in("event_id", currentIds);
-      }
-      await supabase.from("events").delete().eq("empresa_id", empresaId);
-
-      // Insert backup data
-      if (payload.eventos?.length) {
-        const { error } = await supabase.from("events").insert(payload.eventos);
-        if (error) throw error;
-      }
-      if (payload.event_days?.length) {
-        const { error } = await supabase.from("event_days").insert(payload.event_days);
-        if (error) throw error;
-      }
-      if (payload.event_files?.length) {
-        const { error } = await supabase.from("event_files").insert(payload.event_files);
-        if (error) throw error;
-      }
-      if (payload.financials?.length) {
-        const { error } = await supabase.from("financials").insert(payload.financials);
-        if (error) throw error;
-      }
+      await restoreBackup(empresaId, rawPayload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries();
       toast.success("Backup restaurado com sucesso!");
       setRestoreId(null);
+      setImportPreview(null);
     },
     onError: (err) => {
-      toast.error("Erro ao restaurar backup: " + (err as Error).message);
+      toast.error("Erro ao restaurar: " + (err as Error).message);
     },
   });
 
   function handleExport(backup: BackupRow) {
-    const json = JSON.stringify(backup.payload, null, 2);
+    const normalized = normalizeBackup(backup.payload, backup.empresa_id);
+    const json = JSON.stringify(normalized, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `backup-empresa-${format(new Date(backup.created_at), "yyyy-MM-dd")}.json`;
+    a.download = `backstage-backup-${format(new Date(backup.created_at), "yyyy-MM-dd")}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Backup exportado!");
@@ -214,37 +132,30 @@ export default function Backups() {
     if (!importFile) return;
     try {
       const text = await importFile.text();
-      const payload = JSON.parse(text) as BackupPayload;
+      const raw = JSON.parse(text);
+      const normalized = normalizeBackup(raw, empresaId);
+      const validation = validateBackup(normalized);
 
-      if (!payload.eventos || !Array.isArray(payload.eventos)) {
-        toast.error("Arquivo de backup inválido: estrutura incorreta.");
+      if (!validation.valid) {
+        toast.error("Arquivo inválido: " + validation.errors.join(", "));
         return;
       }
 
-      // Overwrite empresa_id to current one for safety
-      payload.empresa_id = empresaId!;
-      payload.eventos = payload.eventos.map((e: any) => ({ ...e, empresa_id: empresaId }));
-      payload.event_days = (payload.event_days || []).map((d: any) => ({ ...d, empresa_id: empresaId }));
-      payload.event_files = (payload.event_files || []).map((f: any) => ({ ...f, empresa_id: empresaId }));
-      payload.financials = (payload.financials || []).map((f: any) => ({ ...f, empresa_id: empresaId }));
-
+      const summary = getBackupSummary(normalized);
       setImportOpen(false);
+      setImportPreview({ payload: normalized, summary });
       setRestoreId("import");
-      // Store payload temporarily
-      (window as any).__importPayload = payload;
     } catch {
       toast.error("Erro ao ler arquivo. Verifique se é um JSON válido.");
     }
   }
 
   function handleRestoreConfirm() {
-    if (restoreId === "import") {
-      const payload = (window as any).__importPayload as BackupPayload;
-      delete (window as any).__importPayload;
-      restoreMutation.mutate(payload);
+    if (restoreId === "import" && importPreview) {
+      restoreMutation.mutate(importPreview.payload);
     } else if (restoreId) {
       const backup = backups.find((b) => b.id === restoreId);
-      if (backup) restoreMutation.mutate(backup.payload as BackupPayload);
+      if (backup) restoreMutation.mutate(backup.payload);
     }
   }
 
@@ -255,6 +166,11 @@ export default function Backups() {
     }
     createBackupMutation.mutate({ tipo: "manual", dateStart: periodStart, dateEnd: periodEnd });
     setPeriodOpen(false);
+  }
+
+  function getBackupEventCount(backup: BackupRow): number {
+    const normalized = normalizeBackup(backup.payload, backup.empresa_id);
+    return normalized.data.eventos?.length ?? 0;
   }
 
   return (
@@ -268,6 +184,54 @@ export default function Backups() {
           <p className="text-muted-foreground mt-1">Gerencie backups dos dados da sua empresa.</p>
         </div>
       </div>
+
+      {/* Stats Row */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        <Card>
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <Database className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-2xl font-bold">{totalBackups}</p>
+              <p className="text-xs text-muted-foreground">Total de backups</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <Shield className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-2xl font-bold">{autoCount}</p>
+              <p className="text-xs text-muted-foreground">Automáticos</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <Plus className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-2xl font-bold">{manualCount}</p>
+              <p className="text-xs text-muted-foreground">Manuais</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium truncate">{lastBackupAgo ?? "Nenhum"}</p>
+              <p className="text-xs text-muted-foreground">Último backup</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Last backup warning */}
+      {lastBackup && (Date.now() - new Date(lastBackup.created_at).getTime() > 3 * 24 * 60 * 60 * 1000) && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <span>Seu último backup foi há mais de 3 dias. Considere gerar um novo backup.</span>
+        </div>
+      )}
 
       {/* Action Cards */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -346,8 +310,7 @@ export default function Backups() {
         ) : (
           <div className="space-y-3">
             {backups.map((backup) => {
-              const payload = backup.payload as BackupPayload;
-              const eventCount = payload?.eventos?.length ?? 0;
+              const eventCount = getBackupEventCount(backup);
 
               return (
                 <Card key={backup.id} className="hover:shadow-md transition-shadow">
@@ -356,7 +319,7 @@ export default function Backups() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium truncate">{backup.nome}</span>
                         <Badge variant={backup.tipo === "auto" ? "secondary" : "default"} className="text-xs">
-                          {backup.tipo === "auto" ? "Automático" : "Manual"}
+                          {backup.tipo === "auto" ? "AUTO" : "MANUAL"}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -423,11 +386,11 @@ export default function Backups() {
       </Dialog>
 
       {/* Import Dialog */}
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) setImportFile(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Importar Backup</DialogTitle>
-            <DialogDescription>Selecione um arquivo .json de backup.</DialogDescription>
+            <DialogDescription>Selecione um arquivo .json de backup exportado.</DialogDescription>
           </DialogHeader>
           <div className="py-2">
             <Input
@@ -441,19 +404,33 @@ export default function Backups() {
               <Button variant="outline">Cancelar</Button>
             </DialogClose>
             <Button onClick={handleImport} disabled={!importFile}>
-              Importar e Restaurar
+              <FileCheck className="h-4 w-4 mr-2" />
+              Validar e Importar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Restore Confirmation */}
-      <AlertDialog open={!!restoreId} onOpenChange={(open) => !open && setRestoreId(null)}>
+      {/* Restore Confirmation (with import preview) */}
+      <AlertDialog open={!!restoreId} onOpenChange={(open) => { if (!open) { setRestoreId(null); setImportPreview(null); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restaurar Backup</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong className="text-destructive">ATENÇÃO:</strong> isso irá substituir todos os dados atuais da empresa (eventos, financeiro, arquivos) pelos dados do backup. Esta ação não pode ser desfeita.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  <strong className="text-destructive">ATENÇÃO:</strong> isso irá substituir todos os dados atuais da empresa pelos dados do backup. Esta ação não pode ser desfeita.
+                </p>
+                {importPreview && (
+                  <div className="rounded-md border p-3 text-sm space-y-1 bg-muted/50">
+                    <p className="font-medium">Preview do backup:</p>
+                    <p>• {importPreview.summary.eventos} evento(s)</p>
+                    <p>• {importPreview.summary.eventDays} dia(s) de evento</p>
+                    <p>• {importPreview.summary.eventFiles} arquivo(s)</p>
+                    <p>• {importPreview.summary.financials} registro(s) financeiro(s)</p>
+                  </div>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
