@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Eye } from "lucide-react";
+import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -67,18 +67,17 @@ export default function EventDetail() {
     },
   });
 
-  const downloadFile = (filePath: string, fileName: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    const a = document.createElement("a");
-    a.href = data.publicUrl;
-    a.download = fileName;
-    a.target = "_blank";
-    a.click();
-  };
 
-  const viewFile = (filePath: string) => {
+  const downloadFile = async (filePath: string, fileName: string) => {
     const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    window.open(data.publicUrl, "_blank");
+    const response = await fetch(data.publicUrl);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -179,11 +178,8 @@ export default function EventDetail() {
                     )}
                     {dayFile && (
                       <div className="flex gap-2 pt-2 border-t border-border">
-                        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => viewFile(dayFile.file_path)}>
-                          <Eye className="h-3 w-3 mr-1" /> Visualizar
-                        </Button>
                         <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
-                          <Download className="h-3 w-3 mr-1" /> Baixar
+                          <Download className="h-3 w-3 mr-1" /> Baixar Rider
                         </Button>
                       </div>
                     )}
