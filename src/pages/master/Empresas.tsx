@@ -66,7 +66,7 @@ export default function Empresas() {
         // New empresa: set contract date to today, vencimento to +1 month
         const today = new Date();
         payload.data_contrato = format(today, "yyyy-MM-dd");
-        payload.vencimento = addMonths(today, 1).toISOString();
+        payload.vencimento = form.vencimento.toISOString();
         payload.plano_bloqueado = false;
 
         if (trialDays > 0) {
