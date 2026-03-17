@@ -359,6 +359,14 @@ export default function Empresas() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right space-x-1">
+                                {p.comprovante_path && (
+                                  <Button size="sm" variant="outline" className="text-primary border-primary hover:bg-primary/10" onClick={() => {
+                                    const { data } = supabase.storage.from("comprovantes").getPublicUrl(p.comprovante_path);
+                                    window.open(data.publicUrl, "_blank");
+                                  }}>
+                                    <FileCheck className="h-4 w-4 mr-1" /> Ver Comprovante
+                                  </Button>
+                                )}
                                 {p.status === "pendente" && (
                                   <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p.id)} disabled={marcarPago.isPending}>
                                     <CheckCircle className="h-4 w-4 mr-1" /> Pago
