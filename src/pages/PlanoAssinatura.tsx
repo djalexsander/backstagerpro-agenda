@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package, Users, Calendar, HardDrive } from "lucide-react";
+import { CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package, Users, Calendar, HardDrive, Upload, FileCheck, Download } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { generatePixPayload } from "@/lib/pix";
@@ -383,6 +383,7 @@ export default function PlanoAssinatura() {
                   <TableHead>Valor</TableHead>
                   <TableHead>Método</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Comprovante</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -393,6 +394,55 @@ export default function PlanoAssinatura() {
                     <TableCell className="uppercase">{p.metodo}</TableCell>
                     <TableCell>
                       <Badge variant={statusColor(p.status) as any}>{p.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {p.comprovante_path ? (
+                        <Badge variant="outline" className="text-accent border-accent gap-1">
+                          <FileCheck className="h-3 w-3" /> Enviado
+                        </Badge>
+                      ) : p.status === "pendente" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            const input = document.createElement("input");
+                            input.type = "file";
+                            input.accept = "image/*,.pdf";
+                            input.onchange = async (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (!file) return;
+                              const path = `${empresaId}/${p.id}-${file.name}`;
+                              const { error: uploadError } = await supabase.storage
+                                .from("comprovantes")
+                                .upload(path, file);
+                              if (uploadError) {
+                                toast.error("Erro ao enviar comprovante");
+                                return;
+                              }
+                              await supabase
+                                .from("pagamentos")
+                                .update({ comprovante_path: path } as any)
+                                .eq("id", p.id);
+                              
+                              // Notify master admin
+                              await supabase.from("notificacoes_master").insert({
+                                empresa_id: empresaId!,
+                                tipo: "comprovante_pagamento",
+                                mensagem: `${empresa?.nome_empresa} enviou comprovante de pagamento - R$${Number(p.valor).toFixed(2)}`,
+                              });
+
+                              queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
+                              toast.success("Comprovante enviado com sucesso!");
+                            };
+                            input.click();
+                          }}
+                        >
+                          <Upload className="h-3 w-3 mr-1" /> Enviar
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

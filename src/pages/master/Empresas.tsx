@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, Download, FileCheck } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -343,8 +343,9 @@ export default function Empresas() {
                             <TableHead>Valor</TableHead>
                             <TableHead>Método</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Comprovante</TableHead>
                             <TableHead className="text-right">Ação</TableHead>
-                          </TableRow>
+                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {detailPagamentos.map((p: any) => (
@@ -358,7 +359,24 @@ export default function Empresas() {
                                   {p.status}
                                 </Badge>
                               </TableCell>
+                              <TableCell>
+                                {p.comprovante_path ? (
+                                  <Badge variant="outline" className="text-accent border-accent gap-1">
+                                    <FileCheck className="h-3 w-3" /> Sim
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
                               <TableCell className="text-right space-x-1">
+                                {p.comprovante_path && (
+                                  <Button size="sm" variant="outline" className="text-primary border-primary hover:bg-primary/10" onClick={() => {
+                                    const { data } = supabase.storage.from("comprovantes").getPublicUrl(p.comprovante_path);
+                                    window.open(data.publicUrl, "_blank");
+                                  }}>
+                                    <FileCheck className="h-4 w-4 mr-1" /> Ver Comprovante
+                                  </Button>
+                                )}
                                 {p.status === "pendente" && (
                                   <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p.id)} disabled={marcarPago.isPending}>
                                     <CheckCircle className="h-4 w-4 mr-1" /> Pago
