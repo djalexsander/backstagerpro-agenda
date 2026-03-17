@@ -582,7 +582,7 @@ export default function Financeiro() {
               <TableHead className="text-right hidden sm:table-cell">Transporte</TableHead>
               <TableHead className="text-right hidden sm:table-cell">Alimentação</TableHead>
               <TableHead className="text-right hidden md:table-cell">Hospedagem</TableHead>
-              <TableHead className="text-right hidden md:table-cell">Outros</TableHead>
+              <TableHead className="text-right hidden md:table-cell">Funcionários</TableHead>
               <TableHead className="text-right hidden lg:table-cell">Extras</TableHead>
               <TableHead className="text-right">Lucro/Prejuízo</TableHead>
               <TableHead className="text-right">Ações</TableHead>
