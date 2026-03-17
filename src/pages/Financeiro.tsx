@@ -367,7 +367,29 @@ export default function Financeiro() {
                 </div>
               ))}
 
-              {/* Extra costs */}
+              {/* Cachê de Funcionários */}
+              <div className="space-y-2">
+                <Label>Cachê de Funcionários</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between font-normal"
+                  onClick={() => {
+                    if (funcionarios.length === 0) {
+                      setFuncionarios(defaultFuncionarios.map((nome) => ({ nome, valor: 0 })));
+                    }
+                    setFuncDialogOpen(true);
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    {funcionarios.length > 0
+                      ? `${funcionarios.filter(f => f.valor > 0).length} funcionário(s) — ${fmt(sumFuncionarios(funcionarios))}`
+                      : "Clique para adicionar funcionários"}
+                  </span>
+                </Button>
+              </div>
+
               {extraCosts.length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-border">
                   <Label className="text-sm font-semibold">Despesas Extras</Label>
