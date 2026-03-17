@@ -6,7 +6,6 @@ import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificacoesEmpresa } from "@/components/NotificacoesEmpresa";
-import { supabase } from "@/integrations/supabase/client";
 import { Bell, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
