@@ -557,7 +557,7 @@ export default function Documentos() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Conteúdo do Template</Label>
-                <span className="text-xs text-muted-foreground">Use variáveis {{...}} para preenchimento automático</span>
+                <span className="text-xs text-muted-foreground">{"Use variáveis {{...}} para preenchimento automático"}</span>
               </div>
               <Textarea
                 value={formConteudo}
