@@ -186,11 +186,8 @@ export default function EventDetail() {
                     )}
                     {dayFile && (
                       <div className="flex gap-2 pt-2 border-t border-border">
-                        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => viewFile(dayFile.file_path)}>
-                          <Eye className="h-3 w-3 mr-1" /> Visualizar
-                        </Button>
                         <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
-                          <Download className="h-3 w-3 mr-1" /> Baixar
+                          <Download className="h-3 w-3 mr-1" /> Baixar Rider
                         </Button>
                       </div>
                     )}
