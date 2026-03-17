@@ -358,12 +358,15 @@ export default function Empresas() {
                                   {p.status}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right space-x-1">
                                 {p.status === "pendente" && (
                                   <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p.id)} disabled={marcarPago.isPending}>
                                     <CheckCircle className="h-4 w-4 mr-1" /> Pago
                                   </Button>
                                 )}
+                                <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-destructive/10" onClick={() => deletePagamento.mutate(p.id)} disabled={deletePagamento.isPending}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
