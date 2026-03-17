@@ -143,6 +143,8 @@ export default function Financeiro() {
     setTransportOpen(false);
     setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
     setLodgingOpen(false);
+    setCacheOpen(false);
+    setCacheDetail(defaultCacheDetail);
     setExtraCosts([]);
     setSelectedEmployees([]);
     setOpen(true);
