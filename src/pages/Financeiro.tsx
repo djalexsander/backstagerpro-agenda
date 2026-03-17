@@ -1107,7 +1107,12 @@ export default function Financeiro() {
             <TableFooter>
               <TableRow>
                 <TableCell className="font-bold">Total</TableCell>
-                <TableCell className="text-right font-bold">{fmt(totalCache)}</TableCell>
+                <TableCell className="text-right font-bold">
+                  <div>{fmt(totalCache)}</div>
+                  {totalCachePendente > 0 && (
+                    <div className="text-[10px] font-normal text-yellow-500">{fmt(totalCachePendente)} pendente</div>
+                  )}
+                </TableCell>
                 <TableCell className="text-right font-bold hidden sm:table-cell">{fmt(financials.reduce((s, f) => s + (f.transport || 0), 0))}</TableCell>
                 <TableCell className="text-right font-bold hidden sm:table-cell">{fmt(financials.reduce((s, f) => s + (f.food || 0), 0))}</TableCell>
                 <TableCell className="text-right font-bold hidden md:table-cell">{fmt(financials.reduce((s, f) => s + (f.lodging || 0), 0))}</TableCell>
