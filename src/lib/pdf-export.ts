@@ -30,7 +30,7 @@ export function exportAgendaPDF(events: Event[]) {
   doc.save("agenda-backstage-pro.pdf");
 }
 
-export function exportEventPDF(event: Event) {
+export function exportEventPDF(event: Event, eventDays?: any[]) {
   const doc = new jsPDF();
   doc.setFontSize(18);
   doc.text(event.name, 14, 22);
@@ -38,12 +38,10 @@ export function exportEventPDF(event: Event) {
   doc.text(`Backstage Pro — Detalhes do Evento`, 14, 30);
 
   const rows = [
-    ["Artista", event.artist],
-    ["Data", event.date ? format(parseISO(event.date), "dd/MM/yyyy") : "—"],
-    ["Status", event.status],
+    ["Status", event.status.charAt(0).toUpperCase() + event.status.slice(1)],
     ["Cidade", event.city],
     ["Local", event.venue],
-    ["Horário", event.show_time?.slice(0, 5) || "—"],
+    ["Dias", String(event.num_days || 1)],
     ["Saída Logística", event.logistics_departure ? format(parseISO(event.logistics_departure), "dd/MM/yyyy HH:mm") : "—"],
     ["Observações", event.observations || "—"],
     ["Material", event.material_list || "—"],
@@ -56,6 +54,30 @@ export function exportEventPDF(event: Event) {
     columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
     styles: { fontSize: 10 },
   });
+
+  if (eventDays && eventDays.length > 0) {
+    let startY = (doc as any).lastAutoTable?.finalY + 10 || 100;
+
+    doc.setFontSize(14);
+    doc.text("Dias do Evento", 14, startY);
+    startY += 6;
+
+    const dayRows = eventDays.map((day) => [
+      `Dia ${day.day_number}`,
+      day.date ? format(parseISO(day.date), "dd/MM/yyyy") : "—",
+      day.artist || "—",
+      day.show_time ? (day.show_time as string).slice(0, 5) : "—",
+      day.observations || "—",
+    ]);
+
+    autoTable(doc, {
+      startY,
+      head: [["Dia", "Data", "Artista", "Horário", "Obs. Técnicas"]],
+      body: dayRows,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [225, 29, 72] },
+    });
+  }
 
   doc.save(`evento-${event.name.toLowerCase().replace(/\s+/g, "-")}.pdf`);
 }

@@ -94,7 +94,7 @@ export default function EventDetail() {
           <Badge className={`mt-2 ${statusColors[event.status]} capitalize`}>{event.status}</Badge>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event)}>
+          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays)}>
             <FileText className="h-4 w-4 mr-1" /> Exportar PDF
           </Button>
           {isAdmin && (
