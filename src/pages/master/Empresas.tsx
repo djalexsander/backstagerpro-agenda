@@ -359,6 +359,15 @@ export default function Empresas() {
                                   {p.status}
                                 </Badge>
                               </TableCell>
+                              <TableCell>
+                                {p.comprovante_path ? (
+                                  <Badge variant="outline" className="text-accent border-accent gap-1">
+                                    <FileCheck className="h-3 w-3" /> Sim
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
                               <TableCell className="text-right space-x-1">
                                 {p.comprovante_path && (
                                   <Button size="sm" variant="outline" className="text-primary border-primary hover:bg-primary/10" onClick={() => {
