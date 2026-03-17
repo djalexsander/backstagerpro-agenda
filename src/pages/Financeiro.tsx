@@ -94,8 +94,9 @@ export default function Financeiro() {
   const openAdd = () => {
     setEditItem(null);
     setSelectedEvent("");
-    setForm({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+    setForm({ cache: "", transport: "", food: "", lodging: "" });
     setExtraCosts([]);
+    setFuncionarios([]);
     setOpen(true);
   };
 
