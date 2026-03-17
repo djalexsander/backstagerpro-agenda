@@ -55,8 +55,10 @@ export default function Financeiro() {
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
-  const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+  const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "" });
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [funcDialogOpen, setFuncDialogOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
   const [exportMonth, setExportMonth] = useState(format(new Date(), "yyyy-MM"));
