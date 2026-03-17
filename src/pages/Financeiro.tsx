@@ -151,7 +151,7 @@ export default function Financeiro() {
       setLodgingDetail({ qtdFuncionarios: String(savedLodging.qtdFuncionarios || ""), valorDia: String(savedLodging.valorDia || ""), qtdDias: String(savedLodging.qtdDias || "") });
       setLodgingOpen(true);
     } else {
-      setLodgingDetail({ qtdFuncionarios: "", valorDia: "" });
+      setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
       setLodgingOpen(Number(f.lodging || 0) > 0);
     }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
