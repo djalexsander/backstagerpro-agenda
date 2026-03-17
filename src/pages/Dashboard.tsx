@@ -12,7 +12,7 @@ import {
   differenceInDays, differenceInHours, startOfMonth, endOfMonth, subMonths
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 
 const statusColors: Record<string, string> = {
   confirmado: "bg-accent text-accent-foreground",
@@ -148,6 +148,12 @@ export default function Dashboard() {
     return data;
   }, [confirmed, pending, canceled]);
 
+  const pieChartConfig = {
+    confirmados: { label: "Confirmados", color: "hsl(160, 84%, 39%)" },
+    pendentes: { label: "Pendentes", color: "hsl(38, 92%, 50%)" },
+    cancelados: { label: "Cancelados", color: "hsl(0, 84%, 60%)" },
+  };
+
   const chartConfig = {
     receita: { label: "Receita", color: "hsl(160, 84%, 39%)" },
     despesas: { label: "Despesas", color: "hsl(0, 84%, 60%)" },
@@ -256,18 +262,16 @@ export default function Dashboard() {
             {statusData.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">Nenhum evento cadastrado.</p>
             ) : (
-              <div className="h-[240px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusData} cx="50%" cy="45%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
-                      {statusData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={pieChartConfig} className="h-[240px] w-full">
+                <PieChart>
+                  <Pie data={statusData} cx="50%" cy="45%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                    {statusData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
