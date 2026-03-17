@@ -282,13 +282,33 @@ export default function Empresas() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            {!editItem && (
-              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                <CalendarDays className="h-4 w-4 inline mr-1" />
-                Data de contrato: <strong>hoje</strong> — Vencimento: <strong>+30 dias</strong>
+              <div className="space-y-2">
+                <Label>Data de Vencimento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !form.vencimento && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {form.vencimento ? format(form.vencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={form.vencimento}
+                      onSelect={(date) => date && setForm(p => ({ ...p, vencimento: date }))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
-            )}
+            </div>
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
