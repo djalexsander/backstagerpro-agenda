@@ -14,6 +14,7 @@ import EventForm from "@/pages/EventForm";
 import Financeiro from "@/pages/Financeiro";
 import UserManagement from "@/pages/UserManagement";
 import PlanoAssinatura from "@/pages/PlanoAssinatura";
+import Backups from "@/pages/Backups";
 
 import PainelMaster from "@/pages/master/PainelMaster";
 import Empresas from "@/pages/master/Empresas";
@@ -44,6 +45,7 @@ const App = () => (
               <Route path="/financeiro" element={<ProtectedRoute adminOnly><Financeiro /></ProtectedRoute>} />
               <Route path="/usuarios" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
               <Route path="/plano" element={<ProtectedRoute adminOnly><PlanoAssinatura /></ProtectedRoute>} />
+              <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
               
               {/* Master Admin Routes */}
               <Route path="/master" element={<ProtectedRoute masterOnly><PainelMaster /></ProtectedRoute>} />
