@@ -8,7 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
-const APP_VERSION = (typeof __APP_VERSION__ !== "undefined") ? __APP_VERSION__ : "1.0.0";
+// @ts-ignore - defined by vite.config.ts
+const APP_VERSION: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0";
 
 export function AppSidebar() {
   const { state } = useSidebar();
