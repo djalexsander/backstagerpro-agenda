@@ -15,6 +15,7 @@ import Financeiro from "@/pages/Financeiro";
 import UserManagement from "@/pages/UserManagement";
 import PlanoAssinatura from "@/pages/PlanoAssinatura";
 import Backups from "@/pages/Backups";
+import Documentos from "@/pages/Documentos";
 
 import PainelMaster from "@/pages/master/PainelMaster";
 import Empresas from "@/pages/master/Empresas";
