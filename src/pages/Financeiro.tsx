@@ -158,8 +158,9 @@ export default function Financeiro() {
       queryClient.invalidateQueries({ queryKey: ["financials"] });
       setOpen(false);
       setEditItem(null);
-      setForm({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+      setForm({ cache: "", transport: "", food: "", lodging: "" });
       setExtraCosts([]);
+      setFuncionarios([]);
       setSelectedEvent("");
       toast({ title: editItem ? "Registro atualizado!" : "Dados financeiros salvos!" });
     },
