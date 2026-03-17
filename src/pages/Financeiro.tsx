@@ -17,25 +17,28 @@ import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "da
 const fieldLabels: Record<string, string> = {
   cache: "Cachê",
   transport: "Transporte",
-  food: "Alimentação",
   lodging: "Hospedagem",
 };
 
-const fieldKeys = ["cache", "transport", "food", "lodging"] as const;
+const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
-type Funcionario = { nome: string; valor: number };
+type EmployeeExpense = { employeeId: string; name: string; funcao: string; cache: number; food: number };
 
-const defaultFuncionarios: string[] = ["Técnico de Som", "Técnico de Luz", "Técnico de Painel", "Auxiliar"];
-
-function parseFuncionarios(raw: any): Funcionario[] {
+function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw)) {
+    // Backwards compat: old format was { nome, valor }
+    if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
+      return raw.map((f: any) => ({ employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0 }));
+    }
+    return raw;
+  }
   try { return JSON.parse(raw); } catch { return []; }
 }
 
-function sumFuncionarios(funcs: Funcionario[]): number {
-  return funcs.reduce((s, f) => s + (f.valor || 0), 0);
+function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
+  return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
 
 function parseExtraCosts(raw: any): ExtraCost[] {
