@@ -60,7 +60,7 @@ export default function Empresas() {
       const plano = planos.find((p: any) => p.nome === form.plano);
       const trialDays = plano?.trial_days || 0;
 
-      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status };
+      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: form.vencimento.toISOString() };
 
       if (!editItem) {
         // New empresa: set contract date to today, vencimento to +1 month
