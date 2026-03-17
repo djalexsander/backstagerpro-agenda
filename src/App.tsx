@@ -59,6 +59,7 @@ const App = () => (
                 <Route path="/master/usuarios" element={<ProtectedRoute masterOnly><UsuariosGlobais /></ProtectedRoute>} />
                 <Route path="/master/planos" element={<ProtectedRoute masterOnly><Planos /></ProtectedRoute>} />
                 <Route path="/master/configuracoes" element={<ProtectedRoute masterOnly><ConfiguracoesSistema /></ProtectedRoute>} />
+                <Route path="/master/financeiro" element={<ProtectedRoute masterOnly><FinanceiroMaster /></ProtectedRoute>} />
                 <Route path="/master/logs" element={<ProtectedRoute masterOnly><LogsSistema /></ProtectedRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />
