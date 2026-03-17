@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings, Save, Upload, Globe, Shield, Image } from "lucide-react";
 import { toast } from "sonner";
 
@@ -229,12 +230,36 @@ export default function ConfiguracoesSistema() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="pix_tipo_chave">Tipo da Chave</Label>
+              <Select
+                value={form.pix_tipo_chave ?? "celular"}
+                onValueChange={(val) => updateField("pix_tipo_chave", val)}
+              >
+                <SelectTrigger id="pix_tipo_chave">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cpf">CPF</SelectItem>
+                  <SelectItem value="cnpj">CNPJ</SelectItem>
+                  <SelectItem value="celular">Celular</SelectItem>
+                  <SelectItem value="email">E-mail</SelectItem>
+                  <SelectItem value="aleatoria">Chave Aleatória</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="pix_chave">Chave PIX</Label>
               <Input
                 id="pix_chave"
                 value={form.pix_chave ?? ""}
                 onChange={(e) => updateField("pix_chave", e.target.value)}
-                placeholder="email@exemplo.com ou CPF/CNPJ"
+                placeholder={
+                  form.pix_tipo_chave === "cpf" ? "000.000.000-00" :
+                  form.pix_tipo_chave === "cnpj" ? "00.000.000/0000-00" :
+                  form.pix_tipo_chave === "email" ? "email@exemplo.com" :
+                  form.pix_tipo_chave === "aleatoria" ? "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :
+                  "+5544999999999"
+                }
               />
             </div>
             <div className="space-y-2">
