@@ -383,6 +383,7 @@ export default function PlanoAssinatura() {
                   <TableHead>Valor</TableHead>
                   <TableHead>Método</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Comprovante</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -393,6 +394,55 @@ export default function PlanoAssinatura() {
                     <TableCell className="uppercase">{p.metodo}</TableCell>
                     <TableCell>
                       <Badge variant={statusColor(p.status) as any}>{p.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {p.comprovante_path ? (
+                        <Badge variant="outline" className="text-accent border-accent gap-1">
+                          <FileCheck className="h-3 w-3" /> Enviado
+                        </Badge>
+                      ) : p.status === "pendente" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            const input = document.createElement("input");
+                            input.type = "file";
+                            input.accept = "image/*,.pdf";
+                            input.onchange = async (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (!file) return;
+                              const path = `${empresaId}/${p.id}-${file.name}`;
+                              const { error: uploadError } = await supabase.storage
+                                .from("comprovantes")
+                                .upload(path, file);
+                              if (uploadError) {
+                                toast.error("Erro ao enviar comprovante");
+                                return;
+                              }
+                              await supabase
+                                .from("pagamentos")
+                                .update({ comprovante_path: path } as any)
+                                .eq("id", p.id);
+                              
+                              // Notify master admin
+                              await supabase.from("notificacoes_master").insert({
+                                empresa_id: empresaId!,
+                                tipo: "comprovante_pagamento",
+                                mensagem: `${empresa?.nome_empresa} enviou comprovante de pagamento - R$${Number(p.valor).toFixed(2)}`,
+                              });
+
+                              queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
+                              toast.success("Comprovante enviado com sucesso!");
+                            };
+                            input.click();
+                          }}
+                        >
+                          <Upload className="h-3 w-3 mr-1" /> Enviar
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
