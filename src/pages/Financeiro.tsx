@@ -451,7 +451,86 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Funcionários Sub-Dialog */}
+      <Dialog open={funcDialogOpen} onOpenChange={setFuncDialogOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cachê de Funcionários</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {funcionarios.map((func, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input
+                  placeholder="Nome do funcionário"
+                  value={func.nome}
+                  onChange={(e) =>
+                    setFuncionarios((prev) =>
+                      prev.map((f, idx) => (idx === i ? { ...f, nome: e.target.value } : f))
+                    )
+                  }
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const parent = e.currentTarget.closest("[data-func-dialog]");
+                      const nextVal = parent?.querySelector<HTMLInputElement>(`[data-func-value="${i}"]`);
+                      nextVal?.focus();
+                    }
+                  }}
+                />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={func.valor || ""}
+                  onChange={(e) =>
+                    setFuncionarios((prev) =>
+                      prev.map((f, idx) => (idx === i ? { ...f, valor: parseFloat(e.target.value) || 0 } : f))
+                    )
+                  }
+                  className="w-28"
+                  data-func-value={i}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const parent = e.currentTarget.closest("[data-func-dialog]");
+                      const nextName = parent?.querySelectorAll<HTMLInputElement>("input:not([type=number])")[i + 1];
+                      if (nextName) {
+                        nextName.focus();
+                      } else {
+                        setFuncDialogOpen(false);
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setFuncionarios((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="shrink-0 text-destructive hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setFuncionarios((prev) => [...prev, { nome: "", valor: 0 }])}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Adicionar Funcionário
+            </Button>
+          </div>
+          <div className="flex items-center justify-between pt-2 border-t border-border">
+            <span className="text-sm font-semibold">Total: {fmt(sumFuncionarios(funcionarios))}</span>
+            <Button onClick={() => setFuncDialogOpen(false)}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
