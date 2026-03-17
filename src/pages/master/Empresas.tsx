@@ -343,8 +343,9 @@ export default function Empresas() {
                             <TableHead>Valor</TableHead>
                             <TableHead>Método</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Comprovante</TableHead>
                             <TableHead className="text-right">Ação</TableHead>
-                          </TableRow>
+                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {detailPagamentos.map((p: any) => (
