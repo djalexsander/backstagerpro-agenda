@@ -17,25 +17,27 @@ import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "da
 const fieldLabels: Record<string, string> = {
   cache: "Cachê",
   transport: "Transporte",
-  food: "Alimentação",
   lodging: "Hospedagem",
 };
 
-const fieldKeys = ["cache", "transport", "food", "lodging"] as const;
+const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
-type Funcionario = { nome: string; valor: number };
+type EmployeeExpense = { employeeId: string; name: string; funcao: string; cache: number; food: number };
 
-const defaultFuncionarios: string[] = ["Técnico de Som", "Técnico de Luz", "Técnico de Painel", "Auxiliar"];
-
-function parseFuncionarios(raw: any): Funcionario[] {
+function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw)) {
+    if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
+      return raw.map((f: any) => ({ employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0 }));
+    }
+    return raw;
+  }
   try { return JSON.parse(raw); } catch { return []; }
 }
 
-function sumFuncionarios(funcs: Funcionario[]): number {
-  return funcs.reduce((s, f) => s + (f.valor || 0), 0);
+function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
+  return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
 
 function parseExtraCosts(raw: any): ExtraCost[] {
@@ -55,9 +57,9 @@ export default function Financeiro() {
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
-  const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "" });
+  const [form, setForm] = useState({ cache: "", transport: "", lodging: "" });
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
-  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [selectedEmployees, setSelectedEmployees] = useState<EmployeeExpense[]>([]);
   const [funcDialogOpen, setFuncDialogOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
@@ -87,6 +89,17 @@ export default function Financeiro() {
     enabled: !!empresaId,
   });
 
+  const { data: dbEmployees = [] } = useQuery({
+    queryKey: ["funcionarios", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("funcionarios").select("*").eq("empresa_id", empresaId).order("nome");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
   const eventsWithoutFinancials = events.filter(
     (e) => !financials.some((f) => f.event_id === e.id) || (editItem && editItem.event_id === e.id)
   );
@@ -94,9 +107,9 @@ export default function Financeiro() {
   const openAdd = () => {
     setEditItem(null);
     setSelectedEvent("");
-    setForm({ cache: "", transport: "", food: "", lodging: "" });
+    setForm({ cache: "", transport: "", lodging: "" });
     setExtraCosts([]);
-    setFuncionarios([]);
+    setSelectedEmployees([]);
     setOpen(true);
   };
 
@@ -106,11 +119,10 @@ export default function Financeiro() {
     setForm({
       cache: String(f.cache || 0),
       transport: String(f.transport || 0),
-      food: String(f.food || 0),
       lodging: String(f.lodging || 0),
     });
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
-    setFuncionarios(parseFuncionarios((f as any).funcionarios_cache));
+    setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
     setOpen(true);
   };
 
@@ -130,20 +142,52 @@ export default function Financeiro() {
     setExtraCosts((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Employee helpers
+  const handleAddEmployee = (empId: string) => {
+    const emp = dbEmployees.find((e: any) => e.id === empId);
+    if (!emp) return;
+    if (selectedEmployees.some((se) => se.employeeId === empId)) return;
+    setSelectedEmployees((prev) => [
+      ...prev,
+      {
+        employeeId: (emp as any).id,
+        name: (emp as any).nome,
+        funcao: (emp as any).funcao || "",
+        cache: Number((emp as any).cache_padrao) || 0,
+        food: 0,
+      },
+    ]);
+  };
+
+  const updateEmployeeCache = (index: number, value: number) => {
+    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, cache: value } : e)));
+  };
+
+  const updateEmployeeFood = (index: number, value: number) => {
+    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, food: value } : e)));
+  };
+
+  const removeEmployee = (index: number) => {
+    setSelectedEmployees((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const totalFuncionarios = sumEmployeeExpenses(selectedEmployees);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const validExtras = extraCosts.filter((e) => e.name.trim() !== "");
-      const validFuncs = funcionarios.filter((f) => f.nome.trim() !== "");
+      const totalEmps = sumEmployeeExpenses(selectedEmployees);
+      const totalFood = selectedEmployees.reduce((s, e) => s + (e.food || 0), 0);
       const payload = {
         event_id: selectedEvent,
         empresa_id: empresaId,
         cache: parseFloat(form.cache) || 0,
         transport: parseFloat(form.transport) || 0,
-        food: parseFloat(form.food) || 0,
+        food: totalFood,
         lodging: parseFloat(form.lodging) || 0,
-        other_costs: sumFuncionarios(validFuncs),
+        other_costs: totalEmps - totalFood,
         extra_costs: validExtras,
-        funcionarios_cache: validFuncs,
+        funcionarios_cache: selectedEmployees,
       };
 
       if (editItem) {
@@ -158,9 +202,9 @@ export default function Financeiro() {
       queryClient.invalidateQueries({ queryKey: ["financials"] });
       setOpen(false);
       setEditItem(null);
-      setForm({ cache: "", transport: "", food: "", lodging: "" });
+      setForm({ cache: "", transport: "", lodging: "" });
       setExtraCosts([]);
-      setFuncionarios([]);
+      setSelectedEmployees([]);
       setSelectedEvent("");
       toast({ title: editItem ? "Registro atualizado!" : "Dados financeiros salvos!" });
     },
@@ -229,6 +273,11 @@ export default function Financeiro() {
     exportFinancialTotalPDF(filtered, title);
     setExportOpen(false);
   };
+
+  // Available employees not yet selected
+  const availableEmployees = dbEmployees.filter(
+    (e: any) => !selectedEmployees.some((se) => se.employeeId === e.id)
+  );
 
   return (
     <div className="space-y-6">
@@ -353,7 +402,6 @@ export default function Financeiro() {
                         if (nextFixed) {
                           nextFixed.focus();
                         } else {
-                          // Try first extra cost name input
                           const firstExtra = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>('[data-extra-name="0"]');
                           if (firstExtra) {
                             firstExtra.focus();
@@ -367,27 +415,80 @@ export default function Financeiro() {
                 </div>
               ))}
 
-              {/* Cachê de Funcionários */}
-              <div className="space-y-2">
-                <Label>Cachê de Funcionários</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-between font-normal"
-                  onClick={() => {
-                    if (funcionarios.length === 0) {
-                      setFuncionarios(defaultFuncionarios.map((nome) => ({ nome, valor: 0 })));
-                    }
-                    setFuncDialogOpen(true);
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    {funcionarios.length > 0
-                      ? `${funcionarios.filter(f => f.valor > 0).length} funcionário(s) — ${fmt(sumFuncionarios(funcionarios))}`
-                      : "Clique para adicionar funcionários"}
-                  </span>
-                </Button>
+              {/* Funcionários do Evento */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <Label className="text-sm font-semibold flex items-center gap-2">
+                  <Users className="h-4 w-4" /> Funcionários do Evento
+                </Label>
+
+                {availableEmployees.length > 0 && (
+                  <Select onValueChange={handleAddEmployee}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Adicionar funcionário..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableEmployees.map((e: any) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.nome} {e.funcao ? `(${e.funcao})` : ""} — {fmt(Number(e.cache_padrao))}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {dbEmployees.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Cadastre funcionários em Funcionários no menu lateral.</p>
+                )}
+
+                {selectedEmployees.map((emp, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-muted/30">
+                    <div className="flex-1 min-w-[120px]">
+                      <p className="text-sm font-medium">{emp.name}</p>
+                      {emp.funcao && <p className="text-xs text-muted-foreground">{emp.funcao}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cachê</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={emp.cache || ""}
+                        onChange={(e) => updateEmployeeCache(i, parseFloat(e.target.value) || 0)}
+                        className="w-24 h-8 text-sm"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Alimentação</Label>
+                      <Select value={String(emp.food)} onValueChange={(v) => updateEmployeeFood(i, Number(v))}>
+                        <SelectTrigger className="w-[140px] h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Sem</SelectItem>
+                          <SelectItem value="60">Meia diária (R$60)</SelectItem>
+                          <SelectItem value="120">Diária completa (R$120)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeEmployee(i)}
+                      className="shrink-0 text-destructive hover:text-destructive h-8 w-8"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                {selectedEmployees.length > 0 && (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-sm font-semibold text-primary">
+                      Total Funcionários: {fmt(totalFuncionarios)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {extraCosts.length > 0 && (
@@ -448,86 +549,6 @@ export default function Financeiro() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Funcionários Sub-Dialog */}
-      <Dialog open={funcDialogOpen} onOpenChange={setFuncDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto" data-func-dialog>
-          <DialogHeader>
-            <DialogTitle>Cachê de Funcionários</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {funcionarios.map((func, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Input
-                  placeholder="Nome do funcionário"
-                  value={func.nome}
-                  onChange={(e) =>
-                    setFuncionarios((prev) =>
-                      prev.map((f, idx) => (idx === i ? { ...f, nome: e.target.value } : f))
-                    )
-                  }
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const parent = e.currentTarget.closest("[data-func-dialog]");
-                      const nextVal = parent?.querySelector<HTMLInputElement>(`[data-func-value="${i}"]`);
-                      nextVal?.focus();
-                    }
-                  }}
-                />
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={func.valor || ""}
-                  onChange={(e) =>
-                    setFuncionarios((prev) =>
-                      prev.map((f, idx) => (idx === i ? { ...f, valor: parseFloat(e.target.value) || 0 } : f))
-                    )
-                  }
-                  className="w-28"
-                  data-func-value={i}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const parent = e.currentTarget.closest("[data-func-dialog]");
-                      const nextName = parent?.querySelectorAll<HTMLInputElement>("input:not([type=number])")[i + 1];
-                      if (nextName) {
-                        nextName.focus();
-                      } else {
-                        setFuncDialogOpen(false);
-                      }
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setFuncionarios((prev) => prev.filter((_, idx) => idx !== i))}
-                  className="shrink-0 text-destructive hover:text-destructive"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setFuncionarios((prev) => [...prev, { nome: "", valor: 0 }])}
-              className="w-full"
-            >
-              <Plus className="h-4 w-4 mr-1" /> Adicionar Funcionário
-            </Button>
-          </div>
-          <div className="flex items-center justify-between pt-2 border-t border-border">
-            <span className="text-sm font-semibold">Total: {fmt(sumFuncionarios(funcionarios))}</span>
-            <Button onClick={() => setFuncDialogOpen(false)}>Confirmar</Button>
-          </div>
         </DialogContent>
       </Dialog>
 

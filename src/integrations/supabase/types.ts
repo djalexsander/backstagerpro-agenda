@@ -389,6 +389,44 @@ export type Database = {
           },
         ]
       }
+      funcionarios: {
+        Row: {
+          cache_padrao: number
+          created_at: string
+          empresa_id: string
+          funcao: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          cache_padrao?: number
+          created_at?: string
+          empresa_id: string
+          funcao?: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          cache_padrao?: number
+          created_at?: string
+          empresa_id?: string
+          funcao?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generated_documents: {
         Row: {
           conteudo_final: string
