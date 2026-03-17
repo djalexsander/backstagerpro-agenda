@@ -32,6 +32,7 @@ export function AppSidebar() {
   const masterItems = [
     { title: "Painel Master", url: "/master", icon: Globe },
     { title: "Empresas", url: "/master/empresas", icon: Building2 },
+    { title: "Financeiro", url: "/master/financeiro", icon: DollarSign },
     { title: "Planos", url: "/master/planos", icon: CreditCard },
     { title: "Usuários Globais", url: "/master/usuarios", icon: Users },
     { title: "Configurações", url: "/master/configuracoes", icon: Settings },
