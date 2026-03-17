@@ -12,7 +12,7 @@ import {
   differenceInDays, differenceInHours, startOfMonth, endOfMonth, subMonths
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 
 const statusColors: Record<string, string> = {
   confirmado: "bg-accent text-accent-foreground",
