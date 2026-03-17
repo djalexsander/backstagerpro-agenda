@@ -276,6 +276,14 @@ export default function Documentos() {
     setEditorOpen(true);
   };
 
+  const duplicateTemplate = (tmpl: any) => {
+    resetForm();
+    setFormNome(`${tmpl.nome} (Cópia)`);
+    setFormTipo(tmpl.tipo);
+    setFormConteudo(tmpl.conteudo);
+    setEditorOpen(true);
+  };
+
   const replaceVariables = (content: string, eventId: string): string => {
     const event = events.find((e) => e.id === eventId);
     if (!event) return content;
@@ -455,6 +463,9 @@ export default function Documentos() {
                         setGenerateOpen(true);
                       }}>
                         <FilePlus className="h-3 w-3 mr-1" /> Gerar
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => duplicateTemplate(tmpl)} title="Duplicar template">
+                        <Copy className="h-3 w-3" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => openEditTemplate(tmpl)}>
                         <Pencil className="h-3 w-3" />
