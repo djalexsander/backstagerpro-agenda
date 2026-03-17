@@ -96,7 +96,13 @@ export function AppSidebar() {
       <SidebarFooter>
         <div className="p-2">
           {!collapsed && profile && (
-            <p className="text-xs text-sidebar-foreground/60 mb-2 truncate px-2">{profile.full_name}</p>
+            <div className="mb-2 px-2">
+              <p className="text-xs text-sidebar-foreground/60 truncate">{profile.full_name}</p>
+              <p className="text-[10px] text-sidebar-foreground/30 font-mono">v{APP_VERSION}</p>
+            </div>
+          )}
+          {collapsed && (
+            <p className="text-[9px] text-sidebar-foreground/30 font-mono text-center mb-1">v{APP_VERSION}</p>
           )}
           <Button variant="ghost" size="sm" className="w-full justify-start text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent" onClick={signOut}>
             <LogOut className="h-4 w-4 mr-2" />
