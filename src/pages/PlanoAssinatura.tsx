@@ -22,6 +22,7 @@ export default function PlanoAssinatura() {
   const [showPix, setShowPix] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
 
