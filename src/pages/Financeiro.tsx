@@ -25,6 +25,17 @@ const fieldLabels: Record<string, string> = {
 const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
+type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
+type CacheDetail = {
+  valorTotal: number;
+  entrada: number;
+  entradaPaga: boolean;
+  parcelado: boolean;
+  parcelas: CacheParcela[];
+  recebimentoEvento: boolean;
+  dataRecebimento: string;
+  recebimentoPago: boolean;
+};
 type EmployeeExpense = {
   employeeId: string;
   name: string;
