@@ -19,12 +19,24 @@ const fieldLabels: Record<string, string> = {
   transport: "Transporte",
   food: "Alimentação",
   lodging: "Hospedagem",
-  other_costs: "Outros Custos",
 };
 
-const fieldKeys = ["cache", "transport", "food", "lodging", "other_costs"] as const;
+const fieldKeys = ["cache", "transport", "food", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
+type Funcionario = { nome: string; valor: number };
+
+const defaultFuncionarios: string[] = ["Técnico de Som", "Técnico de Luz", "Técnico de Painel", "Auxiliar"];
+
+function parseFuncionarios(raw: any): Funcionario[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function sumFuncionarios(funcs: Funcionario[]): number {
+  return funcs.reduce((s, f) => s + (f.valor || 0), 0);
+}
 
 function parseExtraCosts(raw: any): ExtraCost[] {
   if (!raw) return [];
