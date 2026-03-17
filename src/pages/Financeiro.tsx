@@ -83,6 +83,12 @@ export default function Financeiro() {
   const [transportOpen, setTransportOpen] = useState(false);
   const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
   const [lodgingOpen, setLodgingOpen] = useState(false);
+  const [cacheOpen, setCacheOpen] = useState(false);
+  const defaultCacheDetail: CacheDetail = {
+    valorTotal: 0, entrada: 0, entradaPaga: false, parcelado: false,
+    parcelas: [], recebimentoEvento: true, dataRecebimento: "", recebimentoPago: false,
+  };
+  const [cacheDetail, setCacheDetail] = useState<CacheDetail>(defaultCacheDetail);
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<EmployeeExpense[]>([]);
   const [funcDialogOpen, setFuncDialogOpen] = useState(false);
