@@ -102,6 +102,7 @@ export type Database = {
       empresas: {
         Row: {
           created_at: string
+          data_contrato: string | null
           email: string | null
           id: string
           nome_empresa: string
@@ -116,6 +117,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          data_contrato?: string | null
           email?: string | null
           id?: string
           nome_empresa: string
@@ -130,6 +132,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          data_contrato?: string | null
           email?: string | null
           id?: string
           nome_empresa?: string

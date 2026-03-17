@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, Download, FileCheck } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck } from "lucide-react";
+import { format, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function Empresas() {
@@ -59,11 +59,22 @@ export default function Empresas() {
 
       const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status };
 
-      if (!editItem && trialDays > 0) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + trialDays);
-        payload.trial_expires_at = expiresAt.toISOString();
+      if (!editItem) {
+        // New empresa: set contract date to today, vencimento to +1 month
+        const today = new Date();
+        payload.data_contrato = format(today, "yyyy-MM-dd");
+        payload.vencimento = addMonths(today, 1).toISOString();
         payload.plano_bloqueado = false;
+
+        if (trialDays > 0) {
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + trialDays);
+          payload.trial_expires_at = expiresAt.toISOString();
+        }
+
+        if (plano) {
+          payload.plano_id = plano.id;
+        }
       }
 
       if (editItem) {
@@ -76,6 +87,9 @@ export default function Empresas() {
           } else {
             payload.trial_expires_at = null;
             payload.plano_bloqueado = false;
+          }
+          if (plano) {
+            payload.plano_id = plano.id;
           }
         }
         const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
@@ -133,13 +147,29 @@ export default function Empresas() {
   });
 
   const marcarPago = useMutation({
-    mutationFn: async (pagamentoId: string) => {
-      const { error } = await supabase.from("pagamentos").update({ status: "pago" } as any).eq("id", pagamentoId);
+    mutationFn: async (pagamento: any) => {
+      // Mark payment as paid
+      const { error } = await supabase.from("pagamentos").update({ status: "pago" } as any).eq("id", pagamento.id);
       if (error) throw error;
+
+      // Renew empresa vencimento: extend by 1 month from current vencimento
+      const empresa = empresas.find((e: any) => e.id === pagamento.empresa_id);
+      if (empresa) {
+        const currentVencimento = empresa.vencimento ? new Date(empresa.vencimento) : new Date();
+        const baseDate = currentVencimento < new Date() ? new Date() : currentVencimento;
+        const newVencimento = addMonths(baseDate, 1);
+        
+        await supabase.from("empresas").update({
+          vencimento: newVencimento.toISOString(),
+          plano_bloqueado: false,
+          status_pagamento: "pago",
+        } as any).eq("id", pagamento.empresa_id);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["empresa-pagamentos"] });
-      toast({ title: "Pagamento marcado como pago!" });
+      queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
+      toast({ title: "Pagamento confirmado e plano renovado!" });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -168,9 +198,9 @@ export default function Empresas() {
     setAddOpen(true);
   };
 
-  const isTrialExpired = (e: any) => {
-    if (!e.trial_expires_at) return false;
-    return new Date(e.trial_expires_at) < new Date();
+  const isVencimentoExpired = (e: any) => {
+    if (!e.vencimento) return false;
+    return new Date(e.vencimento) < new Date();
   };
 
   const getPlanoInfo = (empresa: any) => {
@@ -221,7 +251,7 @@ export default function Empresas() {
                   <SelectContent>
                     {planos.map((p: any) => (
                       <SelectItem key={p.nome} value={p.nome} className="capitalize">
-                        {p.nome} {p.trial_days > 0 ? `(${p.trial_days} dias trial)` : ""}
+                        {p.nome} — R$ {Number(p.valor).toFixed(2)}/mês
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -250,6 +280,12 @@ export default function Empresas() {
                 </Select>
               </div>
             </div>
+            {!editItem && (
+              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4 inline mr-1" />
+                Data de contrato: <strong>hoje</strong> — Vencimento: <strong>+30 dias</strong>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
@@ -268,7 +304,7 @@ export default function Empresas() {
           </DialogHeader>
           {detailEmpresa && (() => {
             const planoInfo = getPlanoInfo(detailEmpresa);
-            const expired = isTrialExpired(detailEmpresa);
+            const vencido = isVencimentoExpired(detailEmpresa);
             return (
               <div className="space-y-6">
                 {/* Info da empresa */}
@@ -285,9 +321,9 @@ export default function Empresas() {
 
                 <Separator />
 
-                {/* Plano Atual */}
+                {/* Plano & Datas */}
                 <div>
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Package className="h-4 w-4 text-primary" /> Plano Atual</h3>
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Package className="h-4 w-4 text-primary" /> Plano & Contrato</h3>
                   <Card>
                     <CardContent className="pt-4">
                       {planoInfo ? (
@@ -312,12 +348,41 @@ export default function Empresas() {
                       ) : (
                         <p className="text-muted-foreground text-sm">Plano: <span className="capitalize font-medium">{detailEmpresa.plano || "—"}</span></p>
                       )}
+
+                      <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-muted-foreground text-xs">Data do Contrato</p>
+                            <p className="font-medium">
+                              {detailEmpresa.data_contrato
+                                ? format(new Date(detailEmpresa.data_contrato + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })
+                                : format(new Date(detailEmpresa.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className={`h-4 w-4 ${vencido ? "text-destructive" : "text-muted-foreground"}`} />
+                          <div>
+                            <p className="text-muted-foreground text-xs">Vencimento do Plano</p>
+                            {detailEmpresa.vencimento ? (
+                              <p className={`font-medium ${vencido ? "text-destructive" : ""}`}>
+                                {format(new Date(detailEmpresa.vencimento), "dd/MM/yyyy", { locale: ptBR })}
+                                {vencido && <span className="text-xs ml-1">(Vencido!)</span>}
+                              </p>
+                            ) : (
+                              <p className="text-muted-foreground">—</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
                       {detailEmpresa.trial_expires_at && (
                         <div className="mt-3 pt-3 border-t border-border">
                           <div className="flex items-center gap-2 text-sm">
                             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                            <span className={expired ? "text-destructive font-semibold" : "text-muted-foreground"}>
-                              Trial {expired ? "expirado em" : "expira em"} {format(new Date(detailEmpresa.trial_expires_at), "dd/MM/yyyy", { locale: ptBR })}
+                            <span className={new Date(detailEmpresa.trial_expires_at) < new Date() ? "text-destructive font-semibold" : "text-muted-foreground"}>
+                              Trial {new Date(detailEmpresa.trial_expires_at) < new Date() ? "expirado em" : "expira em"} {format(new Date(detailEmpresa.trial_expires_at), "dd/MM/yyyy", { locale: ptBR })}
                             </span>
                           </div>
                         </div>
@@ -374,11 +439,11 @@ export default function Empresas() {
                                     const { data } = supabase.storage.from("comprovantes").getPublicUrl(p.comprovante_path);
                                     window.open(data.publicUrl, "_blank");
                                   }}>
-                                    <FileCheck className="h-4 w-4 mr-1" /> Ver Comprovante
+                                    <FileCheck className="h-4 w-4 mr-1" /> Ver
                                   </Button>
                                 )}
                                 {p.status === "pendente" && (
-                                  <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p.id)} disabled={marcarPago.isPending}>
+                                  <Button size="sm" variant="outline" className="text-accent border-accent hover:bg-accent/10" onClick={() => marcarPago.mutate(p)} disabled={marcarPago.isPending}>
                                     <CheckCircle className="h-4 w-4 mr-1" /> Pago
                                   </Button>
                                 )}
@@ -407,7 +472,7 @@ export default function Empresas() {
               <TableHead>Empresa</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Plano</TableHead>
-              <TableHead>Trial</TableHead>
+              <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -417,7 +482,7 @@ export default function Empresas() {
               <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma empresa cadastrada.</TableCell></TableRow>
             ) : (
               empresas.map((e: any) => {
-                const expired = isTrialExpired(e);
+                const vencido = isVencimentoExpired(e);
                 const blocked = e.plano_bloqueado;
                 return (
                   <TableRow key={e.id} className={`${blocked ? "opacity-60" : ""} cursor-pointer hover:bg-muted/50`} onClick={() => setDetailEmpresa(e)}>
@@ -425,9 +490,9 @@ export default function Empresas() {
                     <TableCell>{e.email || "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{e.plano}</Badge></TableCell>
                     <TableCell>
-                      {e.trial_expires_at ? (
-                        <span className={`text-xs ${expired ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                          {expired ? "Expirado" : `Expira em ${new Date(e.trial_expires_at).toLocaleDateString("pt-BR")}`}
+                      {e.vencimento ? (
+                        <span className={`text-xs ${vencido ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                          {vencido ? "Vencido " : ""}{format(new Date(e.vencimento), "dd/MM/yyyy", { locale: ptBR })}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
@@ -446,7 +511,7 @@ export default function Empresas() {
                       <Button variant="ghost" size="sm" onClick={() => setDetailEmpresa(e)}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {expired && !blocked && (
+                      {!blocked && (
                         <Button variant="ghost" size="sm" className="text-destructive" onClick={() => toggleBlock.mutate({ id: e.id, blocked: true })}>
                           <Lock className="h-4 w-4" />
                         </Button>
