@@ -122,6 +122,8 @@ export default function Financeiro() {
     setForm({ cache: "", transport: "", lodging: "" });
     setTransportDetail({ km: "", valorGasto: "" });
     setTransportOpen(false);
+    setLodgingDetail({ qtdFuncionarios: "", valorDia: "" });
+    setLodgingOpen(false);
     setExtraCosts([]);
     setSelectedEmployees([]);
     setOpen(true);
