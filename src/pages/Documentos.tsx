@@ -392,6 +392,31 @@ export default function Documentos() {
     doc.save(`${nome}.pdf`);
   };
 
+  const exportDOCX = async (nome: string, conteudo: string) => {
+    const lines = conteudo.split("\n");
+    const paragraphs = lines.map((line) => {
+      const isHeading =
+        /^[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ\s\-:]{5,}$/.test(line.trim()) ||
+        /^CLÁUSULA/.test(line.trim());
+      if (isHeading && line.trim().length > 0) {
+        return new Paragraph({
+          children: [new TextRun({ text: line, bold: true, size: 24 })],
+          spacing: { after: 120 },
+        });
+      }
+      return new Paragraph({
+        children: [new TextRun({ text: line, size: 22 })],
+        spacing: { after: 80 },
+      });
+    });
+
+    const doc = new Document({
+      sections: [{ children: paragraphs }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `${nome}.docx`);
+
   const tipoLabel = (tipo: string) => TIPOS_DOCUMENTO.find((t) => t.value === tipo)?.label || tipo;
 
   const tipoBadgeClass = (tipo: string) => {
