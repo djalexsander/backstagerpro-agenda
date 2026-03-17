@@ -53,6 +53,7 @@ const App = () => (
                 <Route path="/plano" element={<ProtectedRoute adminOnly><PlanoAssinatura /></ProtectedRoute>} />
                 <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
                 <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
+                <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
                 
                 {/* Master Admin Routes */}
                 <Route path="/master" element={<ProtectedRoute masterOnly><PainelMaster /></ProtectedRoute>} />
