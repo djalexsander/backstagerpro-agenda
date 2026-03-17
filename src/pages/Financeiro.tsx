@@ -90,6 +90,17 @@ export default function Financeiro() {
     enabled: !!empresaId,
   });
 
+  const { data: dbEmployees = [] } = useQuery({
+    queryKey: ["funcionarios", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("funcionarios").select("*").eq("empresa_id", empresaId).order("nome");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
   const eventsWithoutFinancials = events.filter(
     (e) => !financials.some((f) => f.event_id === e.id) || (editItem && editItem.event_id === e.id)
   );
