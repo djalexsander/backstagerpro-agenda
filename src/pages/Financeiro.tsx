@@ -292,11 +292,31 @@ export default function Financeiro() {
 
   const getExtraCostsTotal = (f: any) => sumExtraCosts(parseExtraCosts((f as any).extra_costs));
 
+  // Calculate paid cache from cache_detail
+  const getCachePago = (f: any): number => {
+    const detail = (f as any).cache_detail as CacheDetail | null;
+    if (!detail) return f.cache || 0; // no detail = assume fully paid (legacy)
+    let paid = 0;
+    if (detail.entrada > 0 && detail.entradaPaga) paid += detail.entrada;
+    if (detail.parcelado) {
+      paid += (detail.parcelas || []).filter(p => p.pago).reduce((s, p) => s + p.valor, 0);
+    } else {
+      if (detail.recebimentoPago) paid += (detail.valorTotal - (detail.entrada || 0));
+    }
+    return paid;
+  };
+
+  const getCachePendente = (f: any): number => {
+    return (f.cache || 0) - getCachePago(f);
+  };
+
   const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
+  const totalCachePago = financials.reduce((s, f) => s + getCachePago(f), 0);
+  const totalCachePendente = totalCache - totalCachePago;
   const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0), 0);
   const totalExtraCosts = financials.reduce((s, f) => s + getExtraCostsTotal(f), 0);
   const totalCosts = totalFixedCosts + totalExtraCosts;
-  const totalProfit = totalCache - totalCosts;
+  const totalProfit = totalCachePago - totalCosts;
 
   const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0) - getExtraCostsTotal(f);
 
