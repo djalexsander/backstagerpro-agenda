@@ -967,7 +967,7 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -977,6 +977,19 @@ export default function Financeiro() {
               <div>
                 <p className="text-lg font-bold">{fmt(totalCache)}</p>
                 <p className="text-xs text-muted-foreground">Total Cachê</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-accent" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-accent">{fmt(totalCachePago)}</p>
+                <p className="text-xs text-muted-foreground">Recebido</p>
               </div>
             </div>
           </CardContent>
