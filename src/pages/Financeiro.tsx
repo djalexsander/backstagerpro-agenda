@@ -23,15 +23,12 @@ const fieldLabels: Record<string, string> = {
 const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
-type EmployeeTransport = { km: number; combustivel: number; total: number };
 type EmployeeExpense = {
   employeeId: string;
   name: string;
   funcao: string;
   cache: number;
   food: number;
-  hospedagem: number;
-  transporte: EmployeeTransport;
 };
 
 function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
