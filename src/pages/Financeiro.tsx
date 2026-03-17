@@ -175,14 +175,6 @@ export default function Financeiro() {
     setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, food: value } : e)));
   };
 
-  const updateEmployeeHospedagem = (index: number, value: number) => {
-    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, hospedagem: value } : e)));
-  };
-
-  const updateEmployeeTransporte = (index: number, field: keyof EmployeeTransport, value: number) => {
-    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, transporte: { ...e.transporte, [field]: value } } : e)));
-  };
-
   const removeEmployee = (index: number) => {
     setSelectedEmployees((prev) => prev.filter((_, i) => i !== index));
   };
