@@ -118,6 +118,8 @@ export default function Financeiro() {
     setEditItem(null);
     setSelectedEvent("");
     setForm({ cache: "", transport: "", lodging: "" });
+    setTransportDetail({ km: "", valorGasto: "" });
+    setTransportOpen(false);
     setExtraCosts([]);
     setSelectedEmployees([]);
     setOpen(true);
