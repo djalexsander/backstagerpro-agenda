@@ -3,15 +3,12 @@ import { registerSW } from "virtual:pwa-register";
 export type UpdateCallback = (available: boolean) => void;
 
 let updateSWFn: ((reloadPage?: boolean) => Promise<void>) | null = null;
-let onUpdateAvailable: UpdateCallback | null = null;
 
 export const isTauri = (): boolean => {
   return Boolean((window as any).__TAURI__);
 };
 
 export const registerPWAUpdate = (callback: UpdateCallback) => {
-  onUpdateAvailable = callback;
-
   updateSWFn = registerSW({
     onNeedRefresh() {
       console.log("[UpdateService] Nova versão disponível (PWA)");
@@ -20,9 +17,8 @@ export const registerPWAUpdate = (callback: UpdateCallback) => {
     onOfflineReady() {
       console.log("[UpdateService] App pronto para uso offline");
     },
-    onRegisteredSW(swUrl, registration) {
-      console.log("[UpdateService] Service Worker registrado:", swUrl);
-      // Auto-check a cada 5 minutos
+    onRegisteredSW(_swUrl, registration) {
+      console.log("[UpdateService] Service Worker registrado");
       if (registration) {
         setInterval(() => {
           registration.update();
@@ -38,6 +34,7 @@ export const installPWAUpdate = async (): Promise<void> => {
   }
 };
 
+// Tauri functions use globalThis to avoid static imports
 export const checkForTauriUpdate = async (): Promise<{
   available: boolean;
   version?: string;
@@ -45,8 +42,9 @@ export const checkForTauriUpdate = async (): Promise<{
   if (!isTauri()) return { available: false };
 
   try {
-    const { check } = await import("@tauri-apps/plugin-updater");
-    const update = await check();
+    // Dynamic import via new Function to avoid Vite/Rolldown resolution
+    const mod = await new Function('return import("@tauri-apps/plugin-updater")')();
+    const update = await mod.check();
     if (update?.available) {
       return { available: true, version: update.version };
     }
@@ -61,12 +59,12 @@ export const installTauriUpdate = async (): Promise<void> => {
   if (!isTauri()) return;
 
   try {
-    const { check } = await import("@tauri-apps/plugin-updater");
-    const update = await check();
+    const updaterMod = await new Function('return import("@tauri-apps/plugin-updater")')();
+    const update = await updaterMod.check();
     if (update?.available) {
       await update.downloadAndInstall();
-      const { relaunch } = await import("@tauri-apps/plugin-process");
-      await relaunch();
+      const processMod = await new Function('return import("@tauri-apps/plugin-process")')();
+      await processMod.relaunch();
     }
   } catch (err) {
     console.error("[UpdateService] Erro ao instalar atualização Tauri:", err);
