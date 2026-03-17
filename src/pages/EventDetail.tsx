@@ -177,8 +177,9 @@ export default function EventDetail() {
                       </div>
                     )}
                     {dayFile && (
-                      <div className="flex gap-2 pt-2 border-t border-border">
-                        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
+                      <div className="pt-2 border-t border-border space-y-2">
+                        <p className="text-xs text-muted-foreground truncate" title={dayFile.file_name}>📄 {dayFile.file_name}</p>
+                        <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
                           <Download className="h-3 w-3 mr-1" /> Baixar Rider
                         </Button>
                       </div>
