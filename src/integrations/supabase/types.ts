@@ -295,6 +295,41 @@ export type Database = {
           },
         ]
       }
+      notificacoes_master: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          lida: boolean
+          mensagem: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          lida?: boolean
+          mensagem: string
+          tipo?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          lida?: boolean
+          mensagem?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_master_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pagamentos: {
         Row: {
           created_at: string
