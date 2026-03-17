@@ -60,6 +60,29 @@ export default function FinanceiroMaster() {
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+  const chartData = useMemo(() => {
+    const months: { month: string; recebido: number; pendente: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = subMonths(new Date(), i);
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      const label = format(startOfMonth(d), "MMM/yy", { locale: ptBR });
+      const recebido = pagamentos
+        .filter((p: any) => { const pd = new Date(p.created_at); return p.status === "pago" && pd.getMonth() === m && pd.getFullYear() === y; })
+        .reduce((a: number, p: any) => a + Number(p.valor || 0), 0);
+      const pendente = pagamentos
+        .filter((p: any) => { const pd = new Date(p.created_at); return p.status === "pendente" && pd.getMonth() === m && pd.getFullYear() === y; })
+        .reduce((a: number, p: any) => a + Number(p.valor || 0), 0);
+      months.push({ month: label, recebido, pendente });
+    }
+    return months;
+  }, [pagamentos]);
+
+  const chartConfig = {
+    recebido: { label: "Recebido", color: "hsl(var(--accent))" },
+    pendente: { label: "Pendente", color: "hsl(var(--muted-foreground))" },
+  };
+
   const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     pago: { label: "Pago", variant: "default" },
     pendente: { label: "Pendente", variant: "secondary" },
