@@ -148,6 +148,12 @@ export default function Dashboard() {
     return data;
   }, [confirmed, pending, canceled]);
 
+  const pieChartConfig = {
+    confirmados: { label: "Confirmados", color: "hsl(160, 84%, 39%)" },
+    pendentes: { label: "Pendentes", color: "hsl(38, 92%, 50%)" },
+    cancelados: { label: "Cancelados", color: "hsl(0, 84%, 60%)" },
+  };
+
   const chartConfig = {
     receita: { label: "Receita", color: "hsl(160, 84%, 39%)" },
     despesas: { label: "Despesas", color: "hsl(0, 84%, 60%)" },
