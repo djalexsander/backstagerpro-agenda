@@ -250,6 +250,7 @@ export default function Financeiro() {
         other_costs: totalEmps - totalFood,
         extra_costs: validExtras,
         funcionarios_cache: selectedEmployees,
+        cache_detail: cacheOpen ? cacheDetail : null,
       };
 
       if (editItem) {
