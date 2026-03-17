@@ -453,7 +453,7 @@ export default function Financeiro() {
 
       {/* Funcionários Sub-Dialog */}
       <Dialog open={funcDialogOpen} onOpenChange={setFuncDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] overflow-y-auto" data-func-dialog>
           <DialogHeader>
             <DialogTitle>Cachê de Funcionários</DialogTitle>
           </DialogHeader>
