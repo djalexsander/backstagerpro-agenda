@@ -163,8 +163,6 @@ export default function Financeiro() {
         funcao: (emp as any).funcao || "",
         cache: Number((emp as any).cache_padrao) || 0,
         food: 0,
-        hospedagem: 0,
-        transporte: { km: 0, combustivel: 0, total: 0 },
       },
     ]);
   };
