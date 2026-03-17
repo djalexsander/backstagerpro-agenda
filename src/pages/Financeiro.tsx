@@ -1059,7 +1059,24 @@ export default function Financeiro() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">{fmt(f.cache)}</TableCell>
+                    <TableCell className="text-right">
+                      <div>{fmt(f.cache)}</div>
+                      {(() => {
+                        const pendente = getCachePendente(f);
+                        const pago = getCachePago(f);
+                        if ((f as any).cache_detail && pendente > 0) {
+                          return (
+                            <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 border-accent text-accent">{fmt(pago)} recebido</Badge>
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 border-yellow-500 text-yellow-500">{fmt(pendente)} pendente</Badge>
+                            </div>
+                          );
+                        } else if ((f as any).cache_detail && pendente <= 0) {
+                          return <Badge variant="outline" className="text-[10px] px-1 py-0 border-accent text-accent mt-0.5">Pago ✓</Badge>;
+                        }
+                        return null;
+                      })()}
+                    </TableCell>
                     <TableCell className="text-right hidden sm:table-cell">{fmt(f.transport)}</TableCell>
                     <TableCell className="text-right hidden sm:table-cell">{fmt(f.food)}</TableCell>
                     <TableCell className="text-right hidden md:table-cell">{fmt(f.lodging)}</TableCell>
