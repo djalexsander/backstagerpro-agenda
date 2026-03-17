@@ -11,7 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { format, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -21,7 +24,7 @@ export default function Empresas() {
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [detailEmpresa, setDetailEmpresa] = useState<any>(null);
-  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string });
+  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date });
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["master-empresas"],
@@ -57,13 +60,13 @@ export default function Empresas() {
       const plano = planos.find((p: any) => p.nome === form.plano);
       const trialDays = plano?.trial_days || 0;
 
-      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status };
+      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: form.vencimento.toISOString() };
 
       if (!editItem) {
         // New empresa: set contract date to today, vencimento to +1 month
         const today = new Date();
         payload.data_contrato = format(today, "yyyy-MM-dd");
-        payload.vencimento = addMonths(today, 1).toISOString();
+        payload.vencimento = form.vencimento.toISOString();
         payload.plano_bloqueado = false;
 
         if (trialDays > 0) {
@@ -118,7 +121,7 @@ export default function Empresas() {
       toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
-      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" });
+      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -188,13 +191,13 @@ export default function Empresas() {
 
   const openEdit = (e: any) => {
     setEditItem(e);
-    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa" });
+    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa", vencimento: e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" });
+    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
@@ -279,13 +282,33 @@ export default function Empresas() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            {!editItem && (
-              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                <CalendarDays className="h-4 w-4 inline mr-1" />
-                Data de contrato: <strong>hoje</strong> — Vencimento: <strong>+30 dias</strong>
+              <div className="space-y-2">
+                <Label>Data de Vencimento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !form.vencimento && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {form.vencimento ? format(form.vencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={form.vencimento}
+                      onSelect={(date) => date && setForm(p => ({ ...p, vencimento: date }))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
-            )}
+            </div>
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
