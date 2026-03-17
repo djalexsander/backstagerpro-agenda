@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
@@ -19,12 +19,24 @@ const fieldLabels: Record<string, string> = {
   transport: "Transporte",
   food: "Alimentação",
   lodging: "Hospedagem",
-  other_costs: "Outros Custos",
 };
 
-const fieldKeys = ["cache", "transport", "food", "lodging", "other_costs"] as const;
+const fieldKeys = ["cache", "transport", "food", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
+type Funcionario = { nome: string; valor: number };
+
+const defaultFuncionarios: string[] = ["Técnico de Som", "Técnico de Luz", "Técnico de Painel", "Auxiliar"];
+
+function parseFuncionarios(raw: any): Funcionario[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function sumFuncionarios(funcs: Funcionario[]): number {
+  return funcs.reduce((s, f) => s + (f.valor || 0), 0);
+}
 
 function parseExtraCosts(raw: any): ExtraCost[] {
   if (!raw) return [];
@@ -43,8 +55,10 @@ export default function Financeiro() {
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
-  const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+  const [form, setForm] = useState({ cache: "", transport: "", food: "", lodging: "" });
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [funcDialogOpen, setFuncDialogOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
   const [exportMonth, setExportMonth] = useState(format(new Date(), "yyyy-MM"));
@@ -80,8 +94,9 @@ export default function Financeiro() {
   const openAdd = () => {
     setEditItem(null);
     setSelectedEvent("");
-    setForm({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+    setForm({ cache: "", transport: "", food: "", lodging: "" });
     setExtraCosts([]);
+    setFuncionarios([]);
     setOpen(true);
   };
 
@@ -93,9 +108,9 @@ export default function Financeiro() {
       transport: String(f.transport || 0),
       food: String(f.food || 0),
       lodging: String(f.lodging || 0),
-      other_costs: String(f.other_costs || 0),
     });
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
+    setFuncionarios(parseFuncionarios((f as any).funcionarios_cache));
     setOpen(true);
   };
 
@@ -118,6 +133,7 @@ export default function Financeiro() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const validExtras = extraCosts.filter((e) => e.name.trim() !== "");
+      const validFuncs = funcionarios.filter((f) => f.nome.trim() !== "");
       const payload = {
         event_id: selectedEvent,
         empresa_id: empresaId,
@@ -125,8 +141,9 @@ export default function Financeiro() {
         transport: parseFloat(form.transport) || 0,
         food: parseFloat(form.food) || 0,
         lodging: parseFloat(form.lodging) || 0,
-        other_costs: parseFloat(form.other_costs) || 0,
+        other_costs: sumFuncionarios(validFuncs),
         extra_costs: validExtras,
+        funcionarios_cache: validFuncs,
       };
 
       if (editItem) {
@@ -141,8 +158,9 @@ export default function Financeiro() {
       queryClient.invalidateQueries({ queryKey: ["financials"] });
       setOpen(false);
       setEditItem(null);
-      setForm({ cache: "", transport: "", food: "", lodging: "", other_costs: "" });
+      setForm({ cache: "", transport: "", food: "", lodging: "" });
       setExtraCosts([]);
+      setFuncionarios([]);
       setSelectedEvent("");
       toast({ title: editItem ? "Registro atualizado!" : "Dados financeiros salvos!" });
     },
@@ -349,7 +367,29 @@ export default function Financeiro() {
                 </div>
               ))}
 
-              {/* Extra costs */}
+              {/* Cachê de Funcionários */}
+              <div className="space-y-2">
+                <Label>Cachê de Funcionários</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between font-normal"
+                  onClick={() => {
+                    if (funcionarios.length === 0) {
+                      setFuncionarios(defaultFuncionarios.map((nome) => ({ nome, valor: 0 })));
+                    }
+                    setFuncDialogOpen(true);
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    {funcionarios.length > 0
+                      ? `${funcionarios.filter(f => f.valor > 0).length} funcionário(s) — ${fmt(sumFuncionarios(funcionarios))}`
+                      : "Clique para adicionar funcionários"}
+                  </span>
+                </Button>
+              </div>
+
               {extraCosts.length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-border">
                   <Label className="text-sm font-semibold">Despesas Extras</Label>
@@ -411,6 +451,86 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
+      {/* Funcionários Sub-Dialog */}
+      <Dialog open={funcDialogOpen} onOpenChange={setFuncDialogOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto" data-func-dialog>
+          <DialogHeader>
+            <DialogTitle>Cachê de Funcionários</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {funcionarios.map((func, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input
+                  placeholder="Nome do funcionário"
+                  value={func.nome}
+                  onChange={(e) =>
+                    setFuncionarios((prev) =>
+                      prev.map((f, idx) => (idx === i ? { ...f, nome: e.target.value } : f))
+                    )
+                  }
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const parent = e.currentTarget.closest("[data-func-dialog]");
+                      const nextVal = parent?.querySelector<HTMLInputElement>(`[data-func-value="${i}"]`);
+                      nextVal?.focus();
+                    }
+                  }}
+                />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={func.valor || ""}
+                  onChange={(e) =>
+                    setFuncionarios((prev) =>
+                      prev.map((f, idx) => (idx === i ? { ...f, valor: parseFloat(e.target.value) || 0 } : f))
+                    )
+                  }
+                  className="w-28"
+                  data-func-value={i}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const parent = e.currentTarget.closest("[data-func-dialog]");
+                      const nextName = parent?.querySelectorAll<HTMLInputElement>("input:not([type=number])")[i + 1];
+                      if (nextName) {
+                        nextName.focus();
+                      } else {
+                        setFuncDialogOpen(false);
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setFuncionarios((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="shrink-0 text-destructive hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setFuncionarios((prev) => [...prev, { nome: "", valor: 0 }])}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Adicionar Funcionário
+            </Button>
+          </div>
+          <div className="flex items-center justify-between pt-2 border-t border-border">
+            <span className="text-sm font-semibold">Total: {fmt(sumFuncionarios(funcionarios))}</span>
+            <Button onClick={() => setFuncDialogOpen(false)}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -462,7 +582,7 @@ export default function Financeiro() {
               <TableHead className="text-right hidden sm:table-cell">Transporte</TableHead>
               <TableHead className="text-right hidden sm:table-cell">Alimentação</TableHead>
               <TableHead className="text-right hidden md:table-cell">Hospedagem</TableHead>
-              <TableHead className="text-right hidden md:table-cell">Outros</TableHead>
+              <TableHead className="text-right hidden md:table-cell">Funcionários</TableHead>
               <TableHead className="text-right hidden lg:table-cell">Extras</TableHead>
               <TableHead className="text-right">Lucro/Prejuízo</TableHead>
               <TableHead className="text-right">Ações</TableHead>

@@ -1,0 +1,1 @@
+ALTER TABLE public.financials ADD COLUMN funcionarios_cache jsonb DEFAULT '[]'::jsonb;

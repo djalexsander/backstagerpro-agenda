@@ -118,7 +118,7 @@ export function exportFinancialPDF(financial: any) {
     ["Transporte", fmtBRL(financial.transport)],
     ["Alimentação", fmtBRL(financial.food)],
     ["Hospedagem", fmtBRL(financial.lodging)],
-    ["Outros Custos", fmtBRL(financial.other_costs)],
+    ["Cachê de Funcionários", fmtBRL(financial.other_costs)],
   ];
 
   extras.forEach((e) => {
@@ -186,7 +186,7 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
 
   autoTable(doc, {
     startY: 36,
-    head: [["Evento", "Cachê", "Transporte", "Alimentação", "Hospedagem", "Outros", "Extras", "Lucro/Prejuízo"]],
+    head: [["Evento", "Cachê", "Transporte", "Alimentação", "Hospedagem", "Funcionários", "Extras", "Lucro/Prejuízo"]],
     body,
     styles: { fontSize: 9 },
     headStyles: { fillColor: [225, 29, 72] },
