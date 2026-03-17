@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package, Users, Calendar, HardDrive } from "lucide-react";
+import { CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package, Users, Calendar, HardDrive, Upload, FileCheck, Download } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { generatePixPayload } from "@/lib/pix";
