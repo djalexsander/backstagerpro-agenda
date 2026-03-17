@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X, Users } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X, Users, CheckCircle2, Clock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
@@ -23,6 +25,17 @@ const fieldLabels: Record<string, string> = {
 const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
+type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
+type CacheDetail = {
+  valorTotal: number;
+  entrada: number;
+  entradaPaga: boolean;
+  parcelado: boolean;
+  parcelas: CacheParcela[];
+  recebimentoEvento: boolean;
+  dataRecebimento: string;
+  recebimentoPago: boolean;
+};
 type EmployeeExpense = {
   employeeId: string;
   name: string;
@@ -70,6 +83,12 @@ export default function Financeiro() {
   const [transportOpen, setTransportOpen] = useState(false);
   const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
   const [lodgingOpen, setLodgingOpen] = useState(false);
+  const [cacheOpen, setCacheOpen] = useState(false);
+  const defaultCacheDetail: CacheDetail = {
+    valorTotal: 0, entrada: 0, entradaPaga: false, parcelado: false,
+    parcelas: [], recebimentoEvento: true, dataRecebimento: "", recebimentoPago: false,
+  };
+  const [cacheDetail, setCacheDetail] = useState<CacheDetail>(defaultCacheDetail);
   const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([]);
   const [selectedEmployees, setSelectedEmployees] = useState<EmployeeExpense[]>([]);
   const [funcDialogOpen, setFuncDialogOpen] = useState(false);
@@ -124,6 +143,8 @@ export default function Financeiro() {
     setTransportOpen(false);
     setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
     setLodgingOpen(false);
+    setCacheOpen(false);
+    setCacheDetail(defaultCacheDetail);
     setExtraCosts([]);
     setSelectedEmployees([]);
     setOpen(true);
@@ -153,6 +174,14 @@ export default function Financeiro() {
     } else {
       setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
       setLodgingOpen(Number(f.lodging || 0) > 0);
+    }
+    const savedCache = (f as any).cache_detail;
+    if (savedCache) {
+      setCacheDetail(savedCache);
+      setCacheOpen(true);
+    } else {
+      setCacheDetail({ ...defaultCacheDetail, valorTotal: Number(f.cache || 0) });
+      setCacheOpen(Number(f.cache || 0) > 0);
     }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
     setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
@@ -221,6 +250,7 @@ export default function Financeiro() {
         other_costs: totalEmps - totalFood,
         extra_costs: validExtras,
         funcionarios_cache: selectedEmployees,
+        cache_detail: cacheOpen ? cacheDetail : null,
       };
 
       if (editItem) {
@@ -236,6 +266,8 @@ export default function Financeiro() {
       setOpen(false);
       setEditItem(null);
       setForm({ cache: "", transport: "", lodging: "" });
+      setCacheDetail(defaultCacheDetail);
+      setCacheOpen(false);
       setExtraCosts([]);
       setSelectedEmployees([]);
       setSelectedEvent("");
@@ -260,13 +292,33 @@ export default function Financeiro() {
 
   const getExtraCostsTotal = (f: any) => sumExtraCosts(parseExtraCosts((f as any).extra_costs));
 
+  // Calculate paid cache from cache_detail
+  const getCachePago = (f: any): number => {
+    const detail = (f as any).cache_detail as CacheDetail | null;
+    if (!detail) return f.cache || 0; // no detail = assume fully paid (legacy)
+    let paid = 0;
+    if (detail.entrada > 0 && detail.entradaPaga) paid += detail.entrada;
+    if (detail.parcelado) {
+      paid += (detail.parcelas || []).filter(p => p.pago).reduce((s, p) => s + p.valor, 0);
+    } else {
+      if (detail.recebimentoPago) paid += (detail.valorTotal - (detail.entrada || 0));
+    }
+    return paid;
+  };
+
+  const getCachePendente = (f: any): number => {
+    return (f.cache || 0) - getCachePago(f);
+  };
+
   const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
+  const totalCachePago = financials.reduce((s, f) => s + getCachePago(f), 0);
+  const totalCachePendente = totalCache - totalCachePago;
   const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0), 0);
   const totalExtraCosts = financials.reduce((s, f) => s + getExtraCostsTotal(f), 0);
   const totalCosts = totalFixedCosts + totalExtraCosts;
-  const totalProfit = totalCache - totalCosts;
+  const totalProfit = totalCachePago - totalCosts;
 
-  const getProfit = (f: any) => (f.cache || 0) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0) - getExtraCostsTotal(f);
+  const getProfit = (f: any) => getCachePago(f) - (f.transport || 0) - (f.food || 0) - (f.lodging || 0) - (f.other_costs || 0) - getExtraCostsTotal(f);
 
   const getFilteredForExport = () => {
     if (exportMode === "all") return financials;
@@ -418,30 +470,240 @@ export default function Financeiro() {
                   </SelectContent>
                 </Select>
               </div>
-              {fieldKeys.filter(k => k !== 'transport' && k !== 'lodging').map((key, idx) => (
-                <div key={key} className="space-y-2">
-                  <Label>{fieldLabels[key]}</Label>
+              {/* Cachê - expandable payment tracking */}
+              <div className="space-y-2">
+                <Label
+                  className="cursor-pointer flex items-center justify-between hover:text-primary transition-colors"
+                  onClick={() => setCacheOpen(!cacheOpen)}
+                >
+                  <span>Cachê {form.cache && Number(form.cache) > 0 ? `— ${fmt(Number(form.cache))}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">{cacheOpen ? "▲ Fechar" : "▼ Detalhar"}</span>
+                </Label>
+                {!cacheOpen && (
                   <Input
-                    type="number"
-                    step="0.01"
-                    value={form[key]}
-                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
-                    placeholder="0.00"
-                    data-field-index={idx}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const firstExtra = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>('[data-extra-name="0"]');
-                        if (firstExtra) {
-                          firstExtra.focus();
-                        } else if (selectedEvent && !saveMutation.isPending) {
-                          saveMutation.mutate();
-                        }
-                      }
+                    type="number" step="0.01"
+                    value={form.cache}
+                    onChange={(e) => {
+                      setForm((p) => ({ ...p, cache: e.target.value }));
+                      setCacheDetail(p => ({ ...p, valorTotal: parseFloat(e.target.value) || 0 }));
                     }}
+                    placeholder="0.00"
+                    onFocus={() => setCacheOpen(true)}
                   />
-                </div>
-              ))}
+                )}
+                {cacheOpen && (
+                  <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Valor Total do Cachê</Label>
+                      <Input
+                        type="number" step="0.01"
+                        value={cacheDetail.valorTotal || ""}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setCacheDetail(p => ({ ...p, valorTotal: val }));
+                          setForm(p => ({ ...p, cache: e.target.value }));
+                        }}
+                        placeholder="0.00" className="h-8 text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Valor de Entrada</Label>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={cacheDetail.entradaPaga}
+                            onCheckedChange={(checked) => setCacheDetail(p => ({ ...p, entradaPaga: !!checked }))}
+                          />
+                          <span className="text-xs text-muted-foreground">Pago</span>
+                        </div>
+                      </div>
+                      <Input
+                        type="number" step="0.01"
+                        value={cacheDetail.entrada || ""}
+                        onChange={(e) => setCacheDetail(p => ({ ...p, entrada: parseFloat(e.target.value) || 0 }))}
+                        placeholder="0.00" className="h-8 text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Forma de Recebimento do Restante</Label>
+                      <Select
+                        value={cacheDetail.parcelado ? "parcelado" : "avista"}
+                        onValueChange={(v) => {
+                          const parcelado = v === "parcelado";
+                          setCacheDetail(p => ({
+                            ...p,
+                            parcelado,
+                            parcelas: parcelado && p.parcelas.length === 0
+                              ? [{ numero: 1, valor: p.valorTotal - (p.entrada || 0), vencimento: "", pago: false }]
+                              : p.parcelas,
+                          }));
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="avista">À Vista (Pagamento Único)</SelectItem>
+                          <SelectItem value="parcelado">Parcelado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {!cacheDetail.parcelado && (
+                      <div className="space-y-2 p-2 rounded border bg-background">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={cacheDetail.recebimentoEvento}
+                            onCheckedChange={(checked) => setCacheDetail(p => ({ ...p, recebimentoEvento: !!checked, dataRecebimento: "" }))}
+                          />
+                          <span className="text-xs">Receber no dia do evento</span>
+                        </div>
+                        {!cacheDetail.recebimentoEvento && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Data do Recebimento</Label>
+                            <Input
+                              type="date"
+                              value={cacheDetail.dataRecebimento}
+                              onChange={(e) => setCacheDetail(p => ({ ...p, dataRecebimento: e.target.value }))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Checkbox
+                            checked={cacheDetail.recebimentoPago}
+                            onCheckedChange={(checked) => setCacheDetail(p => ({ ...p, recebimentoPago: !!checked }))}
+                          />
+                          <span className="text-xs font-medium">
+                            Restante {fmt(cacheDetail.valorTotal - (cacheDetail.entrada || 0))} — {cacheDetail.recebimentoPago ? "Pago ✓" : "Pendente"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {cacheDetail.parcelado && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold">Parcelas</Label>
+                          <Button
+                            type="button" variant="outline" size="sm" className="h-6 text-xs px-2"
+                            onClick={() => {
+                              const restante = cacheDetail.valorTotal - (cacheDetail.entrada || 0);
+                              const numParcelas = cacheDetail.parcelas.length + 1;
+                              const valorParcela = Math.round((restante / numParcelas) * 100) / 100;
+                              setCacheDetail(p => ({
+                                ...p,
+                                parcelas: Array.from({ length: numParcelas }, (_, i) => ({
+                                  numero: i + 1,
+                                  valor: p.parcelas[i]?.valor ?? valorParcela,
+                                  vencimento: p.parcelas[i]?.vencimento ?? "",
+                                  pago: p.parcelas[i]?.pago ?? false,
+                                })),
+                              }));
+                            }}
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Parcela
+                          </Button>
+                        </div>
+                        {cacheDetail.parcelas.map((parcela, i) => (
+                          <div key={i} className="p-2 rounded border bg-background space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium">Parcela {parcela.numero}</span>
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={parcela.pago}
+                                  onCheckedChange={(checked) => {
+                                    setCacheDetail(p => ({
+                                      ...p,
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, pago: !!checked } : pp),
+                                    }));
+                                  }}
+                                />
+                                <span className="text-xs">{parcela.pago ? "Pago ✓" : "Pendente"}</span>
+                                {cacheDetail.parcelas.length > 1 && (
+                                  <Button
+                                    type="button" variant="ghost" size="icon"
+                                    className="h-5 w-5 text-destructive"
+                                    onClick={() => {
+                                      setCacheDetail(p => ({
+                                        ...p,
+                                        parcelas: p.parcelas.filter((_, pi) => pi !== i).map((pp, pi) => ({ ...pp, numero: pi + 1 })),
+                                      }));
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Valor</Label>
+                                <Input
+                                  type="number" step="0.01"
+                                  value={parcela.valor || ""}
+                                  onChange={(e) => {
+                                    setCacheDetail(p => ({
+                                      ...p,
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, valor: parseFloat(e.target.value) || 0 } : pp),
+                                    }));
+                                  }}
+                                  className="h-7 text-xs" placeholder="0.00"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Vencimento</Label>
+                                <Input
+                                  type="date"
+                                  value={parcela.vencimento}
+                                  onChange={(e) => {
+                                    setCacheDetail(p => ({
+                                      ...p,
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, vencimento: e.target.value } : pp),
+                                    }));
+                                  }}
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-xs text-muted-foreground">
+                          Total Parcelas: <span className="font-semibold text-foreground">{fmt(cacheDetail.parcelas.reduce((s, p) => s + p.valor, 0))}</span>
+                          {" | "}Restante a parcelar: <span className="font-semibold text-foreground">{fmt(cacheDetail.valorTotal - (cacheDetail.entrada || 0))}</span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className="pt-2 border-t space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span>Total Cachê:</span>
+                        <span className="font-semibold">{fmt(cacheDetail.valorTotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-accent" /> Recebido:</span>
+                        <span className="font-semibold text-accent">{fmt(
+                          (cacheDetail.entradaPaga ? cacheDetail.entrada : 0) +
+                          (cacheDetail.parcelado
+                            ? cacheDetail.parcelas.filter(p => p.pago).reduce((s, p) => s + p.valor, 0)
+                            : (cacheDetail.recebimentoPago ? cacheDetail.valorTotal - (cacheDetail.entrada || 0) : 0))
+                        )}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-yellow-500" /> Pendente:</span>
+                        <span className="font-semibold text-yellow-500">{fmt(
+                          cacheDetail.valorTotal -
+                          (cacheDetail.entradaPaga ? cacheDetail.entrada : 0) -
+                          (cacheDetail.parcelado
+                            ? cacheDetail.parcelas.filter(p => p.pago).reduce((s, p) => s + p.valor, 0)
+                            : (cacheDetail.recebimentoPago ? cacheDetail.valorTotal - (cacheDetail.entrada || 0) : 0))
+                        )}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Hospedagem - clicável com detalhes */}
               <div className="space-y-2">
@@ -705,7 +967,7 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -715,6 +977,19 @@ export default function Financeiro() {
               <div>
                 <p className="text-lg font-bold">{fmt(totalCache)}</p>
                 <p className="text-xs text-muted-foreground">Total Cachê</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-accent" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-accent">{fmt(totalCachePago)}</p>
+                <p className="text-xs text-muted-foreground">Recebido</p>
               </div>
             </div>
           </CardContent>
@@ -784,7 +1059,24 @@ export default function Financeiro() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">{fmt(f.cache)}</TableCell>
+                    <TableCell className="text-right">
+                      <div>{fmt(f.cache)}</div>
+                      {(() => {
+                        const pendente = getCachePendente(f);
+                        const pago = getCachePago(f);
+                        if ((f as any).cache_detail && pendente > 0) {
+                          return (
+                            <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 border-accent text-accent">{fmt(pago)} recebido</Badge>
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 border-yellow-500 text-yellow-500">{fmt(pendente)} pendente</Badge>
+                            </div>
+                          );
+                        } else if ((f as any).cache_detail && pendente <= 0) {
+                          return <Badge variant="outline" className="text-[10px] px-1 py-0 border-accent text-accent mt-0.5">Pago ✓</Badge>;
+                        }
+                        return null;
+                      })()}
+                    </TableCell>
                     <TableCell className="text-right hidden sm:table-cell">{fmt(f.transport)}</TableCell>
                     <TableCell className="text-right hidden sm:table-cell">{fmt(f.food)}</TableCell>
                     <TableCell className="text-right hidden md:table-cell">{fmt(f.lodging)}</TableCell>
@@ -815,7 +1107,12 @@ export default function Financeiro() {
             <TableFooter>
               <TableRow>
                 <TableCell className="font-bold">Total</TableCell>
-                <TableCell className="text-right font-bold">{fmt(totalCache)}</TableCell>
+                <TableCell className="text-right font-bold">
+                  <div>{fmt(totalCache)}</div>
+                  {totalCachePendente > 0 && (
+                    <div className="text-[10px] font-normal text-yellow-500">{fmt(totalCachePendente)} pendente</div>
+                  )}
+                </TableCell>
                 <TableCell className="text-right font-bold hidden sm:table-cell">{fmt(financials.reduce((s, f) => s + (f.transport || 0), 0))}</TableCell>
                 <TableCell className="text-right font-bold hidden sm:table-cell">{fmt(financials.reduce((s, f) => s + (f.food || 0), 0))}</TableCell>
                 <TableCell className="text-right font-bold hidden md:table-cell">{fmt(financials.reduce((s, f) => s + (f.lodging || 0), 0))}</TableCell>

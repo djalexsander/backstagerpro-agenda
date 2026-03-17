@@ -332,6 +332,7 @@ export type Database = {
       financials: {
         Row: {
           cache: number | null
+          cache_detail: Json | null
           created_at: string
           empresa_id: string | null
           event_id: string
@@ -346,6 +347,7 @@ export type Database = {
         }
         Insert: {
           cache?: number | null
+          cache_detail?: Json | null
           created_at?: string
           empresa_id?: string | null
           event_id: string
@@ -360,6 +362,7 @@ export type Database = {
         }
         Update: {
           cache?: number | null
+          cache_detail?: Json | null
           created_at?: string
           empresa_id?: string | null
           event_id?: string
