@@ -186,7 +186,7 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
 
   autoTable(doc, {
     startY: 36,
-    head: [["Evento", "Cachê", "Transporte", "Alimentação", "Hospedagem", "Outros", "Extras", "Lucro/Prejuízo"]],
+    head: [["Evento", "Cachê", "Transporte", "Alimentação", "Hospedagem", "Funcionários", "Extras", "Lucro/Prejuízo"]],
     body,
     styles: { fontSize: 9 },
     headStyles: { fillColor: [225, 29, 72] },
