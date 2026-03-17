@@ -133,6 +133,7 @@ export default function Financeiro() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const validExtras = extraCosts.filter((e) => e.name.trim() !== "");
+      const validFuncs = funcionarios.filter((f) => f.nome.trim() !== "");
       const payload = {
         event_id: selectedEvent,
         empresa_id: empresaId,
@@ -140,8 +141,9 @@ export default function Financeiro() {
         transport: parseFloat(form.transport) || 0,
         food: parseFloat(form.food) || 0,
         lodging: parseFloat(form.lodging) || 0,
-        other_costs: parseFloat(form.other_costs) || 0,
+        other_costs: sumFuncionarios(validFuncs),
         extra_costs: validExtras,
+        funcionarios_cache: validFuncs,
       };
 
       if (editItem) {
