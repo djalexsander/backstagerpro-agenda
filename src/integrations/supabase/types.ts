@@ -298,6 +298,7 @@ export type Database = {
       notificacoes_master: {
         Row: {
           created_at: string
+          dados: Json | null
           empresa_id: string
           id: string
           lida: boolean
@@ -306,6 +307,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dados?: Json | null
           empresa_id: string
           id?: string
           lida?: boolean
@@ -314,6 +316,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dados?: Json | null
           empresa_id?: string
           id?: string
           lida?: boolean
