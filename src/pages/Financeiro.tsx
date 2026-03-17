@@ -470,30 +470,240 @@ export default function Financeiro() {
                   </SelectContent>
                 </Select>
               </div>
-              {fieldKeys.filter(k => k !== 'transport' && k !== 'lodging').map((key, idx) => (
-                <div key={key} className="space-y-2">
-                  <Label>{fieldLabels[key]}</Label>
+              {/* Cachê - expandable payment tracking */}
+              <div className="space-y-2">
+                <Label
+                  className="cursor-pointer flex items-center justify-between hover:text-primary transition-colors"
+                  onClick={() => setCacheOpen(!cacheOpen)}
+                >
+                  <span>Cachê {form.cache && Number(form.cache) > 0 ? `— ${fmt(Number(form.cache))}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">{cacheOpen ? "▲ Fechar" : "▼ Detalhar"}</span>
+                </Label>
+                {!cacheOpen && (
                   <Input
-                    type="number"
-                    step="0.01"
-                    value={form[key]}
-                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
-                    placeholder="0.00"
-                    data-field-index={idx}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const firstExtra = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>('[data-extra-name="0"]');
-                        if (firstExtra) {
-                          firstExtra.focus();
-                        } else if (selectedEvent && !saveMutation.isPending) {
-                          saveMutation.mutate();
-                        }
-                      }
+                    type="number" step="0.01"
+                    value={form.cache}
+                    onChange={(e) => {
+                      setForm((p) => ({ ...p, cache: e.target.value }));
+                      setCacheDetail(p => ({ ...p, valorTotal: parseFloat(e.target.value) || 0 }));
                     }}
+                    placeholder="0.00"
+                    onFocus={() => setCacheOpen(true)}
                   />
-                </div>
-              ))}
+                )}
+                {cacheOpen && (
+                  <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Valor Total do Cachê</Label>
+                      <Input
+                        type="number" step="0.01"
+                        value={cacheDetail.valorTotal || ""}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setCacheDetail(p => ({ ...p, valorTotal: val }));
+                          setForm(p => ({ ...p, cache: e.target.value }));
+                        }}
+                        placeholder="0.00" className="h-8 text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Valor de Entrada</Label>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={cacheDetail.entradaPaga}
+                            onCheckedChange={(checked) => setCacheDetail(p => ({ ...p, entradaPaga: !!checked }))}
+                          />
+                          <span className="text-xs text-muted-foreground">Pago</span>
+                        </div>
+                      </div>
+                      <Input
+                        type="number" step="0.01"
+                        value={cacheDetail.entrada || ""}
+                        onChange={(e) => setCacheDetail(p => ({ ...p, entrada: parseFloat(e.target.value) || 0 }))}
+                        placeholder="0.00" className="h-8 text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Forma de Recebimento do Restante</Label>
+                      <Select
+                        value={cacheDetail.parcelado ? "parcelado" : "avista"}
+                        onValueChange={(v) => {
+                          const parcelado = v === "parcelado";
+                          setCacheDetail(p => ({
+                            ...p,
+                            parcelado,
+                            parcelas: parcelado && p.parcelas.length === 0
+                              ? [{ numero: 1, valor: p.valorTotal - (p.entrada || 0), vencimento: "", pago: false }]
+                              : p.parcelas,
+                          }));
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="avista">À Vista (Pagamento Único)</SelectItem>
+                          <SelectItem value="parcelado">Parcelado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {!cacheDetail.parcelado && (
+                      <div className="space-y-2 p-2 rounded border bg-background">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={cacheDetail.recebimentoEvento}
+                            onCheckedChange={(checked) => setCacheDetail(p => ({ ...p, recebimentoEvento: !!checked, dataRecebimento: "" }))}
+                          />
+                          <span className="text-xs">Receber no dia do evento</span>
+                        </div>
+                        {!cacheDetail.recebimentoEvento && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Data do Recebimento</Label>
+                            <Input
+                              type="date"
+                              value={cacheDetail.dataRecebimento}
+                              onChange={(e) => setCacheDetail(p => ({ ...p, dataRecebimento: e.target.value }))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Checkbox
+                            checked={cacheDetail.recebimentoPago}
+                            onCheckedChange={(checked) => setCacheDetail(p => ({ ...p, recebimentoPago: !!checked }))}
+                          />
+                          <span className="text-xs font-medium">
+                            Restante {fmt(cacheDetail.valorTotal - (cacheDetail.entrada || 0))} — {cacheDetail.recebimentoPago ? "Pago ✓" : "Pendente"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {cacheDetail.parcelado && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold">Parcelas</Label>
+                          <Button
+                            type="button" variant="outline" size="sm" className="h-6 text-xs px-2"
+                            onClick={() => {
+                              const restante = cacheDetail.valorTotal - (cacheDetail.entrada || 0);
+                              const numParcelas = cacheDetail.parcelas.length + 1;
+                              const valorParcela = Math.round((restante / numParcelas) * 100) / 100;
+                              setCacheDetail(p => ({
+                                ...p,
+                                parcelas: Array.from({ length: numParcelas }, (_, i) => ({
+                                  numero: i + 1,
+                                  valor: p.parcelas[i]?.valor ?? valorParcela,
+                                  vencimento: p.parcelas[i]?.vencimento ?? "",
+                                  pago: p.parcelas[i]?.pago ?? false,
+                                })),
+                              }));
+                            }}
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Parcela
+                          </Button>
+                        </div>
+                        {cacheDetail.parcelas.map((parcela, i) => (
+                          <div key={i} className="p-2 rounded border bg-background space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium">Parcela {parcela.numero}</span>
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={parcela.pago}
+                                  onCheckedChange={(checked) => {
+                                    setCacheDetail(p => ({
+                                      ...p,
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, pago: !!checked } : pp),
+                                    }));
+                                  }}
+                                />
+                                <span className="text-xs">{parcela.pago ? "Pago ✓" : "Pendente"}</span>
+                                {cacheDetail.parcelas.length > 1 && (
+                                  <Button
+                                    type="button" variant="ghost" size="icon"
+                                    className="h-5 w-5 text-destructive"
+                                    onClick={() => {
+                                      setCacheDetail(p => ({
+                                        ...p,
+                                        parcelas: p.parcelas.filter((_, pi) => pi !== i).map((pp, pi) => ({ ...pp, numero: pi + 1 })),
+                                      }));
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Valor</Label>
+                                <Input
+                                  type="number" step="0.01"
+                                  value={parcela.valor || ""}
+                                  onChange={(e) => {
+                                    setCacheDetail(p => ({
+                                      ...p,
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, valor: parseFloat(e.target.value) || 0 } : pp),
+                                    }));
+                                  }}
+                                  className="h-7 text-xs" placeholder="0.00"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Vencimento</Label>
+                                <Input
+                                  type="date"
+                                  value={parcela.vencimento}
+                                  onChange={(e) => {
+                                    setCacheDetail(p => ({
+                                      ...p,
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, vencimento: e.target.value } : pp),
+                                    }));
+                                  }}
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-xs text-muted-foreground">
+                          Total Parcelas: <span className="font-semibold text-foreground">{fmt(cacheDetail.parcelas.reduce((s, p) => s + p.valor, 0))}</span>
+                          {" | "}Restante a parcelar: <span className="font-semibold text-foreground">{fmt(cacheDetail.valorTotal - (cacheDetail.entrada || 0))}</span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className="pt-2 border-t space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span>Total Cachê:</span>
+                        <span className="font-semibold">{fmt(cacheDetail.valorTotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-accent" /> Recebido:</span>
+                        <span className="font-semibold text-accent">{fmt(
+                          (cacheDetail.entradaPaga ? cacheDetail.entrada : 0) +
+                          (cacheDetail.parcelado
+                            ? cacheDetail.parcelas.filter(p => p.pago).reduce((s, p) => s + p.valor, 0)
+                            : (cacheDetail.recebimentoPago ? cacheDetail.valorTotal - (cacheDetail.entrada || 0) : 0))
+                        )}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-yellow-500" /> Pendente:</span>
+                        <span className="font-semibold text-yellow-500">{fmt(
+                          cacheDetail.valorTotal -
+                          (cacheDetail.entradaPaga ? cacheDetail.entrada : 0) -
+                          (cacheDetail.parcelado
+                            ? cacheDetail.parcelas.filter(p => p.pago).reduce((s, p) => s + p.valor, 0)
+                            : (cacheDetail.recebimentoPago ? cacheDetail.valorTotal - (cacheDetail.entrada || 0) : 0))
+                        )}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Hospedagem - clicável com detalhes */}
               <div className="space-y-2">
