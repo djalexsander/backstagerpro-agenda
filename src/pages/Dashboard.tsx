@@ -18,19 +18,42 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { empresaId } = useAuth();
 
-  const { isMasterAdmin } = useAuth();
-
   const { data: events = [] } = useQuery({
     queryKey: ["events", empresaId],
     queryFn: async () => {
       if (!empresaId) return [];
-      let query = supabase.from("events").select("*").order("date", { ascending: true }).eq("empresa_id", empresaId);
-      const { data, error } = await query;
+      const { data, error } = await supabase.from("events").select("*").order("date", { ascending: true }).eq("empresa_id", empresaId);
       if (error) throw error;
       return data;
     },
     enabled: !!empresaId,
   });
+
+  // Fetch event_days for all events
+  const eventIds = events.map((e) => e.id);
+  const { data: allEventDays = [] } = useQuery({
+    queryKey: ["all-event-days", eventIds],
+    queryFn: async () => {
+      if (eventIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("event_days")
+        .select("*")
+        .in("event_id", eventIds)
+        .order("day_number", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: eventIds.length > 0,
+  });
+
+  const getEventArtists = (eventId: string): string => {
+    const days = allEventDays.filter((d) => d.event_id === eventId);
+    if (days.length === 0) return "";
+    const artists = days.map((d) => d.artist).filter(Boolean);
+    if (artists.length === 0) return "";
+    if (artists.length <= 2) return artists.join(", ");
+    return `${artists[0]} +${artists.length - 1}`;
+  };
 
   const today = startOfToday();
   const weekStart = startOfWeek(today, { locale: ptBR });
@@ -97,7 +120,7 @@ export default function Dashboard() {
           <CardContent>
             <h2 className="text-xl md:text-2xl font-bold mb-3">{nextEvent.name}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground"><Music className="h-4 w-4" /> {nextEvent.artist}</div>
+              <div className="flex items-center gap-2 text-muted-foreground"><Music className="h-4 w-4" /> {getEventArtists(nextEvent.id) || nextEvent.artist}</div>
               <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="h-4 w-4" /> {format(parseISO(nextEvent.date), "dd/MM/yyyy", { locale: ptBR })}</div>
               <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {nextEvent.city} – {nextEvent.venue}</div>
             </div>
@@ -119,10 +142,12 @@ export default function Dashboard() {
                     <Badge className={`text-xs shrink-0 ${statusColors[event.status]}`}>{event.status}</Badge>
                   </div>
                   <div className="space-y-1 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1"><Music className="h-3 w-3" /> {event.artist}</div>
+                    <div className="flex items-center gap-1"><Music className="h-3 w-3" /> {getEventArtists(event.id) || event.artist}</div>
                     <div className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {format(parseISO(event.date), "EEE, dd/MM", { locale: ptBR })}</div>
                     <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {event.city}</div>
-                    {event.show_time && <div className="flex items-center gap-1"><Clock className="h-3 w-3" /> {event.show_time.slice(0, 5)}</div>}
+                    {(event as any).num_days > 1 && (
+                      <div className="flex items-center gap-1">📅 {(event as any).num_days} dias</div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

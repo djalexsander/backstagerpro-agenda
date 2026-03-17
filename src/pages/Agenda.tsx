@@ -47,11 +47,38 @@ export default function Agenda() {
     enabled: !!empresaId,
   });
 
+  // Fetch event_days for artist display
+  const eventIds = events.map((e) => e.id);
+  const { data: allEventDays = [] } = useQuery({
+    queryKey: ["all-event-days", eventIds],
+    queryFn: async () => {
+      if (eventIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("event_days")
+        .select("*")
+        .in("event_id", eventIds)
+        .order("day_number", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: eventIds.length > 0,
+  });
+
+  const getEventArtists = (eventId: string) => {
+    const days = allEventDays.filter((d) => d.event_id === eventId);
+    if (days.length === 0) return null;
+    const artists = days.map((d) => d.artist).filter(Boolean);
+    if (artists.length === 0) return null;
+    if (artists.length <= 2) return artists.join(", ");
+    return `${artists[0]}, ${artists[1]} +${artists.length - 2}`;
+  };
+
   const cities = [...new Set(events.map((e) => e.city))].sort();
   const eventDates = events.filter((e) => e.date).map((e) => parseISO(e.date));
 
   const filtered = events.filter((e) => {
-    const matchesSearch = search === "" || e.name.toLowerCase().includes(search.toLowerCase()) || e.artist.toLowerCase().includes(search.toLowerCase());
+    const dayArtists = getEventArtists(e.id) || e.artist;
+    const matchesSearch = search === "" || e.name.toLowerCase().includes(search.toLowerCase()) || dayArtists.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || e.status === statusFilter;
     const matchesCity = cityFilter === "all" || e.city === cityFilter;
     const matchesDate = !selectedDate || isSameDay(parseISO(e.date), selectedDate);
@@ -139,9 +166,7 @@ export default function Agenda() {
               } else if (exportMode === "period" && exportStart && exportEnd) {
                 toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: parseISO(exportStart), end: parseISO(exportEnd) }));
               }
-              if (toExport.length === 0) {
-                return;
-              }
+              if (toExport.length === 0) return;
               exportAgendaPDF(toExport);
               setExportOpen(false);
             }}>
@@ -160,7 +185,7 @@ export default function Agenda() {
               <Button variant="ghost" size="sm" className="ml-auto text-xs h-6 px-2" onClick={() => setSelectedDate(undefined)}>Limpar</Button>
             )}
           </div>
-          <Calendar mode="single" selected={selectedDate} onSelect={(date) => { setSelectedDate(date); }} locale={ptBR}
+          <Calendar mode="single" selected={selectedDate} onSelect={(date) => setSelectedDate(date)} locale={ptBR}
             modifiers={{ hasEvent: eventDates }} modifiersClassNames={{ hasEvent: "bg-primary/20 text-primary font-bold" }} className="w-full" />
           {selectedDate && isAdmin && (
             <div className="px-2 pt-2 border-t border-border mt-2">
@@ -202,9 +227,9 @@ export default function Agenda() {
                   <TableHead>Data</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Evento</TableHead>
-                  <TableHead>Artista</TableHead>
+                  <TableHead>Artista(s)</TableHead>
                   <TableHead className="hidden md:table-cell">Cidade</TableHead>
-                  <TableHead className="hidden lg:table-cell">Local</TableHead>
+                  <TableHead className="hidden md:table-cell">Dias</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -216,9 +241,11 @@ export default function Agenda() {
                       <TableCell className="font-medium whitespace-nowrap">{format(parseISO(event.date), "dd/MM/yyyy")}</TableCell>
                       <TableCell><Badge className={`${statusColors[event.status]} capitalize`}>{event.status}</Badge></TableCell>
                       <TableCell className="font-medium">{event.name}</TableCell>
-                      <TableCell>{event.artist}</TableCell>
+                      <TableCell>{getEventArtists(event.id) || event.artist}</TableCell>
                       <TableCell className="hidden md:table-cell">{event.city}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{event.venue}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Badge variant="outline">{(event as any).num_days || 1} dia(s)</Badge>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
