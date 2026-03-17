@@ -197,7 +197,7 @@ export default function Empresas() {
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" });
+    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
