@@ -299,7 +299,7 @@ export default function Documentos() {
     };
 
     Object.entries(replacements).forEach(([key, value]) => {
-      result = result.replaceAll(key, value);
+      result = result.split(key).join(value);
     });
 
     return result;
