@@ -67,29 +67,18 @@ export default function EventDetail() {
     },
   });
 
-  const getSignedUrl = async (filePath: string) => {
-    const { data, error } = await supabase.storage.from("event-files").createSignedUrl(filePath, 3600);
-    if (error || !data?.signedUrl) {
-      toast({ title: "Erro ao acessar arquivo", description: error?.message || "Tente novamente.", variant: "destructive" });
-      return null;
-    }
-    return data.signedUrl;
-  };
-
-  const downloadFile = async (filePath: string, fileName: string) => {
-    const url = await getSignedUrl(filePath);
-    if (!url) return;
+  const downloadFile = (filePath: string, fileName: string) => {
+    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = data.publicUrl;
     a.download = fileName;
     a.target = "_blank";
     a.click();
   };
 
-  const viewFile = async (filePath: string) => {
-    const url = await getSignedUrl(filePath);
-    if (!url) return;
-    window.open(url, "_blank");
+  const viewFile = (filePath: string) => {
+    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
+    window.open(data.publicUrl, "_blank");
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -190,8 +179,11 @@ export default function EventDetail() {
                     )}
                     {dayFile && (
                       <div className="flex gap-2 pt-2 border-t border-border">
+                        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => viewFile(dayFile.file_path)}>
+                          <Eye className="h-3 w-3 mr-1" /> Visualizar
+                        </Button>
                         <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
-                          <Download className="h-3 w-3 mr-1" /> Baixar Rider
+                          <Download className="h-3 w-3 mr-1" /> Baixar
                         </Button>
                       </div>
                     )}
