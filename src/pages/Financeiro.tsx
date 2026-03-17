@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -298,71 +298,116 @@ export default function Financeiro() {
           <DialogHeader>
             <DialogTitle>{editItem ? "Editar Registro Financeiro" : "Novo Registro Financeiro"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Evento</Label>
-              <Select value={selectedEvent} onValueChange={setSelectedEvent} disabled={!!editItem}>
-                <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
-                <SelectContent>
-                  {editItem ? (
-                    <SelectItem value={editItem.event_id}>{(editItem as any).events?.name || "Evento"}</SelectItem>
-                  ) : (
-                    eventsWithoutFinancials.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)
-                  )}
-                </SelectContent>
-              </Select>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (selectedEvent && !saveMutation.isPending) saveMutation.mutate();
+            }}
+          >
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Evento</Label>
+                <Select value={selectedEvent} onValueChange={setSelectedEvent} disabled={!!editItem}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
+                  <SelectContent>
+                    {editItem ? (
+                      <SelectItem value={editItem.event_id}>{(editItem as any).events?.name || "Evento"}</SelectItem>
+                    ) : (
+                      eventsWithoutFinancials.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              {fieldKeys.map((key, idx) => (
+                <div key={key} className="space-y-2">
+                  <Label>{fieldLabels[key]}</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form[key]}
+                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
+                    placeholder="0.00"
+                    data-field-index={idx}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const nextFixed = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>(`[data-field-index="${idx + 1}"]`);
+                        if (nextFixed) {
+                          nextFixed.focus();
+                        } else {
+                          // Try first extra cost name input
+                          const firstExtra = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>('[data-extra-name="0"]');
+                          if (firstExtra) {
+                            firstExtra.focus();
+                          } else if (selectedEvent && !saveMutation.isPending) {
+                            saveMutation.mutate();
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+
+              {/* Extra costs */}
+              {extraCosts.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <Label className="text-sm font-semibold">Despesas Extras</Label>
+                  {extraCosts.map((extra, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        placeholder="Nome da despesa"
+                        value={extra.name}
+                        onChange={(e) => updateExtraCost(i, "name", e.target.value)}
+                        className="flex-1"
+                        data-extra-name={i}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const valueInput = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>(`[data-extra-value="${i}"]`);
+                            valueInput?.focus();
+                          }
+                        }}
+                      />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={extra.value || ""}
+                        onChange={(e) => updateExtraCost(i, "value", e.target.value)}
+                        className="w-28"
+                        data-extra-value={i}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const nextName = e.currentTarget.closest("form")?.querySelector<HTMLInputElement>(`[data-extra-name="${i + 1}"]`);
+                            if (nextName) {
+                              nextName.focus();
+                            } else if (selectedEvent && !saveMutation.isPending) {
+                              saveMutation.mutate();
+                            }
+                          }
+                        }}
+                      />
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeExtraCost(i)} className="shrink-0 text-destructive hover:text-destructive">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button type="button" variant="outline" size="sm" onClick={addExtraCost} className="w-full">
+                <Plus className="h-4 w-4 mr-1" /> Adicionar Despesa Extra
+              </Button>
             </div>
-            {fieldKeys.map((key) => (
-              <div key={key} className="space-y-2">
-                <Label>{fieldLabels[key]}</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form[key]}
-                  onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
-                  placeholder="0.00"
-                />
-              </div>
-            ))}
-
-            {/* Extra costs */}
-            {extraCosts.length > 0 && (
-              <div className="space-y-3 pt-2 border-t border-border">
-                <Label className="text-sm font-semibold">Despesas Extras</Label>
-                {extraCosts.map((extra, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      placeholder="Nome da despesa"
-                      value={extra.name}
-                      onChange={(e) => updateExtraCost(i, "name", e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={extra.value || ""}
-                      onChange={(e) => updateExtraCost(i, "value", e.target.value)}
-                      className="w-28"
-                    />
-                    <Button variant="ghost" size="icon" onClick={() => removeExtraCost(i)} className="shrink-0 text-destructive hover:text-destructive">
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <Button type="button" variant="outline" size="sm" onClick={addExtraCost} className="w-full">
-              <Plus className="h-4 w-4 mr-1" /> Adicionar Despesa Extra
-            </Button>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={() => saveMutation.mutate()} disabled={!selectedEvent || saveMutation.isPending}>
-              {saveMutation.isPending ? "Salvando..." : editItem ? "Atualizar" : "Salvar"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter className="mt-4">
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+              <Button type="submit" disabled={!selectedEvent || saveMutation.isPending}>
+                {saveMutation.isPending ? "Salvando..." : editItem ? "Atualizar" : "Salvar"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
