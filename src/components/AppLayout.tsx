@@ -115,6 +115,7 @@ export function AppLayout() {
           <header className="h-14 flex items-center justify-between border-b bg-card px-4 shrink-0">
             <SidebarTrigger className="mr-4" />
             <div className="flex items-center gap-2">
+              {!isMasterAdmin && <NotificacoesEmpresa />}
               {isMasterAdmin && <NotificacoesMaster />}
             </div>
           </header>
