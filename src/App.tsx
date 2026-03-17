@@ -45,6 +45,7 @@ const App = () => (
               <Route path="/financeiro" element={<ProtectedRoute adminOnly><Financeiro /></ProtectedRoute>} />
               <Route path="/usuarios" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
               <Route path="/plano" element={<ProtectedRoute adminOnly><PlanoAssinatura /></ProtectedRoute>} />
+              <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
               
               {/* Master Admin Routes */}
               <Route path="/master" element={<ProtectedRoute masterOnly><PainelMaster /></ProtectedRoute>} />
