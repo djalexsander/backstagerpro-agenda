@@ -266,6 +266,8 @@ export default function Financeiro() {
       setOpen(false);
       setEditItem(null);
       setForm({ cache: "", transport: "", lodging: "" });
+      setCacheDetail(defaultCacheDetail);
+      setCacheOpen(false);
       setExtraCosts([]);
       setSelectedEmployees([]);
       setSelectedEvent("");
