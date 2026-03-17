@@ -430,7 +430,8 @@ export default function PlanoAssinatura() {
                                 empresa_id: empresaId!,
                                 tipo: "comprovante_pagamento",
                                 mensagem: `${empresa?.nome_empresa} enviou comprovante de pagamento - R$${Number(p.valor).toFixed(2)}`,
-                              });
+                                dados: { comprovante_path: path },
+                              } as any);
 
                               queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
                               toast.success("Comprovante enviado com sucesso!");
