@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Music } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -17,6 +18,7 @@ export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { platformLogoUrl, platformName } = usePlatformBranding();
 
   useEffect(() => {
     const saved = localStorage.getItem("backstage_saved_login");
@@ -51,11 +53,15 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
-            <Music className="h-7 w-7 text-primary-foreground" />
+          <div className="h-12 w-12 rounded-xl bg-primary/10 border border-border flex items-center justify-center overflow-hidden">
+            {platformLogoUrl ? (
+              <img src={platformLogoUrl} alt={`Logo ${platformName}`} className="h-full w-full object-contain p-1" />
+            ) : (
+              <Music className="h-7 w-7 text-primary" />
+            )}
           </div>
           <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-            Backstage Pro
+            {platformName}
           </h1>
         </div>
         <Card>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings, Save, Upload, Globe, Shield, Image } from "lucide-react";
 import { toast } from "sonner";
+import { useSystemSettings } from "@/hooks/useSystemSettings";
 
 type SettingsMap = Record<string, string | null>;
 
@@ -18,19 +19,10 @@ export default function ConfiguracoesSistema() {
   const [form, setForm] = useState<SettingsMap>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ["system-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("key, value");
-      if (error) throw error;
-      const map: SettingsMap = {};
-      data.forEach((row: any) => { map[row.key] = row.value; });
-      return map;
-    },
-  });
+  const { data: settings, isLoading } = useSystemSettings();
 
   useEffect(() => {
     if (settings) {
@@ -62,26 +54,47 @@ export default function ConfiguracoesSistema() {
 
   const handleLogoUpload = async () => {
     if (!logoFile) return;
-    const ext = logoFile.name.split(".").pop();
-    const path = `system/logo.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("event-files")
-      .upload(path, logoFile, { upsert: true });
+    setIsUploadingLogo(true);
 
-    if (uploadError) {
-      toast.error("Erro ao fazer upload da logo.");
-      return;
+    try {
+      const ext = logoFile.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `system/logo-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("event-files")
+        .upload(path, logoFile, { upsert: false });
+
+      if (uploadError) {
+        toast.error(`Erro ao fazer upload da logo: ${uploadError.message}`);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("event-files")
+        .getPublicUrl(path);
+
+      const url = `${urlData.publicUrl}?v=${Date.now()}`;
+
+      const { error: updateError } = await supabase
+        .from("system_settings")
+        .update({ value: url })
+        .eq("key", "platform_logo_url");
+
+      if (updateError) {
+        toast.error("Upload concluído, mas não foi possível salvar a logo.");
+        return;
+      }
+
+      setForm(prev => ({ ...prev, platform_logo_url: url }));
+      setLogoPreview(url);
+      setLogoFile(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
+      toast.success("Logo enviada com sucesso!");
+    } finally {
+      setIsUploadingLogo(false);
     }
-
-    const { data: urlData } = supabase.storage
-      .from("event-files")
-      .getPublicUrl(path);
-
-    const url = urlData.publicUrl;
-    setForm(prev => ({ ...prev, platform_logo_url: url }));
-    setLogoPreview(url);
-    toast.success("Logo enviada com sucesso!");
   };
 
   const handleSave = () => {
