@@ -464,6 +464,9 @@ export default function Documentos() {
                       }}>
                         <FilePlus className="h-3 w-3 mr-1" /> Gerar
                       </Button>
+                      <Button size="sm" variant="ghost" onClick={() => duplicateTemplate(tmpl)} title="Duplicar template">
+                        <Copy className="h-3 w-3" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => openEditTemplate(tmpl)}>
                         <Pencil className="h-3 w-3" />
                       </Button>
