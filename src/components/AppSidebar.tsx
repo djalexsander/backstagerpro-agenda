@@ -19,6 +19,7 @@ export function AppSidebar() {
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
       { title: "Usuários", url: "/usuarios", icon: Users },
       { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
+      { title: "Documentos", url: "/documentos", icon: FileText },
       { title: "Backups", url: "/backups", icon: Database },
     ] : []),
   ];
