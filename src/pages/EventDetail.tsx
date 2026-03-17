@@ -67,14 +67,6 @@ export default function EventDetail() {
     },
   });
 
-  const downloadFile = (filePath: string, fileName: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    const a = document.createElement("a");
-    a.href = data.publicUrl;
-    a.download = fileName;
-    a.target = "_blank";
-    a.click();
-  };
 
   const downloadFile = async (filePath: string, fileName: string) => {
     const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
