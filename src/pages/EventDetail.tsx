@@ -67,18 +67,29 @@ export default function EventDetail() {
     },
   });
 
-  const downloadFile = (filePath: string, fileName: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
+  const getSignedUrl = async (filePath: string) => {
+    const { data, error } = await supabase.storage.from("event-files").createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) {
+      toast({ title: "Erro ao acessar arquivo", description: error?.message || "Tente novamente.", variant: "destructive" });
+      return null;
+    }
+    return data.signedUrl;
+  };
+
+  const downloadFile = async (filePath: string, fileName: string) => {
+    const url = await getSignedUrl(filePath);
+    if (!url) return;
     const a = document.createElement("a");
-    a.href = data.publicUrl;
+    a.href = url;
     a.download = fileName;
     a.target = "_blank";
     a.click();
   };
 
-  const viewFile = (filePath: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    window.open(data.publicUrl, "_blank");
+  const viewFile = async (filePath: string) => {
+    const url = await getSignedUrl(filePath);
+    if (!url) return;
+    window.open(url, "_blank");
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
