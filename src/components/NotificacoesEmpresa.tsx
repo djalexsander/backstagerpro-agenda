@@ -136,7 +136,7 @@ export function NotificacoesEmpresa() {
             id: "plano-vencido",
             tipo: "plano_vencido",
             titulo: "Plano vencido!",
-            descricao: "Renove seu plano para continuar usando o sistema.",
+            descricao: "Seu plano expirou. Realize o pagamento para evitar o bloqueio.",
             icone: CreditCard,
             cor: "text-destructive",
             acao: () => navigate("/plano"),
@@ -146,12 +146,25 @@ export function NotificacoesEmpresa() {
             id: "plano-vencendo",
             tipo: "plano_vencendo",
             titulo: `Plano vence em ${diasVenc} dia${diasVenc !== 1 ? "s" : ""}`,
-            descricao: "Renove para garantir acesso contínuo.",
+            descricao: `Vencimento em ${format(venc, "dd/MM/yyyy", { locale: ptBR })}. Renove para evitar bloqueio.`,
             icone: CreditCard,
             cor: "text-[hsl(var(--warning))]",
             acao: () => navigate("/plano"),
           });
         }
+      }
+
+      // Bloqueio alert
+      if (empresa.plano_bloqueado) {
+        list.unshift({
+          id: "empresa-bloqueada",
+          tipo: "plano_vencido",
+          titulo: "Empresa Bloqueada!",
+          descricao: "Sua empresa foi bloqueada por falta de pagamento. Regularize para continuar.",
+          icone: AlertTriangle,
+          cor: "text-destructive",
+          acao: () => navigate("/plano"),
+        });
       }
     }
 
