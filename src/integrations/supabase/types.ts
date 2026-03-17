@@ -67,10 +67,65 @@ export type Database = {
           },
         ]
       }
+      event_days: {
+        Row: {
+          artist: string | null
+          created_at: string
+          date: string | null
+          day_number: number
+          empresa_id: string | null
+          event_id: string
+          id: string
+          observations: string | null
+          show_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          artist?: string | null
+          created_at?: string
+          date?: string | null
+          day_number: number
+          empresa_id?: string | null
+          event_id: string
+          id?: string
+          observations?: string | null
+          show_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          artist?: string | null
+          created_at?: string
+          date?: string | null
+          day_number?: number
+          empresa_id?: string | null
+          event_id?: string
+          id?: string
+          observations?: string | null
+          show_time?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_days_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_days_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_files: {
         Row: {
           created_at: string
           empresa_id: string | null
+          event_day_id: string | null
           event_id: string
           file_name: string
           file_path: string
@@ -80,6 +135,7 @@ export type Database = {
         Insert: {
           created_at?: string
           empresa_id?: string | null
+          event_day_id?: string | null
           event_id: string
           file_name: string
           file_path: string
@@ -89,6 +145,7 @@ export type Database = {
         Update: {
           created_at?: string
           empresa_id?: string | null
+          event_day_id?: string | null
           event_id?: string
           file_name?: string
           file_path?: string
@@ -101,6 +158,13 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_files_event_day_id_fkey"
+            columns: ["event_day_id"]
+            isOneToOne: false
+            referencedRelation: "event_days"
             referencedColumns: ["id"]
           },
           {
@@ -124,6 +188,7 @@ export type Database = {
           logistics_departure: string | null
           material_list: string | null
           name: string
+          num_days: number
           observations: string | null
           show_time: string | null
           status: Database["public"]["Enums"]["event_status"]
@@ -141,6 +206,7 @@ export type Database = {
           logistics_departure?: string | null
           material_list?: string | null
           name: string
+          num_days?: number
           observations?: string | null
           show_time?: string | null
           status?: Database["public"]["Enums"]["event_status"]
@@ -158,6 +224,7 @@ export type Database = {
           logistics_departure?: string | null
           material_list?: string | null
           name?: string
+          num_days?: number
           observations?: string | null
           show_time?: string | null
           status?: Database["public"]["Enums"]["event_status"]

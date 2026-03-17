@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,15 +10,28 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Upload } from "lucide-react";
+import { Upload, Plus, Minus, Music } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Database } from "@/integrations/supabase/types";
 
 type EventStatus = Database["public"]["Enums"]["event_status"];
 
+interface DayForm {
+  date: string;
+  artist: string;
+  show_time: string;
+  observations: string;
+  riderFile: File | null;
+  existingRiderId?: string;
+  existingRiderName?: string;
+}
+
+const emptyDay = (dayNum: number): DayForm => ({
+  date: "", artist: "", show_time: "", observations: "", riderFile: null,
+});
+
 export default function EventForm() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
   const { user, empresaId } = useAuth();
@@ -26,12 +39,17 @@ export default function EventForm() {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState({
-    name: "", artist: "", date: searchParams.get("date") || "", status: "pendente" as EventStatus,
-    city: "", venue: "", show_time: "", logistics_departure: "",
-    observations: "", material_list: "",
+    name: "",
+    city: "",
+    venue: "",
+    status: "pendente" as EventStatus,
+    num_days: 1,
+    observations: "",
+    logistics_departure: "",
+    material_list: "",
   });
-  const [artistRider, setArtistRider] = useState<File | null>(null);
-  const [eventRider, setEventRider] = useState<File | null>(null);
+
+  const [days, setDays] = useState<DayForm[]>([emptyDay(1)]);
   const [saving, setSaving] = useState(false);
 
   const { data: existingEvent } = useQuery({
@@ -44,24 +62,92 @@ export default function EventForm() {
     },
   });
 
+  const { data: existingDays = [] } = useQuery({
+    queryKey: ["event-days", id],
+    enabled: !!isEditing,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_days")
+        .select("*")
+        .eq("event_id", id!)
+        .order("day_number", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: existingFiles = [] } = useQuery({
+    queryKey: ["event-files", id],
+    enabled: !!isEditing,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_files").select("*").eq("event_id", id!);
+      if (error) throw error;
+      return data;
+    },
+  });
+
   useEffect(() => {
     if (existingEvent) {
       setForm({
-        name: existingEvent.name, artist: existingEvent.artist, date: existingEvent.date,
-        status: existingEvent.status, city: existingEvent.city, venue: existingEvent.venue,
-        show_time: existingEvent.show_time || "", logistics_departure: existingEvent.logistics_departure?.slice(0, 16) || "",
-        observations: existingEvent.observations || "", material_list: existingEvent.material_list || "",
+        name: existingEvent.name,
+        city: existingEvent.city,
+        venue: existingEvent.venue,
+        status: existingEvent.status,
+        num_days: (existingEvent as any).num_days || 1,
+        observations: existingEvent.observations || "",
+        logistics_departure: existingEvent.logistics_departure?.slice(0, 16) || "",
+        material_list: existingEvent.material_list || "",
       });
     }
   }, [existingEvent]);
 
-  const uploadFile = async (file: File, eventId: string, fileType: "artist_rider" | "event_rider") => {
-    const path = `${eventId}/${fileType}_${Date.now()}_${file.name}`;
+  useEffect(() => {
+    if (existingDays.length > 0) {
+      const mapped = existingDays.map((d) => {
+        const file = existingFiles.find((f) => f.event_day_id === d.id);
+        return {
+          date: d.date || "",
+          artist: d.artist || "",
+          show_time: d.show_time?.slice(0, 5) || "",
+          observations: d.observations || "",
+          riderFile: null,
+          existingRiderId: file?.id,
+          existingRiderName: file?.file_name,
+        } as DayForm;
+      });
+      setDays(mapped);
+    }
+  }, [existingDays, existingFiles]);
+
+  const handleNumDaysChange = (newNum: number) => {
+    if (newNum < 1) return;
+    if (newNum > 30) return;
+    setForm((p) => ({ ...p, num_days: newNum }));
+    setDays((prev) => {
+      if (newNum > prev.length) {
+        return [...prev, ...Array.from({ length: newNum - prev.length }, (_, i) => emptyDay(prev.length + i + 1))];
+      }
+      return prev.slice(0, newNum);
+    });
+  };
+
+  const updateDay = (index: number, key: keyof DayForm, value: any) => {
+    setDays((prev) => prev.map((d, i) => i === index ? { ...d, [key]: value } : d));
+  };
+
+  const uploadDayRider = async (file: File, eventId: string, eventDayId: string) => {
+    const path = `${eventId}/day_${eventDayId}_${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage.from("event-files").upload(path, file);
     if (uploadError) throw uploadError;
-    await supabase.from("event_files").delete().eq("event_id", eventId).eq("file_type", fileType);
+    // Remove old rider for this day
+    await supabase.from("event_files").delete().eq("event_day_id", eventDayId);
     const { error: insertError } = await supabase.from("event_files").insert({
-      event_id: eventId, file_type: fileType, file_path: path, file_name: file.name, empresa_id: empresaId,
+      event_id: eventId,
+      event_day_id: eventDayId,
+      file_type: "artist_rider" as any,
+      file_path: path,
+      file_name: file.name,
+      empresa_id: empresaId,
     } as any);
     if (insertError) throw insertError;
   };
@@ -71,15 +157,22 @@ export default function EventForm() {
     setSaving(true);
 
     try {
+      // Use first day's date and artist as the event-level values for backward compat
+      const firstDay = days[0];
       const payload = {
-        name: form.name, artist: form.artist, date: form.date, status: form.status,
-        city: form.city, venue: form.venue,
-        show_time: form.show_time || null,
+        name: form.name,
+        artist: firstDay?.artist || "Vários",
+        date: firstDay?.date || new Date().toISOString().slice(0, 10),
+        status: form.status,
+        city: form.city,
+        venue: form.venue,
+        show_time: firstDay?.show_time || null,
         logistics_departure: form.logistics_departure || null,
         observations: form.observations || null,
         material_list: form.material_list || null,
         created_by: user?.id,
         empresa_id: empresaId,
+        num_days: form.num_days,
       };
 
       let eventId: string;
@@ -88,17 +181,36 @@ export default function EventForm() {
         const { error } = await supabase.from("events").update(payload as any).eq("id", id!);
         if (error) throw error;
         eventId = id!;
+        // Delete old days and recreate
+        await supabase.from("event_days").delete().eq("event_id", eventId);
       } else {
         const { data, error } = await supabase.from("events").insert(payload as any).select("id").single();
         if (error) throw error;
         eventId = data.id;
       }
 
-      if (artistRider) await uploadFile(artistRider, eventId, "artist_rider");
-      if (eventRider) await uploadFile(eventRider, eventId, "event_rider");
+      // Create event_days
+      for (let i = 0; i < days.length; i++) {
+        const day = days[i];
+        const { data: dayData, error: dayError } = await supabase.from("event_days").insert({
+          event_id: eventId,
+          day_number: i + 1,
+          date: day.date || null,
+          artist: day.artist || "",
+          show_time: day.show_time || null,
+          observations: day.observations || null,
+          empresa_id: empresaId,
+        } as any).select("id").single();
+        if (dayError) throw dayError;
+
+        if (day.riderFile && dayData) {
+          await uploadDayRider(day.riderFile, eventId, dayData.id);
+        }
+      }
 
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-days", eventId] });
       toast({ title: isEditing ? "Evento atualizado!" : "Evento criado!" });
       navigate(`/evento/${eventId}`);
     } catch (err: any) {
@@ -112,16 +224,29 @@ export default function EventForm() {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{isEditing ? "Editar Evento" : "Novo Evento"}</h1>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+        {isEditing ? "Editar Evento" : "Novo Evento"}
+      </h1>
+
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Event Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
-            <CardHeader><CardTitle className="text-base">Informações Principais</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Informações do Evento</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2"><Label>Nome do Evento *</Label><Input value={form.name} onChange={set("name")} required /></div>
-              <div className="space-y-2"><Label>Artista *</Label><Input value={form.artist} onChange={set("artist")} required /></div>
-              <div className="space-y-2"><Label>Data *</Label><Input type="date" value={form.date} onChange={set("date")} required /></div>
+              <div className="space-y-2">
+                <Label>Nome do Evento *</Label>
+                <Input value={form.name} onChange={set("name")} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Cidade *</Label>
+                <Input value={form.city} onChange={set("city")} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Local *</Label>
+                <Input value={form.venue} onChange={set("venue")} required />
+              </div>
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as EventStatus }))}>
@@ -133,49 +258,120 @@ export default function EventForm() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label>Cidade *</Label><Input value={form.city} onChange={set("city")} required /></div>
-              <div className="space-y-2"><Label>Local *</Label><Input value={form.venue} onChange={set("venue")} required /></div>
-              <div className="space-y-2"><Label>Horário do Show</Label><Input type="time" value={form.show_time} onChange={set("show_time")} /></div>
+              <div className="space-y-2">
+                <Label>Quantidade de Dias / Shows</Label>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="icon" onClick={() => handleNumDaysChange(form.num_days - 1)}>
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={form.num_days}
+                    onChange={(e) => handleNumDaysChange(parseInt(e.target.value) || 1)}
+                    className="w-20 text-center"
+                  />
+                  <Button type="button" variant="outline" size="icon" onClick={() => handleNumDaysChange(form.num_days + 1)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Logística</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Logística & Observações</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2"><Label>Saída Logística</Label><Input type="datetime-local" value={form.logistics_departure} onChange={set("logistics_departure")} /></div>
-              <div className="space-y-2"><Label>Observações</Label><Textarea value={form.observations} onChange={set("observations")} rows={4} /></div>
-              <div className="space-y-2"><Label>Lista de Material</Label><Textarea value={form.material_list} onChange={set("material_list")} rows={4} /></div>
+              <div className="space-y-2">
+                <Label>Saída Logística</Label>
+                <Input type="datetime-local" value={form.logistics_departure} onChange={set("logistics_departure")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Observações Gerais</Label>
+                <Textarea value={form.observations} onChange={set("observations")} rows={4} />
+              </div>
+              <div className="space-y-2">
+                <Label>Lista de Material</Label>
+                <Textarea value={form.material_list} onChange={set("material_list")} rows={4} />
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card>
-          <CardHeader><CardTitle className="text-base">Arquivos PDF</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Rider Técnico do Artista</Label>
-                <label className="flex items-center gap-2 border border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/50 transition-colors">
-                  <Upload className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{artistRider?.name || "Selecionar PDF..."}</span>
-                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setArtistRider(e.target.files?.[0] || null)} />
-                </label>
-              </div>
-              <div className="space-y-2">
-                <Label>Rider Técnico do Evento</Label>
-                <label className="flex items-center gap-2 border border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/50 transition-colors">
-                  <Upload className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{eventRider?.name || "Selecionar PDF..."}</span>
-                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setEventRider(e.target.files?.[0] || null)} />
-                </label>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Day Cards */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Music className="h-5 w-5 text-primary" />
+            Dias do Evento ({days.length})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {days.map((day, i) => (
+              <Card key={i} className="border-primary/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-bold text-primary">DIA {i + 1}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data do Show</Label>
+                    <Input
+                      type="date"
+                      value={day.date}
+                      onChange={(e) => updateDay(i, "date", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Artista *</Label>
+                    <Input
+                      value={day.artist}
+                      onChange={(e) => updateDay(i, "artist", e.target.value)}
+                      placeholder="Nome do artista"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Horário</Label>
+                    <Input
+                      type="time"
+                      value={day.show_time}
+                      onChange={(e) => updateDay(i, "show_time", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Observações Técnicas</Label>
+                    <Textarea
+                      value={day.observations}
+                      onChange={(e) => updateDay(i, "observations", e.target.value)}
+                      rows={2}
+                      placeholder="Obs. técnicas..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Rider Técnico (PDF)</Label>
+                    <label className="flex items-center gap-2 border border-dashed rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground truncate">
+                        {day.riderFile?.name || day.existingRiderName || "Selecionar PDF..."}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={(e) => updateDay(i, "riderFile", e.target.files?.[0] || null)}
+                      />
+                    </label>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
 
         <div className="flex gap-3 justify-end">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancelar</Button>
-          <Button type="submit" disabled={saving}>{saving ? "Salvando..." : isEditing ? "Atualizar" : "Criar Evento"}</Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Salvando..." : isEditing ? "Atualizar" : "Criar Evento"}
+          </Button>
         </div>
       </form>
     </div>
