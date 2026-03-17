@@ -55,6 +55,50 @@ export type Database = {
           },
         ]
       }
+      document_templates: {
+        Row: {
+          ativo: boolean
+          conteudo: string
+          created_at: string
+          empresa_id: string
+          id: string
+          nome: string
+          tipo: string
+          updated_at: string
+          variaveis: Json
+        }
+        Insert: {
+          ativo?: boolean
+          conteudo?: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          nome: string
+          tipo?: string
+          updated_at?: string
+          variaveis?: Json
+        }
+        Update: {
+          ativo?: boolean
+          conteudo?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          nome?: string
+          tipo?: string
+          updated_at?: string
+          variaveis?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_templates_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           created_at: string
@@ -338,6 +382,64 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: true
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_documents: {
+        Row: {
+          conteudo_final: string
+          created_at: string
+          dados: Json
+          empresa_id: string
+          event_id: string | null
+          id: string
+          nome: string
+          template_id: string | null
+          tipo: string
+        }
+        Insert: {
+          conteudo_final?: string
+          created_at?: string
+          dados?: Json
+          empresa_id: string
+          event_id?: string | null
+          id?: string
+          nome: string
+          template_id?: string | null
+          tipo?: string
+        }
+        Update: {
+          conteudo_final?: string
+          created_at?: string
+          dados?: Json
+          empresa_id?: string
+          event_id?: string | null
+          id?: string
+          nome?: string
+          template_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_documents_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_documents_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_documents_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "document_templates"
             referencedColumns: ["id"]
           },
         ]

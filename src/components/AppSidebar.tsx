@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -19,6 +19,7 @@ export function AppSidebar() {
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
       { title: "Usuários", url: "/usuarios", icon: Users },
       { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
+      { title: "Documentos", url: "/documentos", icon: FileText },
       { title: "Backups", url: "/backups", icon: Database },
     ] : []),
   ];
