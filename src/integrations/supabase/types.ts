@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      backups: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          nome: string
+          payload: Json
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          nome: string
+          payload?: Json
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          tipo?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          nome?: string
+          payload?: Json
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backups_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           created_at: string
