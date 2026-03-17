@@ -133,6 +133,15 @@ export default function Financeiro() {
       transport: String(f.transport || 0),
       lodging: String(f.lodging || 0),
     });
+    // Try to parse transport detail from extra metadata if available
+    const savedDetail = (f as any).transport_detail;
+    if (savedDetail) {
+      setTransportDetail({ km: String(savedDetail.km || ""), valorGasto: String(savedDetail.valorGasto || "") });
+      setTransportOpen(true);
+    } else {
+      setTransportDetail({ km: "", valorGasto: "" });
+      setTransportOpen(Number(f.transport || 0) > 0);
+    }
     setExtraCosts(parseExtraCosts((f as any).extra_costs));
     setSelectedEmployees(parseEmployeeExpenses((f as any).funcionarios_cache));
     setOpen(true);
