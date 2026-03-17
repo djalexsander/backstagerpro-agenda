@@ -164,7 +164,7 @@ export default function Financeiro() {
     const emp = dbEmployees.find((e: any) => e.id === empId);
     if (!emp) return;
     if (selectedEmployees.some((se) => se.employeeId === empId)) return;
-    setSelectedEmployees((prev) => [
+      setSelectedEmployees((prev) => [
       ...prev,
       {
         employeeId: (emp as any).id,
@@ -172,6 +172,8 @@ export default function Financeiro() {
         funcao: (emp as any).funcao || "",
         cache: Number((emp as any).cache_padrao) || 0,
         food: 0,
+        hospedagem: 0,
+        transporte: { km: 0, combustivel: 0, total: 0 },
       },
     ]);
   };
