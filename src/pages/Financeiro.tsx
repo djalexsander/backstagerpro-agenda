@@ -23,21 +23,38 @@ const fieldLabels: Record<string, string> = {
 const fieldKeys = ["cache", "transport", "lodging"] as const;
 
 type ExtraCost = { name: string; value: number };
-type EmployeeExpense = { employeeId: string; name: string; funcao: string; cache: number; food: number };
+type EmployeeTransport = { km: number; combustivel: number; total: number };
+type EmployeeExpense = {
+  employeeId: string;
+  name: string;
+  funcao: string;
+  cache: number;
+  food: number;
+  hospedagem: number;
+  transporte: EmployeeTransport;
+};
 
 function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
     if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
-      return raw.map((f: any) => ({ employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0 }));
+      return raw.map((f: any) => ({
+        employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0,
+        hospedagem: 0, transporte: { km: 0, combustivel: 0, total: 0 },
+      }));
     }
-    return raw;
+    return raw.map((e: any) => ({
+      ...e,
+      hospedagem: e.hospedagem || 0,
+      transporte: e.transporte || { km: 0, combustivel: 0, total: 0 },
+    }));
   }
   try { return JSON.parse(raw); } catch { return []; }
 }
 
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
-  return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
+  return emps.reduce((s, e) =>
+    s + (e.cache || 0) + (e.food || 0) + (e.hospedagem || 0) + (e.transporte?.total || 0), 0);
 }
 
 function parseExtraCosts(raw: any): ExtraCost[] {
@@ -147,7 +164,7 @@ export default function Financeiro() {
     const emp = dbEmployees.find((e: any) => e.id === empId);
     if (!emp) return;
     if (selectedEmployees.some((se) => se.employeeId === empId)) return;
-    setSelectedEmployees((prev) => [
+      setSelectedEmployees((prev) => [
       ...prev,
       {
         employeeId: (emp as any).id,
@@ -155,6 +172,8 @@ export default function Financeiro() {
         funcao: (emp as any).funcao || "",
         cache: Number((emp as any).cache_padrao) || 0,
         food: 0,
+        hospedagem: 0,
+        transporte: { km: 0, combustivel: 0, total: 0 },
       },
     ]);
   };
@@ -165,6 +184,14 @@ export default function Financeiro() {
 
   const updateEmployeeFood = (index: number, value: number) => {
     setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, food: value } : e)));
+  };
+
+  const updateEmployeeHospedagem = (index: number, value: number) => {
+    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, hospedagem: value } : e)));
+  };
+
+  const updateEmployeeTransporte = (index: number, field: keyof EmployeeTransport, value: number) => {
+    setSelectedEmployees((prev) => prev.map((e, i) => (i === index ? { ...e, transporte: { ...e.transporte, [field]: value } } : e)));
   };
 
   const removeEmployee = (index: number) => {
@@ -441,44 +468,83 @@ export default function Financeiro() {
                 )}
 
                 {selectedEmployees.map((emp, i) => (
-                  <div key={i} className="flex flex-wrap items-center gap-2 p-2 rounded-lg border bg-muted/30">
-                    <div className="flex-1 min-w-[120px]">
-                      <p className="text-sm font-medium">{emp.name}</p>
-                      {emp.funcao && <p className="text-xs text-muted-foreground">{emp.funcao}</p>}
+                  <div key={i} className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">{emp.name}</p>
+                        {emp.funcao && <p className="text-xs text-muted-foreground uppercase">{emp.funcao}</p>}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeEmployee(i)}
+                        className="shrink-0 text-destructive hover:text-destructive h-8 w-8"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cachê</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={emp.cache || ""}
+                          onChange={(e) => updateEmployeeCache(i, parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm" placeholder="0.00"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Alimentação</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={emp.food || ""}
+                          onChange={(e) => updateEmployeeFood(i, parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm" placeholder="0.00"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Hospedagem</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={emp.hospedagem || ""}
+                          onChange={(e) => updateEmployeeHospedagem(i, parseFloat(e.target.value) || 0)}
+                          className="h-8 text-sm" placeholder="0.00"
+                        />
+                      </div>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Cachê</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={emp.cache || ""}
-                        onChange={(e) => updateEmployeeCache(i, parseFloat(e.target.value) || 0)}
-                        className="w-24 h-8 text-sm"
-                        placeholder="0.00"
-                      />
+                      <Label className="text-xs font-semibold">Transporte</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">KM</Label>
+                          <Input
+                            type="number" step="0.01"
+                            value={emp.transporte?.km || ""}
+                            onChange={(e) => updateEmployeeTransporte(i, 'km', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-sm" placeholder="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Combustível</Label>
+                          <Input
+                            type="number" step="0.01"
+                            value={emp.transporte?.combustivel || ""}
+                            onChange={(e) => updateEmployeeTransporte(i, 'combustivel', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-sm" placeholder="0.00"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Total Gasto</Label>
+                          <Input
+                            type="number" step="0.01"
+                            value={emp.transporte?.total || ""}
+                            onChange={(e) => updateEmployeeTransporte(i, 'total', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-sm" placeholder="0.00"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Alimentação</Label>
-                      <Select value={String(emp.food)} onValueChange={(v) => updateEmployeeFood(i, Number(v))}>
-                        <SelectTrigger className="w-[140px] h-8 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="0">Sem</SelectItem>
-                          <SelectItem value="60">Meia diária (R$60)</SelectItem>
-                          <SelectItem value="120">Diária completa (R$120)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeEmployee(i)}
-                      className="shrink-0 text-destructive hover:text-destructive h-8 w-8"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
                   </div>
                 ))}
 
