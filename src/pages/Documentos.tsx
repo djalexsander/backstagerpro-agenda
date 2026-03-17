@@ -276,6 +276,14 @@ export default function Documentos() {
     setEditorOpen(true);
   };
 
+  const duplicateTemplate = (tmpl: any) => {
+    resetForm();
+    setFormNome(`${tmpl.nome} (Cópia)`);
+    setFormTipo(tmpl.tipo);
+    setFormConteudo(tmpl.conteudo);
+    setEditorOpen(true);
+  };
+
   const replaceVariables = (content: string, eventId: string): string => {
     const event = events.find((e) => e.id === eventId);
     if (!event) return content;
