@@ -332,6 +332,7 @@ export type Database = {
       }
       pagamentos: {
         Row: {
+          comprovante_path: string | null
           created_at: string
           descricao: string | null
           empresa_id: string
@@ -343,6 +344,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          comprovante_path?: string | null
           created_at?: string
           descricao?: string | null
           empresa_id: string
@@ -354,6 +356,7 @@ export type Database = {
           valor?: number
         }
         Update: {
+          comprovante_path?: string | null
           created_at?: string
           descricao?: string | null
           empresa_id?: string
