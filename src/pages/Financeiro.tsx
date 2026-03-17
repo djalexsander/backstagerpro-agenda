@@ -45,8 +45,7 @@ function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
 }
 
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
-  return emps.reduce((s, e) =>
-    s + (e.cache || 0) + (e.food || 0) + (e.hospedagem || 0) + (e.transporte?.total || 0), 0);
+  return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
 
 function parseExtraCosts(raw: any): ExtraCost[] {
