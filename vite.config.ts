@@ -1,13 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import fs from "fs";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
+const pkg = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
+
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  const pkg = JSON.parse(require('fs').readFileSync('./package.json', 'utf-8'));
-  return {
+export default defineConfig(({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
