@@ -5,6 +5,18 @@ import type { Tables } from "@/integrations/supabase/types";
 
 type Event = Tables<"events">;
 
+type ExtraCost = { name: string; value: number };
+
+function parseExtraCosts(raw: any): ExtraCost[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function sumExtraCosts(extras: ExtraCost[]): number {
+  return extras.reduce((s, e) => s + (e.value || 0), 0);
+}
+
 export function exportAgendaPDF(events: Event[]) {
   const doc = new jsPDF();
   doc.setFontSize(18);
@@ -96,18 +108,25 @@ export function exportFinancialPDF(financial: any) {
   doc.setFontSize(10);
   doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 38);
 
-  const costs = (financial.transport || 0) + (financial.food || 0) + (financial.lodging || 0) + (financial.other_costs || 0);
+  const extras = parseExtraCosts(financial.extra_costs);
+  const extrasTotal = sumExtraCosts(extras);
+  const costs = (financial.transport || 0) + (financial.food || 0) + (financial.lodging || 0) + (financial.other_costs || 0) + extrasTotal;
   const profit = (financial.cache || 0) - costs;
 
-  const rows = [
+  const rows: string[][] = [
     ["Cachê", fmtBRL(financial.cache)],
     ["Transporte", fmtBRL(financial.transport)],
     ["Alimentação", fmtBRL(financial.food)],
     ["Hospedagem", fmtBRL(financial.lodging)],
     ["Outros Custos", fmtBRL(financial.other_costs)],
-    ["Total Custos", fmtBRL(costs)],
-    ["Resultado (Lucro/Prejuízo)", fmtBRL(profit)],
   ];
+
+  extras.forEach((e) => {
+    rows.push([e.name, fmtBRL(e.value)]);
+  });
+
+  rows.push(["Total Custos", fmtBRL(costs)]);
+  rows.push(["Resultado (Lucro/Prejuízo)", fmtBRL(profit)]);
 
   autoTable(doc, {
     startY: 44,
@@ -130,7 +149,9 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
   doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 30);
 
   const body = financials.map((f) => {
-    const costs = (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0);
+    const extras = parseExtraCosts(f.extra_costs);
+    const extrasTotal = sumExtraCosts(extras);
+    const costs = (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + extrasTotal;
     const profit = (f.cache || 0) - costs;
     return [
       f.events?.name || "—",
@@ -139,6 +160,7 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
       fmtBRL(f.food),
       fmtBRL(f.lodging),
       fmtBRL(f.other_costs),
+      fmtBRL(extrasTotal),
       fmtBRL(profit),
     ];
   });
@@ -148,7 +170,8 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
   const totalFood = financials.reduce((s, f) => s + (f.food || 0), 0);
   const totalLodging = financials.reduce((s, f) => s + (f.lodging || 0), 0);
   const totalOther = financials.reduce((s, f) => s + (f.other_costs || 0), 0);
-  const totalProfit = totalCache - totalTransport - totalFood - totalLodging - totalOther;
+  const totalExtras = financials.reduce((s, f) => s + sumExtraCosts(parseExtraCosts(f.extra_costs)), 0);
+  const totalProfit = totalCache - totalTransport - totalFood - totalLodging - totalOther - totalExtras;
 
   body.push([
     "TOTAL",
@@ -157,12 +180,13 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
     fmtBRL(totalFood),
     fmtBRL(totalLodging),
     fmtBRL(totalOther),
+    fmtBRL(totalExtras),
     fmtBRL(totalProfit),
   ]);
 
   autoTable(doc, {
     startY: 36,
-    head: [["Evento", "Cachê", "Transporte", "Alimentação", "Hospedagem", "Outros", "Lucro/Prejuízo"]],
+    head: [["Evento", "Cachê", "Transporte", "Alimentação", "Hospedagem", "Outros", "Extras", "Lucro/Prejuízo"]],
     body,
     styles: { fontSize: 9 },
     headStyles: { fillColor: [225, 29, 72] },
