@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
-import { format } from "date-fns";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3 } from "lucide-react";
+import { format, subMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function FinanceiroMaster() {
@@ -56,6 +59,29 @@ export default function FinanceiroMaster() {
 
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const chartData = useMemo(() => {
+    const months: { month: string; recebido: number; pendente: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = subMonths(new Date(), i);
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      const label = format(startOfMonth(d), "MMM/yy", { locale: ptBR });
+      const recebido = pagamentos
+        .filter((p: any) => { const pd = new Date(p.created_at); return p.status === "pago" && pd.getMonth() === m && pd.getFullYear() === y; })
+        .reduce((a: number, p: any) => a + Number(p.valor || 0), 0);
+      const pendente = pagamentos
+        .filter((p: any) => { const pd = new Date(p.created_at); return p.status === "pendente" && pd.getMonth() === m && pd.getFullYear() === y; })
+        .reduce((a: number, p: any) => a + Number(p.valor || 0), 0);
+      months.push({ month: label, recebido, pendente });
+    }
+    return months;
+  }, [pagamentos]);
+
+  const chartConfig = {
+    recebido: { label: "Recebido", color: "hsl(var(--accent))" },
+    pendente: { label: "Pendente", color: "hsl(var(--muted-foreground))" },
+  };
 
   const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     pago: { label: "Pago", variant: "default" },
@@ -122,6 +148,28 @@ export default function FinanceiroMaster() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Gráfico Receita Mensal */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Receita Mensal (últimos 12 meses)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
+              <YAxis tick={{ fontSize: 12 }} className="fill-muted-foreground" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+              <Bar dataKey="recebido" fill="var(--color-recebido)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pendente" fill="var(--color-pendente)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
 
       {/* Histórico de Pagamentos */}
       <Card>
