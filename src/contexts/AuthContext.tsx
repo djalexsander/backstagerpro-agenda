@@ -100,6 +100,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
     if (!error && data.user) {
+      // Check if account is activated
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("ativado")
+        .eq("user_id", data.user.id)
+        .single();
+
+      if (prof && !prof.ativado) {
+        await supabase.auth.signOut();
+        return { error: new Error("Conta ainda não ativada. Utilize 'Primeiro acesso' para definir sua senha.") };
+      }
+
       // Log login action asynchronously
       supabase.from("system_logs").insert({
         tipo: "auth",

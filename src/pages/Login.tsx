@@ -87,6 +87,11 @@ export default function Login() {
                 {loading ? "Carregando..." : "Entrar"}
               </Button>
             </form>
+            <div className="mt-4 text-center">
+              <Button variant="link" className="text-sm text-muted-foreground" onClick={() => navigate("/primeiro-acesso")}>
+                Primeiro acesso? Ative sua conta aqui
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

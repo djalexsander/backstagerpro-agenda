@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
 import { UpdateProvider, UpdateBanner } from "@/features/update";
 import Login from "@/pages/Login";
+import PrimeiroAcesso from "@/pages/PrimeiroAcesso";
 import Dashboard from "@/pages/Dashboard";
 import Agenda from "@/pages/Agenda";
 import EventDetail from "@/pages/EventDetail";
@@ -41,6 +42,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/dashboard" element={<Dashboard />} />

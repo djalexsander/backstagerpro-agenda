@@ -32,14 +32,17 @@ Deno.serve(async (req) => {
 
     const { empresa_id, email, password, full_name, role } = await req.json();
 
-    if (!email || !password || !empresa_id) {
-      throw new Error("Email, senha e empresa são obrigatórios");
+    if (!email || !empresa_id) {
+      throw new Error("Email e empresa são obrigatórios");
     }
+
+    // Use provided password or generate a random one (user will set their own via first-access)
+    const finalPassword = password || crypto.randomUUID() + "Aa1!";
 
     // Try to create auth user; if already exists, link to empresa
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password,
+      password: finalPassword,
       email_confirm: true,
       user_metadata: {
         full_name: full_name || email,

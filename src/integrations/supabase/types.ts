@@ -636,6 +636,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          ativado: boolean
           avatar_url: string | null
           created_at: string
           empresa_id: string | null
@@ -645,6 +646,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ativado?: boolean
           avatar_url?: string | null
           created_at?: string
           empresa_id?: string | null
@@ -654,6 +656,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ativado?: boolean
           avatar_url?: string | null
           created_at?: string
           empresa_id?: string | null
