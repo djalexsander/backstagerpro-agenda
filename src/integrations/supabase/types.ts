@@ -772,7 +772,12 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user" | "master_admin" | "admin_empresa" | "usuario"
-      event_status: "confirmado" | "pendente" | "cancelado"
+      event_status:
+        | "confirmado"
+        | "pendente"
+        | "cancelado"
+        | "em_negociacao"
+        | "finalizado"
       file_type: "artist_rider" | "event_rider" | "material_list"
     }
     CompositeTypes: {
@@ -902,7 +907,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user", "master_admin", "admin_empresa", "usuario"],
-      event_status: ["confirmado", "pendente", "cancelado"],
+      event_status: [
+        "confirmado",
+        "pendente",
+        "cancelado",
+        "em_negociacao",
+        "finalizado",
+      ],
       file_type: ["artist_rider", "event_rider", "material_list"],
     },
   },

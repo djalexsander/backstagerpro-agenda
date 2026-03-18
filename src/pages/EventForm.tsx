@@ -415,6 +415,8 @@ export default function EventForm() {
                     <SelectItem value="pendente">Pendente</SelectItem>
                     <SelectItem value="confirmado">Confirmado</SelectItem>
                     <SelectItem value="cancelado">Cancelado</SelectItem>
+                    <SelectItem value="em_negociacao">Em Negociação</SelectItem>
+                    <SelectItem value="finalizado">Finalizado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
