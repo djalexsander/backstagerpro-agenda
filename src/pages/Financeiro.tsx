@@ -75,7 +75,7 @@ function sumExtraCosts(extras: ExtraCost[]): number {
 export default function Financeiro() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
