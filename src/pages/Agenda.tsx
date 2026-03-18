@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportAgendaPDF } from "@/lib/pdf-export";
+import type { PdfBranding } from "@/lib/pdf-branding";
 import { useToast } from "@/hooks/use-toast";
 import { AgendaStats } from "@/components/agenda/AgendaStats";
 import { AgendaFilters } from "@/components/agenda/AgendaFilters";
@@ -34,7 +35,7 @@ import {
 
 export default function Agenda() {
   const navigate = useNavigate();
-  const { isAdmin, empresaId } = useAuth();
+  const { isAdmin, empresaId, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -237,7 +238,7 @@ export default function Agenda() {
                   toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: parseISO(exportStart), end: parseISO(exportEnd) }));
                 }
                 if (toExport.length === 0) return;
-                exportAgendaPDF(toExport);
+                exportAgendaPDF(toExport, { empresaNome: empresaNome, empresaLogoUrl: empresaLogoUrl } as PdfBranding);
                 setExportOpen(false);
               }}>
                 <FileDown className="h-4 w-4 mr-1" /> Exportar PDF

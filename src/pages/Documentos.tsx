@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
+import { addBrandingHeader } from "@/lib/pdf-branding";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 
@@ -132,7 +133,7 @@ function fmtCurrency(n: number | null) {
 export default function Documentos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
 
   const [tab, setTab] = useState("templates");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -359,13 +360,14 @@ export default function Documentos() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
-  const exportPDF = (nome: string, conteudo: string) => {
+  const exportPDF = async (nome: string, conteudo: string) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
     const maxWidth = pageWidth - margin * 2;
     const lineHeight = 6;
-    let y = 20;
+    let y = await addBrandingHeader(doc, { empresaNome, empresaLogoUrl }, "Backstage Pro");
+    y += 4;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
@@ -378,7 +380,6 @@ export default function Documentos() {
           doc.addPage();
           y = 20;
         }
-        // Bold for lines that look like headings (ALL CAPS or starting with CLÁUSULA)
         if (/^[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ\s\-:]{5,}$/.test(wl.trim()) || /^CLÁUSULA/.test(wl.trim())) {
           doc.setFont("helvetica", "bold");
         } else {

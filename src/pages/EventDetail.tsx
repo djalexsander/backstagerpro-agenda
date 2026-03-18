@@ -23,7 +23,7 @@ const statusColors: Record<string, string> = {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -140,7 +140,7 @@ export default function EventDetail() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays)}>
+          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl })}>
             <FileText className="h-4 w-4 mr-1" /> Exportar PDF
           </Button>
           {isAdmin && (

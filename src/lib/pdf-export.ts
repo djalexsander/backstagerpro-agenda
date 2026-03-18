@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
+import { PdfBranding, addBrandingHeader } from "./pdf-branding";
 
 type Event = Tables<"events">;
 
@@ -72,15 +73,18 @@ function getCachePendente(f: any): number {
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
-export function exportAgendaPDF(events: Event[]) {
+export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
   const doc = new jsPDF();
-  doc.setFontSize(18);
-  doc.text("Backstage Pro — Agenda", 14, 22);
+  const b = branding || {};
+  const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
+
+  doc.setFontSize(14);
+  doc.text("Agenda", 14, headerY);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 30);
+  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
 
   autoTable(doc, {
-    startY: 36,
+    startY: headerY + 14,
     head: [["Data", "Status", "Evento", "Artista", "Cidade", "Local"]],
     body: events.map((e) => [
       e.date ? format(parseISO(e.date), "dd/MM/yyyy") : "—",
@@ -94,15 +98,18 @@ export function exportAgendaPDF(events: Event[]) {
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  doc.save("agenda-backstage-pro.pdf");
+  doc.save("agenda.pdf");
 }
 
-export function exportEventPDF(event: Event, eventDays?: any[]) {
+export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding) {
   const doc = new jsPDF();
-  doc.setFontSize(18);
-  doc.text(event.name, 14, 22);
+  const b = branding || {};
+  const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
+
+  doc.setFontSize(16);
+  doc.text(event.name, 14, headerY);
   doc.setFontSize(10);
-  doc.text(`Backstage Pro — Detalhes do Evento`, 14, 30);
+  doc.text("Detalhes do Evento", 14, headerY + 8);
 
   const rows = [
     ["Status", event.status.charAt(0).toUpperCase() + event.status.slice(1)],
@@ -115,7 +122,7 @@ export function exportEventPDF(event: Event, eventDays?: any[]) {
   ];
 
   autoTable(doc, {
-    startY: 36,
+    startY: headerY + 14,
     body: rows,
     theme: "grid",
     columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
@@ -146,16 +153,18 @@ export function exportEventPDF(event: Event, eventDays?: any[]) {
   doc.save(`evento-${event.name.toLowerCase().replace(/\s+/g, "-")}.pdf`);
 }
 
-export function exportFinancialPDF(financial: any) {
+export async function exportFinancialPDF(financial: any, branding?: PdfBranding) {
   const doc = new jsPDF();
+  const b = branding || {};
   const eventName = financial.events?.name || "Evento";
+  const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
 
-  doc.setFontSize(18);
-  doc.text(`Relatório Financeiro`, 14, 22);
+  doc.setFontSize(14);
+  doc.text("Relatório Financeiro", 14, headerY);
   doc.setFontSize(12);
-  doc.text(eventName, 14, 30);
+  doc.text(eventName, 14, headerY + 8);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 38);
+  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 16);
 
   const extras = parseExtraCosts(financial.extra_costs);
   const extrasTotal = sumExtraCosts(extras);
@@ -166,7 +175,6 @@ export function exportFinancialPDF(financial: any) {
   const costs = (financial.transport || 0) + (financial.food || 0) + (financial.lodging || 0) + employeesTotal + extrasTotal;
   const profit = cachePago - costs;
 
-  // === RECEITAS (Cachê) ===
   const rows: string[][] = [];
   rows.push(["RECEITAS", ""]);
   rows.push(["Cachê Total", fmtBRL(financial.cache)]);
@@ -192,20 +200,12 @@ export function exportFinancialPDF(financial: any) {
     rows.push(["Cachê Pendente", fmtBRL(cachePendente)]);
   }
 
-  // === CUSTOS ===
   rows.push(["", ""]);
   rows.push(["CUSTOS", ""]);
-
-  // Transporte detalhado
   rows.push(["Transporte", fmtBRL(financial.transport)]);
-
-  // Alimentação
   rows.push(["Alimentação", fmtBRL(financial.food)]);
-
-  // Hospedagem
   rows.push(["Hospedagem", fmtBRL(financial.lodging)]);
 
-  // Funcionários detalhado
   if (employees.length > 0) {
     rows.push(["Equipe Técnica", fmtBRL(employeesTotal)]);
     employees.forEach((emp) => {
@@ -218,20 +218,18 @@ export function exportFinancialPDF(financial: any) {
     rows.push(["Equipe Técnica", fmtBRL(financial.other_costs)]);
   }
 
-  // Extras
   if (extras.length > 0) {
     extras.forEach((e) => {
       rows.push([`  ${e.name}`, fmtBRL(e.value)]);
     });
   }
 
-  // Totais
   rows.push(["", ""]);
   rows.push(["Total Custos", fmtBRL(costs)]);
   rows.push(["Resultado (Lucro/Prejuízo)", fmtBRL(profit)]);
 
   autoTable(doc, {
-    startY: 44,
+    startY: headerY + 22,
     body: rows,
     theme: "grid",
     columnStyles: { 0: { fontStyle: "bold", cellWidth: 80 } },
@@ -252,14 +250,16 @@ export function exportFinancialPDF(financial: any) {
   doc.save(`financeiro-${eventName.toLowerCase().replace(/\s+/g, "-")}.pdf`);
 }
 
-export function exportFinancialTotalPDF(financials: any[], periodTitle?: string) {
+export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding) {
   const doc = new jsPDF("landscape");
+  const b = branding || {};
   const subtitle = periodTitle ? `Período: ${periodTitle}` : "Consolidado";
+  const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
 
-  doc.setFontSize(18);
-  doc.text(`Relatório Financeiro — ${subtitle}`, 14, 22);
+  doc.setFontSize(14);
+  doc.text(`Relatório Financeiro — ${subtitle}`, 14, headerY);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 30);
+  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
 
   const body = financials.map((f) => {
     const extras = parseExtraCosts(f.extra_costs);
@@ -311,7 +311,7 @@ export function exportFinancialTotalPDF(financials: any[], periodTitle?: string)
   ]);
 
   autoTable(doc, {
-    startY: 36,
+    startY: headerY + 14,
     head: [["Evento", "Cachê Total", "Recebido", "Pendente", "Transporte", "Alimentação", "Hospedagem", "Equipe", "Extras", "Total Custos", "Resultado"]],
     body,
     styles: { fontSize: 8 },

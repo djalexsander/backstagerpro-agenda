@@ -75,7 +75,7 @@ function sumExtraCosts(extras: ExtraCost[]): number {
 export default function Financeiro() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
@@ -370,7 +370,7 @@ export default function Financeiro() {
     } else if (exportMode === "period" && exportStart && exportEnd) {
       title = `${exportStart.split("-").reverse().join("/")} a ${exportEnd.split("-").reverse().join("/")}`;
     }
-    exportFinancialTotalPDF(filtered, title);
+    exportFinancialTotalPDF(filtered, title, { empresaNome, empresaLogoUrl });
     setExportOpen(false);
   };
 
@@ -1064,7 +1064,7 @@ export default function Financeiro() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f)} title="Exportar PDF">
+                        <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f, { empresaNome, empresaLogoUrl })} title="Exportar PDF">
                           <FileDown className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
