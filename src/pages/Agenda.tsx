@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportAgendaPDF } from "@/lib/pdf-export";
+import type { PdfBranding } from "@/lib/pdf-branding";
 import { useToast } from "@/hooks/use-toast";
 import { AgendaStats } from "@/components/agenda/AgendaStats";
 import { AgendaFilters } from "@/components/agenda/AgendaFilters";
