@@ -129,9 +129,30 @@ export default function EventDetail() {
             {event.observations && (
               <div><p className="text-muted-foreground mb-1">Observações:</p><p className="whitespace-pre-wrap">{event.observations}</p></div>
             )}
-            {event.material_list && (
-              <div><p className="text-muted-foreground mb-1">Lista de Material:</p><p className="whitespace-pre-wrap">{event.material_list}</p></div>
-            )}
+            {/* Material List PDFs */}
+            {(() => {
+              const materialFiles = files.filter((f) => f.file_type === "material_list");
+              if (materialFiles.length === 0 && !event.material_list) return null;
+              return (
+                <div>
+                  <p className="text-muted-foreground mb-2">Lista de Material:</p>
+                  {event.material_list && <p className="whitespace-pre-wrap mb-2">{event.material_list}</p>}
+                  {materialFiles.length > 0 && (
+                    <div className="space-y-2">
+                      {materialFiles.map((f) => (
+                        <div key={f.id} className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm truncate flex-1">{f.file_name}</span>
+                          <Button variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                            <Download className="h-3 w-3 mr-1" /> Baixar
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>

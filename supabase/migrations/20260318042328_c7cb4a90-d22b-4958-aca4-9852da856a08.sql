@@ -1,0 +1,1 @@
+ALTER TYPE public.file_type ADD VALUE IF NOT EXISTS 'material_list';
