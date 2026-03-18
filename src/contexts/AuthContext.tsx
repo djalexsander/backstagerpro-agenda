@@ -41,21 +41,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ]);
     if (profileRes.data) {
       setProfile(profileRes.data as any);
-      // Check if empresa is blocked (trial expired)
+      // Check if empresa is blocked (trial expired) and get logo
       if (profileRes.data.empresa_id) {
         const { data: empresa } = await supabase
           .from("empresas")
-          .select("plano_bloqueado, trial_expires_at")
+          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa")
           .eq("id", profileRes.data.empresa_id)
           .single();
         if (empresa) {
           const isExpired = empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date();
-          setEmpresaBloqueada(empresa.plano_bloqueado || isExpired);
+          setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired);
+          setEmpresaLogoUrl((empresa as any).logo_url || null);
+          setEmpresaNome((empresa as any).nome_empresa || null);
         } else {
           setEmpresaBloqueada(false);
+          setEmpresaLogoUrl(null);
+          setEmpresaNome(null);
         }
       } else {
         setEmpresaBloqueada(false);
+        setEmpresaLogoUrl(null);
+        setEmpresaNome(null);
       }
     }
     if (roleRes.data) setRole(roleRes.data.role as AppRole);
