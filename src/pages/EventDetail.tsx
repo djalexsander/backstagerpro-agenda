@@ -192,6 +192,27 @@ export default function EventDetail() {
                 </div>
               );
             })()}
+            {/* Event Rider / Projeto PDFs */}
+            {(() => {
+              const riderFiles = files.filter((f) => f.file_type === "event_rider");
+              if (riderFiles.length === 0) return null;
+              return (
+                <div>
+                  <p className="text-muted-foreground mb-2">Rider / Projeto do Evento:</p>
+                  <div className="space-y-2">
+                    {riderFiles.map((f) => (
+                      <div key={f.id} className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate flex-1">{f.file_name}</span>
+                        <Button variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                          <Download className="h-3 w-3 mr-1" /> Baixar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>

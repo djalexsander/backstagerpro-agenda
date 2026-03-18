@@ -61,6 +61,8 @@ export default function EventForm() {
   const [saving, setSaving] = useState(false);
   const [materialFiles, setMaterialFiles] = useState<MaterialFile[]>([]);
   const [deletedMaterialIds, setDeletedMaterialIds] = useState<string[]>([]);
+  const [eventRiderFiles, setEventRiderFiles] = useState<MaterialFile[]>([]);
+  const [deletedEventRiderIds, setDeletedEventRiderIds] = useState<string[]>([]);
 
   const { data: existingEvent } = useQuery({
     queryKey: ["event", id],
@@ -135,13 +137,16 @@ export default function EventForm() {
       const matFiles = existingFiles
         .filter((f) => f.file_type === "material_list")
         .map((f) => ({
-          id: f.id,
-          file: null,
-          name: f.file_name,
-          path: f.file_path,
-          isExisting: true,
+          id: f.id, file: null, name: f.file_name, path: f.file_path, isExisting: true,
         }));
       setMaterialFiles(matFiles);
+
+      const riderFiles = existingFiles
+        .filter((f) => f.file_type === "event_rider")
+        .map((f) => ({
+          id: f.id, file: null, name: f.file_name, path: f.file_path, isExisting: true,
+        }));
+      setEventRiderFiles(riderFiles);
     }
   }, [existingFiles]);
 
@@ -204,6 +209,33 @@ export default function EventForm() {
         i === index
           ? { ...m, file, name: file.name, isExisting: false }
           : m
+      )
+    );
+  };
+
+  // Event rider file handlers
+  const handleAddEventRiderFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles: MaterialFile[] = Array.from(files).map((f) => ({
+      file: f, name: f.name, isExisting: false,
+    }));
+    setEventRiderFiles((prev) => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const handleRemoveEventRiderFile = (index: number) => {
+    const item = eventRiderFiles[index];
+    if (item.isExisting && item.id) {
+      setDeletedEventRiderIds((prev) => [...prev, item.id!]);
+    }
+    setEventRiderFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleReplaceEventRiderFile = (index: number, file: File) => {
+    setEventRiderFiles((prev) =>
+      prev.map((m, i) =>
+        i === index ? { ...m, file, name: file.name, isExisting: false } : m
       )
     );
   };
@@ -299,6 +331,36 @@ export default function EventForm() {
             file_type: "material_list" as any,
             file_path: path,
             file_name: mat.file.name,
+            empresa_id: empresaId,
+          } as any);
+          if (insErr) throw insErr;
+        }
+      }
+
+      // Handle event rider file deletions
+      for (const delId of deletedEventRiderIds) {
+        const fileToDelete = existingFiles.find((f) => f.id === delId);
+        if (fileToDelete) {
+          await supabase.storage.from("event-files").remove([fileToDelete.file_path]);
+          await supabase.from("event_files").delete().eq("id", delId);
+        }
+      }
+
+      // Upload new event rider files
+      for (const rdr of eventRiderFiles) {
+        if (rdr.file) {
+          if (rdr.isExisting && rdr.id && rdr.path) {
+            await supabase.storage.from("event-files").remove([rdr.path]);
+            await supabase.from("event_files").delete().eq("id", rdr.id);
+          }
+          const path = `${eventId}/rider_${Date.now()}_${rdr.file.name}`;
+          const { error: upErr } = await supabase.storage.from("event-files").upload(path, rdr.file);
+          if (upErr) throw upErr;
+          const { error: insErr } = await supabase.from("event_files").insert({
+            event_id: eventId,
+            file_type: "event_rider" as any,
+            file_path: path,
+            file_name: rdr.file.name,
             empresa_id: empresaId,
           } as any);
           if (insErr) throw insErr;
@@ -443,6 +505,62 @@ export default function EventForm() {
                 )}
                 {!isAdmin && materialFiles.length === 0 && (
                   <p className="text-sm text-muted-foreground italic">Nenhum arquivo de material.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Rider / Projeto do Evento (PDFs)</Label>
+                {eventRiderFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {eventRiderFiles.map((rdr, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate flex-1" title={rdr.name}>{rdr.name}</span>
+                        {rdr.isExisting && rdr.path && (
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => downloadMaterialFile(rdr.path!, rdr.name)} title="Baixar">
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {isAdmin && (
+                          <>
+                            <label className="cursor-pointer" title="Substituir">
+                              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 pointer-events-none">
+                                <Upload className="h-3.5 w-3.5" />
+                              </Button>
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleReplaceEventRiderFile(i, f);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => handleRemoveEventRiderFile(i)} title="Remover">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {isAdmin && (
+                  <label className="flex items-center gap-2 border border-dashed rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Adicionar PDF de rider/projeto...</span>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      multiple
+                      className="hidden"
+                      onChange={handleAddEventRiderFile}
+                    />
+                  </label>
+                )}
+                {!isAdmin && eventRiderFiles.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic">Nenhum arquivo de rider/projeto.</p>
                 )}
               </div>
             </CardContent>
