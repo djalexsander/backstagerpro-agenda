@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
+import { FinanceCards } from "@/components/financeiro/FinanceCards";
 
 const fieldLabels: Record<string, string> = {
   cache: "Cachê",
@@ -286,6 +287,18 @@ export default function Financeiro() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["financials"] });
       toast({ title: "Registro excluído!" });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  const togglePaymentMutation = useMutation({
+    mutationFn: async ({ financialId, cacheDetail: newDetail }: { financialId: string; cacheDetail: CacheDetail }) => {
+      const { error } = await supabase.from("financials").update({ cache_detail: newDetail as any }).eq("id", financialId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financials"] });
+      toast({ title: "Pagamento atualizado!" });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -984,73 +997,12 @@ export default function Financeiro() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <Card>
-          <CardContent className="pt-4 pb-3 px-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 shrink-0 rounded-lg bg-accent/10 flex items-center justify-center">
-                <DollarSign className="h-4 w-4 text-accent" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold truncate">{fmt(totalCache)}</p>
-                <p className="text-[10px] text-muted-foreground">Total Cachê</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 shrink-0 rounded-lg bg-accent/10 flex items-center justify-center">
-                <CheckCircle2 className="h-4 w-4 text-accent" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-accent truncate">{fmt(totalCachePago)}</p>
-                <p className="text-[10px] text-muted-foreground">Recebido</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 shrink-0 rounded-lg bg-warning/10 flex items-center justify-center">
-                <Clock className="h-4 w-4 text-warning" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-warning truncate">{fmt(totalCachePendente)}</p>
-                <p className="text-[10px] text-muted-foreground">Pendente</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 shrink-0 rounded-lg bg-destructive/10 flex items-center justify-center">
-                <TrendingDown className="h-4 w-4 text-destructive" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold truncate">{fmt(totalCosts)}</p>
-                <p className="text-[10px] text-muted-foreground">Total Custos</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3 px-3">
-            <div className="flex items-center gap-2">
-              <div className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${totalProfit >= 0 ? "bg-accent/10" : "bg-destructive/10"}`}>
-                {totalProfit >= 0 ? <TrendingUp className="h-4 w-4 text-accent" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-bold truncate ${totalProfit >= 0 ? "text-accent" : "text-destructive"}`}>{fmt(totalProfit)}</p>
-                <p className="text-[10px] text-muted-foreground">Resultado</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <FinanceCards
+        financials={financials}
+        getCachePago={getCachePago}
+        getCachePendente={getCachePendente}
+        onTogglePayment={(financialId, detail) => togglePaymentMutation.mutate({ financialId, cacheDetail: detail })}
+      />
 
       <div className="rounded-lg border bg-card">
         <Table>
