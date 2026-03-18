@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon, Upload, X, ImageIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,9 @@ export default function Empresas() {
   const [editItem, setEditItem] = useState<any>(null);
   const [detailEmpresa, setDetailEmpresa] = useState<any>(null);
   const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["master-empresas"],
@@ -55,6 +58,18 @@ export default function Empresas() {
     enabled: !!detailEmpresa?.id,
   });
 
+  const uploadLogo = async (empresaId: string): Promise<string | null> => {
+    if (!logoFile) return null;
+    const ext = logoFile.name.split(".").pop();
+    const path = `${empresaId}/logo.${ext}`;
+    // Remove old logo if exists
+    await supabase.storage.from("logos").remove([path]);
+    const { error } = await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
+    if (error) throw new Error("Erro ao fazer upload da logo: " + error.message);
+    const { data } = supabase.storage.from("logos").getPublicUrl(path);
+    return data.publicUrl + "?t=" + Date.now();
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const plano = planos.find((p: any) => p.nome === form.plano);
@@ -63,7 +78,6 @@ export default function Empresas() {
       const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: form.vencimento.toISOString() };
 
       if (!editItem) {
-        // New empresa: set contract date to today, vencimento to +1 month
         const today = new Date();
         payload.data_contrato = format(today, "yyyy-MM-dd");
         payload.vencimento = form.vencimento.toISOString();
@@ -95,11 +109,25 @@ export default function Empresas() {
             payload.plano_id = plano.id;
           }
         }
+
+        // Upload logo if provided
+        if (logoFile) {
+          payload.logo_url = await uploadLogo(editItem.id);
+        }
+
         const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
         if (error) throw error;
       } else {
         const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
         if (error) throw error;
+
+        // Upload logo after creating empresa
+        if (logoFile) {
+          const logoUrl = await uploadLogo(newEmpresa.id);
+          if (logoUrl) {
+            await supabase.from("empresas").update({ logo_url: logoUrl } as any).eq("id", newEmpresa.id);
+          }
+        }
 
         if (form.email && form.senha) {
           const res = await supabase.functions.invoke("create-empresa-user", {
@@ -121,6 +149,8 @@ export default function Empresas() {
       toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
+      setLogoFile(null);
+      setLogoPreview(null);
       setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
@@ -189,14 +219,39 @@ export default function Empresas() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "Máximo 2MB", variant: "destructive" });
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const removeLogo = useMutation({
+    mutationFn: async (empresaId: string) => {
+      await supabase.from("empresas").update({ logo_url: null } as any).eq("id", empresaId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
+      toast({ title: "Logo removida!" });
+    },
+  });
+
   const openEdit = (e: any) => {
     setEditItem(e);
+    setLogoFile(null);
+    setLogoPreview(e.logo_url || null);
     setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa", vencimento: e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
+    setLogoFile(null);
+    setLogoPreview(null);
     setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     setAddOpen(true);
   };
@@ -228,6 +283,47 @@ export default function Empresas() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editItem ? "Editar Empresa" : "Nova Empresa"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Logo Upload */}
+            <div className="space-y-2">
+              <Label>Logo da Empresa</Label>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml"
+                className="hidden"
+                onChange={handleLogoSelect}
+              />
+              <div className="flex items-center gap-3">
+                {logoPreview ? (
+                  <div className="relative h-16 w-16 rounded-lg border border-border overflow-hidden bg-muted">
+                    <img src={logoPreview} alt="Preview" className="h-full w-full object-contain p-1" />
+                    <button
+                      type="button"
+                      className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                      onClick={() => { setLogoFile(null); setLogoPreview(null); }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-16 w-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/50">
+                    <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-1" /> {logoPreview ? "Trocar" : "Upload"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground">PNG, JPG ou SVG • Máx 2MB</p>
+                </div>
+                {editItem?.logo_url && !logoFile && logoPreview && (
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => { removeLogo.mutate(editItem.id); setLogoPreview(null); }}>
+                    <Trash2 className="h-4 w-4 mr-1" /> Remover
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Nome da Empresa *</Label>
               <Input value={form.nome_empresa} onChange={(e) => setForm(p => ({ ...p, nome_empresa: e.target.value }))} />

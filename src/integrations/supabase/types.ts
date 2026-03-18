@@ -105,6 +105,7 @@ export type Database = {
           data_contrato: string | null
           email: string | null
           id: string
+          logo_url: string | null
           nome_empresa: string
           plano: string | null
           plano_bloqueado: boolean
@@ -120,6 +121,7 @@ export type Database = {
           data_contrato?: string | null
           email?: string | null
           id?: string
+          logo_url?: string | null
           nome_empresa: string
           plano?: string | null
           plano_bloqueado?: boolean
@@ -135,6 +137,7 @@ export type Database = {
           data_contrato?: string | null
           email?: string | null
           id?: string
+          logo_url?: string | null
           nome_empresa?: string
           plano?: string | null
           plano_bloqueado?: boolean
