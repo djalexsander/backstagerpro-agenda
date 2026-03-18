@@ -132,7 +132,7 @@ function fmtCurrency(n: number | null) {
 export default function Documentos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
 
   const [tab, setTab] = useState("templates");
   const [editorOpen, setEditorOpen] = useState(false);
