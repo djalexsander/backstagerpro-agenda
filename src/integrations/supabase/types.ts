@@ -406,6 +406,7 @@ export type Database = {
           funcao: string
           id: string
           nome: string
+          tipo: string
           updated_at: string
         }
         Insert: {
@@ -415,6 +416,7 @@ export type Database = {
           funcao?: string
           id?: string
           nome: string
+          tipo?: string
           updated_at?: string
         }
         Update: {
@@ -424,6 +426,7 @@ export type Database = {
           funcao?: string
           id?: string
           nome?: string
+          tipo?: string
           updated_at?: string
         }
         Relationships: [
