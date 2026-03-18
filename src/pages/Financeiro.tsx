@@ -79,7 +79,7 @@ export default function Financeiro() {
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [form, setForm] = useState({ cache: "", transport: "", lodging: "" });
-  const [transportDetail, setTransportDetail] = useState({ km: "", valorGasto: "" });
+  const [transportDetail, setTransportDetail] = useState({ km: "", valorGasto: "", pedagio: "" });
   const [transportOpen, setTransportOpen] = useState(false);
   const [lodgingDetail, setLodgingDetail] = useState({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
   const [lodgingOpen, setLodgingOpen] = useState(false);
@@ -139,7 +139,7 @@ export default function Financeiro() {
     setEditItem(null);
     setSelectedEvent("");
     setForm({ cache: "", transport: "", lodging: "" });
-    setTransportDetail({ km: "", valorGasto: "" });
+    setTransportDetail({ km: "", valorGasto: "", pedagio: "" });
     setTransportOpen(false);
     setLodgingDetail({ qtdFuncionarios: "", valorDia: "", qtdDias: "" });
     setLodgingOpen(false);
@@ -161,10 +161,10 @@ export default function Financeiro() {
     // Try to parse transport detail from extra metadata if available
     const savedDetail = (f as any).transport_detail;
     if (savedDetail) {
-      setTransportDetail({ km: String(savedDetail.km || ""), valorGasto: String(savedDetail.valorGasto || "") });
+      setTransportDetail({ km: String(savedDetail.km || ""), valorGasto: String(savedDetail.valorGasto || ""), pedagio: String(savedDetail.pedagio || "") });
       setTransportOpen(true);
     } else {
-      setTransportDetail({ km: "", valorGasto: "" });
+      setTransportDetail({ km: "", valorGasto: "", pedagio: "" });
       setTransportOpen(Number(f.transport || 0) > 0);
     }
     const savedLodging = (f as any).lodging_detail;
@@ -251,7 +251,7 @@ export default function Financeiro() {
         extra_costs: validExtras,
         funcionarios_cache: selectedEmployees,
         cache_detail: cacheOpen ? cacheDetail : null,
-        transport_detail: transportOpen ? { km: transportDetail.km, valorGasto: transportDetail.valorGasto } : null,
+        transport_detail: transportOpen ? { km: transportDetail.km, valorGasto: transportDetail.valorGasto, pedagio: transportDetail.pedagio } : null,
         lodging_detail: lodgingOpen ? { qtdFuncionarios: lodgingDetail.qtdFuncionarios, valorDia: lodgingDetail.valorDia, qtdDias: lodgingDetail.qtdDias } : null,
       };
 
@@ -803,7 +803,7 @@ export default function Financeiro() {
                 )}
                 {transportOpen && (
                   <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">KM Rodados</Label>
                         <Input
@@ -814,14 +814,29 @@ export default function Financeiro() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Valor Gasto</Label>
+                        <Label className="text-xs">Valor de Combustível</Label>
                         <Input
                           type="number" step="0.01"
                           value={transportDetail.valorGasto}
                           onChange={(e) => {
                             const val = e.target.value;
                             setTransportDetail(p => ({ ...p, valorGasto: val }));
-                            setForm(p => ({ ...p, transport: val }));
+                            const total = (parseFloat(val) || 0) + (parseFloat(transportDetail.pedagio) || 0);
+                            setForm(p => ({ ...p, transport: total ? String(total) : "" }));
+                          }}
+                          placeholder="0.00" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Pedágio</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={transportDetail.pedagio}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTransportDetail(p => ({ ...p, pedagio: val }));
+                            const total = (parseFloat(transportDetail.valorGasto) || 0) + (parseFloat(val) || 0);
+                            setForm(p => ({ ...p, transport: total ? String(total) : "" }));
                           }}
                           placeholder="0.00" className="h-8 text-sm"
                         />
