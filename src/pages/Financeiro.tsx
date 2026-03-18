@@ -803,7 +803,7 @@ export default function Financeiro() {
                 )}
                 {transportOpen && (
                   <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">KM Rodados</Label>
                         <Input
@@ -814,14 +814,29 @@ export default function Financeiro() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs">Valor Gasto</Label>
+                        <Label className="text-xs">Valor de Combustível</Label>
                         <Input
                           type="number" step="0.01"
                           value={transportDetail.valorGasto}
                           onChange={(e) => {
                             const val = e.target.value;
                             setTransportDetail(p => ({ ...p, valorGasto: val }));
-                            setForm(p => ({ ...p, transport: val }));
+                            const total = (parseFloat(val) || 0) + (parseFloat(transportDetail.pedagio) || 0);
+                            setForm(p => ({ ...p, transport: total ? String(total) : "" }));
+                          }}
+                          placeholder="0.00" className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Pedágio</Label>
+                        <Input
+                          type="number" step="0.01"
+                          value={transportDetail.pedagio}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTransportDetail(p => ({ ...p, pedagio: val }));
+                            const total = (parseFloat(transportDetail.valorGasto) || 0) + (parseFloat(val) || 0);
+                            setForm(p => ({ ...p, transport: total ? String(total) : "" }));
                           }}
                           placeholder="0.00" className="h-8 text-sm"
                         />
