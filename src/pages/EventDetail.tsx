@@ -242,10 +242,34 @@ export default function EventDetail() {
                         <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
                           <Download className="h-3 w-3 mr-1" /> Baixar Rider
                         </Button>
+                        {isAdmin && (
+                          <div className="flex gap-2">
+                            <label className="flex-1 cursor-pointer">
+                              <Button variant="outline" size="sm" className="w-full text-xs pointer-events-none">
+                                <Upload className="h-3 w-3 mr-1" /> Trocar
+                              </Button>
+                              <input type="file" accept=".pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRider(day.id, f); e.target.value = ""; }} />
+                            </label>
+                            <Button variant="outline" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => handleRemoveRider(dayFile.id, dayFile.file_path)}>
+                              <Trash2 className="h-3 w-3 mr-1" /> Remover
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                     {!dayFile && (
-                      <p className="text-xs text-muted-foreground italic pt-2 border-t border-border">Sem rider técnico</p>
+                      <div className="pt-2 border-t border-border">
+                        {isAdmin ? (
+                          <label className="cursor-pointer">
+                            <Button variant="outline" size="sm" className="w-full text-xs pointer-events-none">
+                              <Upload className="h-3 w-3 mr-1" /> Adicionar Rider
+                            </Button>
+                            <input type="file" accept=".pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRider(day.id, f); e.target.value = ""; }} />
+                          </label>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">Sem rider técnico</p>
+                        )}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
