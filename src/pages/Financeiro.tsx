@@ -291,6 +291,18 @@ export default function Financeiro() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  const togglePaymentMutation = useMutation({
+    mutationFn: async ({ financialId, cacheDetail: newDetail }: { financialId: string; cacheDetail: CacheDetail }) => {
+      const { error } = await supabase.from("financials").update({ cache_detail: newDetail as any }).eq("id", financialId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financials"] });
+      toast({ title: "Pagamento atualizado!" });
+    },
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
   const fmt = (n: number | null) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
   const getExtraCostsTotal = (f: any) => sumExtraCosts(parseExtraCosts((f as any).extra_costs));
