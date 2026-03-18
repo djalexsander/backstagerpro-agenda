@@ -6,12 +6,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Plus, Minus, Music, Trash2, FileText, Download } from "lucide-react";
+import { Upload, Plus, Minus, Music, Trash2, FileText, Download, Users } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Database } from "@/integrations/supabase/types";
 
 type EventStatus = Database["public"]["Enums"]["event_status"];
@@ -63,6 +65,7 @@ export default function EventForm() {
   const [deletedMaterialIds, setDeletedMaterialIds] = useState<string[]>([]);
   const [eventRiderFiles, setEventRiderFiles] = useState<MaterialFile[]>([]);
   const [deletedEventRiderIds, setDeletedEventRiderIds] = useState<string[]>([]);
+  const [selectedFuncionarios, setSelectedFuncionarios] = useState<string[]>([]);
 
   const { data: existingEvent } = useQuery({
     queryKey: ["event", id],
@@ -97,6 +100,33 @@ export default function EventForm() {
       return data;
     },
   });
+
+  const { data: funcionarios = [] } = useQuery({
+    queryKey: ["funcionarios", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("funcionarios").select("id, nome, funcao, tipo").eq("empresa_id", empresaId).order("nome");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: existingTeam = [] } = useQuery({
+    queryKey: ["event-team", id],
+    enabled: !!isEditing,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_funcionarios").select("funcionario_id").eq("event_id", id!);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (existingTeam.length > 0) {
+      setSelectedFuncionarios(existingTeam.map((t: any) => t.funcionario_id));
+    }
+  }, [existingTeam]);
 
   useEffect(() => {
     if (existingEvent) {
@@ -367,10 +397,23 @@ export default function EventForm() {
         }
       }
 
+      // Save team assignments
+      await supabase.from("event_funcionarios").delete().eq("event_id", eventId);
+      if (selectedFuncionarios.length > 0) {
+        const teamRows = selectedFuncionarios.map((fid) => ({
+          event_id: eventId,
+          funcionario_id: fid,
+          empresa_id: empresaId,
+        }));
+        const { error: teamErr } = await supabase.from("event_funcionarios").insert(teamRows as any);
+        if (teamErr) throw teamErr;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["event-days", eventId] });
       queryClient.invalidateQueries({ queryKey: ["event-files", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-team", eventId] });
       toast({ title: isEditing ? "Evento atualizado!" : "Evento criado!" });
       navigate(`/evento/${eventId}`);
     } catch (err: any) {
@@ -568,6 +611,43 @@ export default function EventForm() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Equipe Escalada */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Equipe Escalada
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {funcionarios.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">Nenhum funcionário cadastrado.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {funcionarios.map((f: any) => (
+                  <label key={f.id} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                    <Checkbox
+                      checked={selectedFuncionarios.includes(f.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedFuncionarios((prev) =>
+                          checked ? [...prev, f.id] : prev.filter((id) => id !== f.id)
+                        );
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{f.nome}</p>
+                      {f.funcao && <p className="text-xs text-muted-foreground truncate">{f.funcao}</p>}
+                    </div>
+                    <Badge variant="outline" className="ml-auto text-xs shrink-0">
+                      {f.tipo === "freelancer" ? "Freelancer" : "Equipe"}
+                    </Badge>
+                  </label>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Day Cards */}
         <div className="space-y-4">

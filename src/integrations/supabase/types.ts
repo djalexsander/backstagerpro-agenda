@@ -267,6 +267,52 @@ export type Database = {
           },
         ]
       }
+      event_funcionarios: {
+        Row: {
+          created_at: string
+          empresa_id: string | null
+          event_id: string
+          funcionario_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id?: string | null
+          event_id: string
+          funcionario_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string | null
+          event_id?: string
+          funcionario_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_funcionarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_funcionarios_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_funcionarios_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           artist: string

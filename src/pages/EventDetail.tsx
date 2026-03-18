@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft } from "lucide-react";
+import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft, Users } from "lucide-react";
 import { useRef, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -133,6 +133,18 @@ export default function EventDetail() {
     queryKey: ["event-files", id],
     queryFn: async () => {
       const { data, error } = await supabase.from("event_files").select("*").eq("event_id", id!);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["event-team", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_funcionarios")
+        .select("funcionario_id, funcionarios(nome, funcao, tipo)")
+        .eq("event_id", id!);
       if (error) throw error;
       return data;
     },
@@ -303,6 +315,33 @@ export default function EventDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Equipe Escalada */}
+      {teamMembers.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            Equipe Escalada ({teamMembers.length})
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {teamMembers.map((tm: any) => (
+              <Card key={tm.funcionario_id} className="border-border">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Users className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{tm.funcionarios?.nome}</p>
+                    {tm.funcionarios?.funcao && (
+                      <p className="text-xs text-muted-foreground truncate">{tm.funcionarios.funcao}</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Event Days Cards */}
       {hasMultipleDays ? (
