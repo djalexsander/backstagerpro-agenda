@@ -507,6 +507,62 @@ export default function EventForm() {
                   <p className="text-sm text-muted-foreground italic">Nenhum arquivo de material.</p>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label>Rider / Projeto do Evento (PDFs)</Label>
+                {eventRiderFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {eventRiderFiles.map((rdr, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate flex-1" title={rdr.name}>{rdr.name}</span>
+                        {rdr.isExisting && rdr.path && (
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => downloadMaterialFile(rdr.path!, rdr.name)} title="Baixar">
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {isAdmin && (
+                          <>
+                            <label className="cursor-pointer" title="Substituir">
+                              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 pointer-events-none">
+                                <Upload className="h-3.5 w-3.5" />
+                              </Button>
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleReplaceEventRiderFile(i, f);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => handleRemoveEventRiderFile(i)} title="Remover">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {isAdmin && (
+                  <label className="flex items-center gap-2 border border-dashed rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Adicionar PDF de rider/projeto...</span>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      multiple
+                      className="hidden"
+                      onChange={handleAddEventRiderFile}
+                    />
+                  </label>
+                )}
+                {!isAdmin && eventRiderFiles.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic">Nenhum arquivo de rider/projeto.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
