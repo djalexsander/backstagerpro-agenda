@@ -101,7 +101,7 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
   doc.save("agenda.pdf");
 }
 
-export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding) {
+export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[]) {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -129,14 +129,32 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     styles: { fontSize: 10 },
   });
 
-  if (eventDays && eventDays.length > 0) {
-    let startY = (doc as any).lastAutoTable?.finalY + 10 || 100;
+  let lastY = (doc as any).lastAutoTable?.finalY + 10 || 100;
+
+  // Equipe Escalada
+  if (teamMembers && teamMembers.length > 0) {
     doc.setFontSize(14);
-    doc.text("Dias do Evento", 14, startY);
-    startY += 6;
+    doc.text("Equipe Escalada", 14, lastY);
+    lastY += 6;
 
     autoTable(doc, {
-      startY,
+      startY: lastY,
+      head: [["Nome", "Função"]],
+      body: teamMembers.map((m) => [m.nome, m.funcao || "—"]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [225, 29, 72] },
+    });
+
+    lastY = (doc as any).lastAutoTable?.finalY + 10 || lastY + 20;
+  }
+
+  if (eventDays && eventDays.length > 0) {
+    doc.setFontSize(14);
+    doc.text("Dias do Evento", 14, lastY);
+    lastY += 6;
+
+    autoTable(doc, {
+      startY: lastY,
       head: [["Dia", "Data", "Artista", "Horário", "Obs. Técnicas"]],
       body: eventDays.map((day) => [
         `Dia ${day.day_number}`,
