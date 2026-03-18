@@ -341,8 +341,10 @@ export type Database = {
           funcionarios_cache: Json | null
           id: string
           lodging: number | null
+          lodging_detail: Json | null
           other_costs: number | null
           transport: number | null
+          transport_detail: Json | null
           updated_at: string
         }
         Insert: {
@@ -356,8 +358,10 @@ export type Database = {
           funcionarios_cache?: Json | null
           id?: string
           lodging?: number | null
+          lodging_detail?: Json | null
           other_costs?: number | null
           transport?: number | null
+          transport_detail?: Json | null
           updated_at?: string
         }
         Update: {
@@ -371,8 +375,10 @@ export type Database = {
           funcionarios_cache?: Json | null
           id?: string
           lodging?: number | null
+          lodging_detail?: Json | null
           other_costs?: number | null
           transport?: number | null
+          transport_detail?: Json | null
           updated_at?: string
         }
         Relationships: [
