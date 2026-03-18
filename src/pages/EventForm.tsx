@@ -137,13 +137,16 @@ export default function EventForm() {
       const matFiles = existingFiles
         .filter((f) => f.file_type === "material_list")
         .map((f) => ({
-          id: f.id,
-          file: null,
-          name: f.file_name,
-          path: f.file_path,
-          isExisting: true,
+          id: f.id, file: null, name: f.file_name, path: f.file_path, isExisting: true,
         }));
       setMaterialFiles(matFiles);
+
+      const riderFiles = existingFiles
+        .filter((f) => f.file_type === "event_rider")
+        .map((f) => ({
+          id: f.id, file: null, name: f.file_name, path: f.file_path, isExisting: true,
+        }));
+      setEventRiderFiles(riderFiles);
     }
   }, [existingFiles]);
 
