@@ -370,7 +370,7 @@ export default function Financeiro() {
     } else if (exportMode === "period" && exportStart && exportEnd) {
       title = `${exportStart.split("-").reverse().join("/")} a ${exportEnd.split("-").reverse().join("/")}`;
     }
-    exportFinancialTotalPDF(filtered, title);
+    exportFinancialTotalPDF(filtered, title, { empresaNome, empresaLogoUrl });
     setExportOpen(false);
   };
 
