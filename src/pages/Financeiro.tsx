@@ -1034,12 +1034,7 @@ export default function Financeiro() {
                 return (
                   <TableRow key={f.id}>
                     <TableCell className="font-medium">
-                      <div>{(f as any).events?.name || "—"}</div>
-                      {extras.length > 0 && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {extras.map((e) => e.name).join(", ")}
-                        </div>
-                      )}
+                      {(f as any).events?.name || "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div>{fmt(f.cache)}</div>
