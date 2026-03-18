@@ -251,7 +251,7 @@ export default function Financeiro() {
         extra_costs: validExtras,
         funcionarios_cache: selectedEmployees,
         cache_detail: cacheOpen ? cacheDetail : null,
-        transport_detail: transportOpen ? { km: transportDetail.km, valorGasto: transportDetail.valorGasto } : null,
+        transport_detail: transportOpen ? { km: transportDetail.km, valorGasto: transportDetail.valorGasto, pedagio: transportDetail.pedagio } : null,
         lodging_detail: lodgingOpen ? { qtdFuncionarios: lodgingDetail.qtdFuncionarios, valorDia: lodgingDetail.valorDia, qtdDias: lodgingDetail.qtdDias } : null,
       };
 
