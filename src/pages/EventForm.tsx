@@ -365,6 +365,7 @@ export default function EventForm() {
           } as any);
           if (insErr) throw insErr;
         }
+      }
 
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
