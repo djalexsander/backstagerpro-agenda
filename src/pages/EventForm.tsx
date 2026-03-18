@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -66,6 +67,7 @@ export default function EventForm() {
   const [eventRiderFiles, setEventRiderFiles] = useState<MaterialFile[]>([]);
   const [deletedEventRiderIds, setDeletedEventRiderIds] = useState<string[]>([]);
   const [selectedFuncionarios, setSelectedFuncionarios] = useState<string[]>([]);
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
 
   const { data: existingEvent } = useQuery({
     queryKey: ["event", id],
@@ -614,36 +616,78 @@ export default function EventForm() {
 
         {/* Equipe Escalada */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
-              Equipe Escalada
+              Equipe Escalada ({selectedFuncionarios.length})
             </CardTitle>
+            {isAdmin && funcionarios.length > 0 && (
+              <Dialog open={teamDialogOpen} onOpenChange={setTeamDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" size="sm" variant="outline">
+                    <Plus className="h-4 w-4 mr-1" /> Adicionar
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Selecionar Equipe</DialogTitle>
+                  </DialogHeader>
+                  <div className="max-h-80 overflow-y-auto space-y-2">
+                    {funcionarios.map((f: any) => (
+                      <label key={f.id} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                        <Checkbox
+                          checked={selectedFuncionarios.includes(f.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedFuncionarios((prev) =>
+                              checked ? [...prev, f.id] : prev.filter((fid) => fid !== f.id)
+                            );
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{f.nome}</p>
+                          {f.funcao && <p className="text-xs text-muted-foreground">{f.funcao}</p>}
+                        </div>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {f.tipo === "freelancer" ? "Freelancer" : "Equipe"}
+                        </Badge>
+                      </label>
+                    ))}
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" onClick={() => setTeamDialogOpen(false)}>Fechar</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </CardHeader>
           <CardContent>
-            {funcionarios.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">Nenhum funcionário cadastrado.</p>
+            {selectedFuncionarios.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">Nenhum funcionário escalado.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {funcionarios.map((f: any) => (
-                  <label key={f.id} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
-                    <Checkbox
-                      checked={selectedFuncionarios.includes(f.id)}
-                      onCheckedChange={(checked) => {
-                        setSelectedFuncionarios((prev) =>
-                          checked ? [...prev, f.id] : prev.filter((id) => id !== f.id)
-                        );
-                      }}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{f.nome}</p>
-                      {f.funcao && <p className="text-xs text-muted-foreground truncate">{f.funcao}</p>}
+              <div className="flex flex-wrap gap-2">
+                {selectedFuncionarios.map((fid) => {
+                  const f = funcionarios.find((fn: any) => fn.id === fid);
+                  if (!f) return null;
+                  return (
+                    <div key={fid} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{f.nome}</p>
+                        {f.funcao && <p className="text-xs text-muted-foreground">{f.funcao}</p>}
+                      </div>
+                      {isAdmin && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                          onClick={() => setSelectedFuncionarios((prev) => prev.filter((id) => id !== fid))}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
-                    <Badge variant="outline" className="ml-auto text-xs shrink-0">
-                      {f.tipo === "freelancer" ? "Freelancer" : "Equipe"}
-                    </Badge>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
