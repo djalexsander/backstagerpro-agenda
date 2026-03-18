@@ -25,6 +25,9 @@ export default function Empresas() {
   const [editItem, setEditItem] = useState<any>(null);
   const [detailEmpresa, setDetailEmpresa] = useState<any>(null);
   const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["master-empresas"],
