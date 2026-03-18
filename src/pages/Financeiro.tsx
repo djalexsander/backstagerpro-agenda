@@ -161,10 +161,10 @@ export default function Financeiro() {
     // Try to parse transport detail from extra metadata if available
     const savedDetail = (f as any).transport_detail;
     if (savedDetail) {
-      setTransportDetail({ km: String(savedDetail.km || ""), valorGasto: String(savedDetail.valorGasto || "") });
+      setTransportDetail({ km: String(savedDetail.km || ""), valorGasto: String(savedDetail.valorGasto || ""), pedagio: String(savedDetail.pedagio || "") });
       setTransportOpen(true);
     } else {
-      setTransportDetail({ km: "", valorGasto: "" });
+      setTransportDetail({ km: "", valorGasto: "", pedagio: "" });
       setTransportOpen(Number(f.transport || 0) > 0);
     }
     const savedLodging = (f as any).lodging_detail;
