@@ -1,25 +1,28 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
+import { PdfBranding, addBrandingHeader } from "./pdf-branding";
 
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
-export function exportMasterFinanceiroPDF(
+export async function exportMasterFinanceiroPDF(
   pagamentos: any[],
   empresas: any[],
-  periodTitle: string
+  periodTitle: string,
+  branding?: PdfBranding
 ) {
   const doc = new jsPDF("landscape");
+  const b = branding || {};
+  const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
 
-  doc.setFontSize(18);
-  doc.text("Relatório Financeiro Master", 14, 22);
+  doc.setFontSize(14);
+  doc.text("Relatório Financeiro Master", 14, headerY);
   doc.setFontSize(12);
-  doc.text(`Período: ${periodTitle}`, 14, 30);
+  doc.text(`Período: ${periodTitle}`, 14, headerY + 8);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 38);
+  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 16);
 
-  // KPIs
   const totalRecebido = pagamentos
     .filter((p) => p.status === "pago")
     .reduce((a, p) => a + Number(p.valor || 0), 0);
@@ -28,11 +31,10 @@ export function exportMasterFinanceiroPDF(
     .reduce((a, p) => a + Number(p.valor || 0), 0);
 
   doc.setFontSize(11);
-  doc.text(`Total Recebido: ${fmtBRL(totalRecebido)}    |    Pendente: ${fmtBRL(totalPendente)}    |    Pagamentos: ${pagamentos.length}`, 14, 48);
+  doc.text(`Total Recebido: ${fmtBRL(totalRecebido)}    |    Pendente: ${fmtBRL(totalPendente)}    |    Pagamentos: ${pagamentos.length}`, 14, headerY + 26);
 
-  // Tabela de pagamentos
   autoTable(doc, {
-    startY: 54,
+    startY: headerY + 32,
     head: [["Empresa", "Valor", "Método", "Status", "Data", "Descrição"]],
     body: pagamentos.map((p) => [
       p.empresas?.nome_empresa || "—",
@@ -46,7 +48,6 @@ export function exportMasterFinanceiroPDF(
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  // Resumo por empresa
   let startY = (doc as any).lastAutoTable?.finalY + 12 || 120;
   
   if (startY > 170) {
