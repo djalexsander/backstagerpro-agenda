@@ -47,8 +47,8 @@ const App = () => (
                 <Route path="/agenda" element={<Agenda />} />
                 <Route path="/evento/:id" element={<EventDetail />} />
                 <Route path="/evento/:id/editar" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
+                <Route path="/evento/editar/:id" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
                 <Route path="/evento/novo" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
-                <Route path="/financeiro" element={<ProtectedRoute adminOnly><Financeiro /></ProtectedRoute>} />
                 <Route path="/usuarios" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
                 <Route path="/plano" element={<ProtectedRoute adminOnly><PlanoAssinatura /></ProtectedRoute>} />
                 <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
