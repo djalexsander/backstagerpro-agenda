@@ -238,7 +238,7 @@ export default function Agenda() {
                   toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: parseISO(exportStart), end: parseISO(exportEnd) }));
                 }
                 if (toExport.length === 0) return;
-                exportAgendaPDF(toExport);
+                exportAgendaPDF(toExport, { empresaNome: empresaNome, empresaLogoUrl: empresaLogoUrl } as PdfBranding);
                 setExportOpen(false);
               }}>
                 <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
