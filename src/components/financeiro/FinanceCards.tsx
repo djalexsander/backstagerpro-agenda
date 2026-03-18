@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, ChevronUp, DollarSign, CheckCircle2, Clock, TrendingDown, TrendingUp } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { ChevronDown, DollarSign, CheckCircle2, Clock, TrendingDown, TrendingUp } from "lucide-react";
 
 type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
 type CacheDetail = {
