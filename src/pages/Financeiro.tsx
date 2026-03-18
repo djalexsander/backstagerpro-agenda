@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
+import { FinanceCards } from "@/components/financeiro/FinanceCards";
 
 const fieldLabels: Record<string, string> = {
   cache: "Cachê",
