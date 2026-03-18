@@ -138,6 +138,18 @@ export default function EventDetail() {
     },
   });
 
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["event-team", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_funcionarios")
+        .select("funcionario_id, funcionarios(nome, funcao, tipo)")
+        .eq("event_id", id!);
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("events").delete().eq("id", id!);
