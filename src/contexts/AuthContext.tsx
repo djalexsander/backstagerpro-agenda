@@ -124,6 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, session, profile, role, empresaId,
+      empresaLogoUrl, empresaNome,
       empresaBloqueada: isMasterAdmin ? false : empresaBloqueada,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
