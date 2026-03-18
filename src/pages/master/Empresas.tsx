@@ -283,6 +283,47 @@ export default function Empresas() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editItem ? "Editar Empresa" : "Nova Empresa"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Logo Upload */}
+            <div className="space-y-2">
+              <Label>Logo da Empresa</Label>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml"
+                className="hidden"
+                onChange={handleLogoSelect}
+              />
+              <div className="flex items-center gap-3">
+                {logoPreview ? (
+                  <div className="relative h-16 w-16 rounded-lg border border-border overflow-hidden bg-muted">
+                    <img src={logoPreview} alt="Preview" className="h-full w-full object-contain p-1" />
+                    <button
+                      type="button"
+                      className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                      onClick={() => { setLogoFile(null); setLogoPreview(null); }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-16 w-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/50">
+                    <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-1" /> {logoPreview ? "Trocar" : "Upload"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground">PNG, JPG ou SVG • Máx 2MB</p>
+                </div>
+                {editItem?.logo_url && !logoFile && logoPreview && (
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => { removeLogo.mutate(editItem.id); setLogoPreview(null); }}>
+                    <Trash2 className="h-4 w-4 mr-1" /> Remover
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Nome da Empresa *</Label>
               <Input value={form.nome_empresa} onChange={(e) => setForm(p => ({ ...p, nome_empresa: e.target.value }))} />
