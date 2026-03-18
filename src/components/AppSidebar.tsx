@@ -60,7 +60,7 @@ export function AppSidebar() {
                 <Music className="h-5 w-5 text-sidebar-primary" />
               )}
               {!collapsed && (
-                <span className="font-bold text-base tracking-tight truncate" style={{ fontFamily: "Montserrat, sans-serif" }}>
+                <span className="font-bold text-sm tracking-tight truncate max-w-[160px]" style={{ fontFamily: "Montserrat, sans-serif" }} title={displayName}>
                   {displayName}
                 </span>
               )}
