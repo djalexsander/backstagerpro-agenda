@@ -233,74 +233,17 @@ export default function EventDetail() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {eventDays.map((day) => {
-              const dayFile = files.find((f) => f.event_day_id === day.id);
+              const dayFile = files.find((f) => f.event_day_id === day.id && f.file_type !== "material_list");
               return (
-                <Card key={day.id} className="border-primary/20 hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-bold text-primary">DIA {day.day_number}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    {day.date && (
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span>{format(parseISO(day.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
-                      </div>
-                    )}
-                    {day.artist && (
-                      <div className="flex items-center gap-2">
-                        <Music className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{day.artist}</span>
-                      </div>
-                    )}
-                    {day.show_time && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span>{(day.show_time as string).slice(0, 5)}</span>
-                      </div>
-                    )}
-                    {day.observations && (
-                      <div className="text-xs text-muted-foreground">
-                        <p className="font-medium mb-1">Obs. Técnicas:</p>
-                        <p className="whitespace-pre-wrap">{day.observations}</p>
-                      </div>
-                    )}
-                    {dayFile && (
-                      <div className="pt-2 border-t border-border space-y-2">
-                        <p className="text-xs text-muted-foreground truncate" title={dayFile.file_name}>📄 {dayFile.file_name}</p>
-                        <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
-                          <Download className="h-3 w-3 mr-1" /> Baixar Rider
-                        </Button>
-                        {isAdmin && (
-                          <div className="flex gap-2">
-                            <label className="flex-1 cursor-pointer">
-                              <Button variant="outline" size="sm" className="w-full text-xs pointer-events-none">
-                                <Upload className="h-3 w-3 mr-1" /> Trocar
-                              </Button>
-                              <input type="file" accept=".pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRider(day.id, f); e.target.value = ""; }} />
-                            </label>
-                            <Button variant="outline" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => handleRemoveRider(dayFile.id, dayFile.file_path)}>
-                              <Trash2 className="h-3 w-3 mr-1" /> Remover
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {!dayFile && (
-                      <div className="pt-2 border-t border-border">
-                        {isAdmin ? (
-                          <label className="cursor-pointer">
-                            <Button variant="outline" size="sm" className="w-full text-xs pointer-events-none">
-                              <Upload className="h-3 w-3 mr-1" /> Adicionar Rider
-                            </Button>
-                            <input type="file" accept=".pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRider(day.id, f); e.target.value = ""; }} />
-                          </label>
-                        ) : (
-                          <p className="text-xs text-muted-foreground italic">Sem rider técnico</p>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <DayCard
+                  key={day.id}
+                  day={day}
+                  dayFile={dayFile}
+                  isAdmin={isAdmin}
+                  onDownload={downloadFile}
+                  onUpload={handleUploadRider}
+                  onRemove={handleRemoveRider}
+                />
               );
             })}
           </div>
