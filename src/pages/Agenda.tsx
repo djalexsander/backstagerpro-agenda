@@ -385,7 +385,7 @@ export default function Agenda() {
                                 <>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/evento/editar/${event.id}`)}>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate(`/evento/${event.id}/editar`)}>
                                         <Edit className="h-3.5 w-3.5" />
                                       </Button>
                                     </TooltipTrigger>
