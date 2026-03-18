@@ -64,6 +64,7 @@ export default function EventForm() {
   const [deletedMaterialIds, setDeletedMaterialIds] = useState<string[]>([]);
   const [eventRiderFiles, setEventRiderFiles] = useState<MaterialFile[]>([]);
   const [deletedEventRiderIds, setDeletedEventRiderIds] = useState<string[]>([]);
+  const [selectedFuncionarios, setSelectedFuncionarios] = useState<string[]>([]);
 
   const { data: existingEvent } = useQuery({
     queryKey: ["event", id],
