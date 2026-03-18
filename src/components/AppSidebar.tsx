@@ -50,10 +50,10 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/70">
             <div className="flex items-center gap-2 min-w-0">
-              {platformLogoUrl ? (
+              {displayLogoUrl ? (
                 <img
-                  src={platformLogoUrl}
-                  alt={`Logo ${platformName}`}
+                  src={displayLogoUrl}
+                  alt={`Logo ${displayName}`}
                   className="h-7 w-7 rounded-md object-contain bg-sidebar-accent/40 p-0.5"
                 />
               ) : (
@@ -61,7 +61,7 @@ export function AppSidebar() {
               )}
               {!collapsed && (
                 <span className="font-bold text-base tracking-tight truncate" style={{ fontFamily: "Montserrat, sans-serif" }}>
-                  {platformName}
+                  {displayName}
                 </span>
               )}
             </div>
