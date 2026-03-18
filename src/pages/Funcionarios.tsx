@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const fmt = (n: number) =>
@@ -23,6 +23,7 @@ export default function Funcionarios() {
   const [nome, setNome] = useState("");
   const [funcao, setFuncao] = useState("");
   const [cachePadrao, setCachePadrao] = useState("");
+  const [tipo, setTipo] = useState<"equipe" | "freelancer">("equipe");
 
   const { data: funcionarios = [] } = useQuery({
     queryKey: ["funcionarios", empresaId],
@@ -39,11 +40,15 @@ export default function Funcionarios() {
     enabled: !!empresaId,
   });
 
-  const openAdd = () => {
+  const equipe = funcionarios.filter((f: any) => f.tipo !== "freelancer");
+  const freelancers = funcionarios.filter((f: any) => f.tipo === "freelancer");
+
+  const openAdd = (t: "equipe" | "freelancer") => {
     setEditItem(null);
     setNome("");
     setFuncao("");
     setCachePadrao("");
+    setTipo(t);
     setOpen(true);
   };
 
@@ -52,6 +57,7 @@ export default function Funcionarios() {
     setNome(f.nome);
     setFuncao(f.funcao || "");
     setCachePadrao(String(f.cache_padrao || 0));
+    setTipo(f.tipo || "equipe");
     setOpen(true);
   };
 
@@ -62,6 +68,7 @@ export default function Funcionarios() {
         nome: nome.trim(),
         funcao: funcao.trim(),
         cache_padrao: parseFloat(cachePadrao) || 0,
+        tipo,
       };
       if (editItem) {
         const { error } = await supabase.from("funcionarios").update(payload as any).eq("id", editItem.id);
@@ -74,7 +81,7 @@ export default function Funcionarios() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["funcionarios"] });
       setOpen(false);
-      toast({ title: editItem ? "Funcionário atualizado!" : "Funcionário cadastrado!" });
+      toast({ title: editItem ? "Atualizado!" : "Cadastrado!" });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -86,24 +93,60 @@ export default function Funcionarios() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["funcionarios"] });
-      toast({ title: "Funcionário removido!" });
+      toast({ title: "Removido!" });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
+
+  const renderTable = (items: any[]) =>
+    items.length === 0 ? (
+      <p className="text-center text-muted-foreground py-8">Nenhum cadastrado.</p>
+    ) : (
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>Função</TableHead>
+              <TableHead className="text-right">Cachê Padrão</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((f: any) => (
+              <TableRow key={f.id}>
+                <TableCell className="font-medium">{f.nome}</TableCell>
+                <TableCell>{f.funcao || "—"}</TableCell>
+                <TableCell className="text-right">{fmt(Number(f.cache_padrao))}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Funcionários</h1>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="h-4 w-4 mr-1" /> Adicionar
-        </Button>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editItem ? "Editar Funcionário" : "Novo Funcionário"}</DialogTitle>
+            <DialogTitle>
+              {editItem ? "Editar" : tipo === "freelancer" ? "Novo Freelancer" : "Novo Funcionário"}
+            </DialogTitle>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -114,7 +157,7 @@ export default function Funcionarios() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Nome *</Label>
-                <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome do funcionário" required />
+                <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome" required />
               </div>
               <div className="space-y-2">
                 <Label>Função</Label>
@@ -141,50 +184,32 @@ export default function Funcionarios() {
         </DialogContent>
       </Dialog>
 
+      {/* Equipe */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            Equipe ({funcionarios.length})
+            Equipe ({equipe.length})
           </CardTitle>
+          <Button size="sm" variant="outline" onClick={() => openAdd("equipe")}>
+            <Plus className="h-4 w-4 mr-1" /> Adicionar
+          </Button>
         </CardHeader>
-        <CardContent>
-          {funcionarios.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">Nenhum funcionário cadastrado.</p>
-          ) : (
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Função</TableHead>
-                    <TableHead className="text-right">Cachê Padrão</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {funcionarios.map((f: any) => (
-                    <TableRow key={f.id}>
-                      <TableCell className="font-medium">{f.nome}</TableCell>
-                      <TableCell>{f.funcao || "—"}</TableCell>
-                      <TableCell className="text-right">{fmt(Number(f.cache_padrao))}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
+        <CardContent>{renderTable(equipe)}</CardContent>
+      </Card>
+
+      {/* Freelancers */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-accent" />
+            Freelancers ({freelancers.length})
+          </CardTitle>
+          <Button size="sm" variant="outline" onClick={() => openAdd("freelancer")}>
+            <Plus className="h-4 w-4 mr-1" /> Adicionar
+          </Button>
+        </CardHeader>
+        <CardContent>{renderTable(freelancers)}</CardContent>
       </Card>
     </div>
   );
