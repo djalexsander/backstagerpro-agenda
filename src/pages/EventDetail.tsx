@@ -130,7 +130,11 @@ export default function EventDetail() {
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{event.name}</h1>
           <Badge className={`mt-2 ${statusColors[event.status]} capitalize`}>{event.status}</Badge>
         </div>
