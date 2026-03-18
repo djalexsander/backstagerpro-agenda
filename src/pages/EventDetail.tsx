@@ -23,7 +23,7 @@ const statusColors: Record<string, string> = {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
