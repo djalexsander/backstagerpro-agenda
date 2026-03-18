@@ -81,6 +81,44 @@ export default function EventDetail() {
     URL.revokeObjectURL(url);
   };
 
+  const handleUploadRider = async (dayId: string, file: File) => {
+    try {
+      // Delete existing rider for this day
+      const existingFile = files.find((f) => f.event_day_id === dayId && f.file_type !== "material_list");
+      if (existingFile) {
+        await supabase.storage.from("event-files").remove([existingFile.file_path]);
+        await supabase.from("event_files").delete().eq("id", existingFile.id);
+      }
+      const path = `${id}/day_${dayId}_${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabase.storage.from("event-files").upload(path, file);
+      if (upErr) throw upErr;
+      const { error: insErr } = await supabase.from("event_files").insert({
+        event_id: id!,
+        event_day_id: dayId,
+        file_type: "artist_rider" as any,
+        file_path: path,
+        file_name: file.name,
+        empresa_id: event?.empresa_id,
+      } as any);
+      if (insErr) throw insErr;
+      queryClient.invalidateQueries({ queryKey: ["event-files", id] });
+      toast({ title: "Rider atualizado!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao enviar rider", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleRemoveRider = async (fileId: string, filePath: string) => {
+    try {
+      await supabase.storage.from("event-files").remove([filePath]);
+      await supabase.from("event_files").delete().eq("id", fileId);
+      queryClient.invalidateQueries({ queryKey: ["event-files", id] });
+      toast({ title: "Rider removido!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao remover rider", description: err.message, variant: "destructive" });
+    }
+  };
+
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
   if (!event) return <p className="text-center text-muted-foreground py-12">Evento não encontrado.</p>;
 
