@@ -396,10 +396,23 @@ export default function EventForm() {
         }
       }
 
+      // Save team assignments
+      await supabase.from("event_funcionarios").delete().eq("event_id", eventId);
+      if (selectedFuncionarios.length > 0) {
+        const teamRows = selectedFuncionarios.map((fid) => ({
+          event_id: eventId,
+          funcionario_id: fid,
+          empresa_id: empresaId,
+        }));
+        const { error: teamErr } = await supabase.from("event_funcionarios").insert(teamRows as any);
+        if (teamErr) throw teamErr;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["event-days", eventId] });
       queryClient.invalidateQueries({ queryKey: ["event-files", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-team", eventId] });
       toast({ title: isEditing ? "Evento atualizado!" : "Evento criado!" });
       navigate(`/evento/${eventId}`);
     } catch (err: any) {
