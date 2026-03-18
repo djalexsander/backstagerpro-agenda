@@ -8,6 +8,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: { full_name: string; avatar_url: string | null; empresa_id: string | null } | null;
+  empresaLogoUrl: string | null;
+  empresaNome: string | null;
   role: AppRole | null;
   empresaId: string | null;
   empresaBloqueada: boolean;
