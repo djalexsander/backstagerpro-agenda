@@ -611,6 +611,43 @@ export default function EventForm() {
           </Card>
         </div>
 
+        {/* Equipe Escalada */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Equipe Escalada
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {funcionarios.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">Nenhum funcionário cadastrado.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {funcionarios.map((f: any) => (
+                  <label key={f.id} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                    <Checkbox
+                      checked={selectedFuncionarios.includes(f.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedFuncionarios((prev) =>
+                          checked ? [...prev, f.id] : prev.filter((id) => id !== f.id)
+                        );
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{f.nome}</p>
+                      {f.funcao && <p className="text-xs text-muted-foreground truncate">{f.funcao}</p>}
+                    </div>
+                    <Badge variant="outline" className="ml-auto text-xs shrink-0">
+                      {f.tipo === "freelancer" ? "Freelancer" : "Equipe"}
+                    </Badge>
+                  </label>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Day Cards */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
