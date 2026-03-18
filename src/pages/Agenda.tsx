@@ -300,13 +300,6 @@ export default function Agenda() {
                 },
               }}
             />
-            {selectedDate && isAdmin && (
-              <div className="px-2 pt-2 border-t border-border mt-2">
-                <Button size="sm" className="w-full" onClick={() => navigate(`/evento/novo?date=${format(selectedDate, "yyyy-MM-dd")}`)}>
-                  <Plus className="h-4 w-4 mr-1" /> Criar Evento em {format(selectedDate, "dd/MM/yyyy")}
-                </Button>
-              </div>
-            )}
           </div>
 
           {/* Main Content */}
