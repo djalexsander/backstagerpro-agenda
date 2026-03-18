@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck } from "lucide-react";
+import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace } from "lucide-react";
+import { useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +79,44 @@ export default function EventDetail() {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleUploadRider = async (dayId: string, file: File) => {
+    try {
+      // Delete existing rider for this day
+      const existingFile = files.find((f) => f.event_day_id === dayId && f.file_type !== "material_list");
+      if (existingFile) {
+        await supabase.storage.from("event-files").remove([existingFile.file_path]);
+        await supabase.from("event_files").delete().eq("id", existingFile.id);
+      }
+      const path = `${id}/day_${dayId}_${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabase.storage.from("event-files").upload(path, file);
+      if (upErr) throw upErr;
+      const { error: insErr } = await supabase.from("event_files").insert({
+        event_id: id!,
+        event_day_id: dayId,
+        file_type: "artist_rider" as any,
+        file_path: path,
+        file_name: file.name,
+        empresa_id: event?.empresa_id,
+      } as any);
+      if (insErr) throw insErr;
+      queryClient.invalidateQueries({ queryKey: ["event-files", id] });
+      toast({ title: "Rider atualizado!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao enviar rider", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleRemoveRider = async (fileId: string, filePath: string) => {
+    try {
+      await supabase.storage.from("event-files").remove([filePath]);
+      await supabase.from("event_files").delete().eq("id", fileId);
+      queryClient.invalidateQueries({ queryKey: ["event-files", id] });
+      toast({ title: "Rider removido!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao remover rider", description: err.message, variant: "destructive" });
+    }
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -203,10 +242,34 @@ export default function EventDetail() {
                         <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => downloadFile(dayFile.file_path, dayFile.file_name)}>
                           <Download className="h-3 w-3 mr-1" /> Baixar Rider
                         </Button>
+                        {isAdmin && (
+                          <div className="flex gap-2">
+                            <label className="flex-1 cursor-pointer">
+                              <Button variant="outline" size="sm" className="w-full text-xs pointer-events-none">
+                                <Upload className="h-3 w-3 mr-1" /> Trocar
+                              </Button>
+                              <input type="file" accept=".pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRider(day.id, f); e.target.value = ""; }} />
+                            </label>
+                            <Button variant="outline" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => handleRemoveRider(dayFile.id, dayFile.file_path)}>
+                              <Trash2 className="h-3 w-3 mr-1" /> Remover
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                     {!dayFile && (
-                      <p className="text-xs text-muted-foreground italic pt-2 border-t border-border">Sem rider técnico</p>
+                      <div className="pt-2 border-t border-border">
+                        {isAdmin ? (
+                          <label className="cursor-pointer">
+                            <Button variant="outline" size="sm" className="w-full text-xs pointer-events-none">
+                              <Upload className="h-3 w-3 mr-1" /> Adicionar Rider
+                            </Button>
+                            <input type="file" accept=".pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRider(day.id, f); e.target.value = ""; }} />
+                          </label>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">Sem rider técnico</p>
+                        )}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
