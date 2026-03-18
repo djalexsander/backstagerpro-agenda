@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Plus, Minus, Music, Trash2, FileText, Download } from "lucide-react";
+import { Upload, Plus, Minus, Music, Trash2, FileText, Download, Users } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Database } from "@/integrations/supabase/types";
 
 type EventStatus = Database["public"]["Enums"]["event_status"];
