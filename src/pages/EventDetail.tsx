@@ -20,6 +20,86 @@ const statusColors: Record<string, string> = {
   finalizado: "bg-primary text-primary-foreground",
 };
 
+function DayCard({ day, dayFile, isAdmin, onDownload, onUpload, onRemove }: {
+  day: any;
+  dayFile: any;
+  isAdmin: boolean;
+  onDownload: (path: string, name: string) => void;
+  onUpload: (dayId: string, file: File) => void;
+  onRemove: (fileId: string, filePath: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) onUpload(day.id, f);
+    e.target.value = "";
+  }, [day.id, onUpload]);
+
+  return (
+    <Card className="border-primary/20 hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-bold text-primary">DIA {day.day_number}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {day.date && (
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span>{format(parseISO(day.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
+          </div>
+        )}
+        {day.artist && (
+          <div className="flex items-center gap-2">
+            <Music className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{day.artist}</span>
+          </div>
+        )}
+        {day.show_time && (
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span>{(day.show_time as string).slice(0, 5)}</span>
+          </div>
+        )}
+        {day.observations && (
+          <div className="text-xs text-muted-foreground">
+            <p className="font-medium mb-1">Obs. Técnicas:</p>
+            <p className="whitespace-pre-wrap">{day.observations}</p>
+          </div>
+        )}
+        <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+        {dayFile ? (
+          <div className="pt-2 border-t border-border space-y-2">
+            <p className="text-xs text-muted-foreground truncate" title={dayFile.file_name}>📄 {dayFile.file_name}</p>
+            <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => onDownload(dayFile.file_path, dayFile.file_name)}>
+              <Download className="h-3 w-3 mr-1" /> Baixar Rider
+            </Button>
+            {isAdmin && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-3 w-3 mr-1" /> Trocar
+                </Button>
+                <Button variant="outline" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => onRemove(dayFile.id, dayFile.file_path)}>
+                  <Trash2 className="h-3 w-3 mr-1" /> Remover
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="pt-2 border-t border-border">
+            {isAdmin ? (
+              <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-3 w-3 mr-1" /> Adicionar Rider
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Sem rider técnico</p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
