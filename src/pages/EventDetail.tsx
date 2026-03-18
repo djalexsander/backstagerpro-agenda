@@ -316,6 +316,33 @@ export default function EventDetail() {
         </Card>
       </div>
 
+      {/* Equipe Escalada */}
+      {teamMembers.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            Equipe Escalada ({teamMembers.length})
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {teamMembers.map((tm: any) => (
+              <Card key={tm.funcionario_id} className="border-border">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Users className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{tm.funcionarios?.nome}</p>
+                    {tm.funcionarios?.funcao && (
+                      <p className="text-xs text-muted-foreground truncate">{tm.funcionarios.funcao}</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Event Days Cards */}
       {hasMultipleDays ? (
         <div className="space-y-4">
