@@ -213,6 +213,33 @@ export default function EventForm() {
     );
   };
 
+  // Event rider file handlers
+  const handleAddEventRiderFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles: MaterialFile[] = Array.from(files).map((f) => ({
+      file: f, name: f.name, isExisting: false,
+    }));
+    setEventRiderFiles((prev) => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const handleRemoveEventRiderFile = (index: number) => {
+    const item = eventRiderFiles[index];
+    if (item.isExisting && item.id) {
+      setDeletedEventRiderIds((prev) => [...prev, item.id!]);
+    }
+    setEventRiderFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleReplaceEventRiderFile = (index: number, file: File) => {
+    setEventRiderFiles((prev) =>
+      prev.map((m, i) =>
+        i === index ? { ...m, file, name: file.name, isExisting: false } : m
+      )
+    );
+  };
+
   const downloadMaterialFile = async (filePath: string, fileName: string) => {
     const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
     const response = await fetch(data.publicUrl);
