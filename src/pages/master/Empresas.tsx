@@ -58,6 +58,18 @@ export default function Empresas() {
     enabled: !!detailEmpresa?.id,
   });
 
+  const uploadLogo = async (empresaId: string): Promise<string | null> => {
+    if (!logoFile) return null;
+    const ext = logoFile.name.split(".").pop();
+    const path = `${empresaId}/logo.${ext}`;
+    // Remove old logo if exists
+    await supabase.storage.from("logos").remove([path]);
+    const { error } = await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
+    if (error) throw new Error("Erro ao fazer upload da logo: " + error.message);
+    const { data } = supabase.storage.from("logos").getPublicUrl(path);
+    return data.publicUrl + "?t=" + Date.now();
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const plano = planos.find((p: any) => p.nome === form.plano);
@@ -66,7 +78,6 @@ export default function Empresas() {
       const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: form.vencimento.toISOString() };
 
       if (!editItem) {
-        // New empresa: set contract date to today, vencimento to +1 month
         const today = new Date();
         payload.data_contrato = format(today, "yyyy-MM-dd");
         payload.vencimento = form.vencimento.toISOString();
@@ -98,11 +109,25 @@ export default function Empresas() {
             payload.plano_id = plano.id;
           }
         }
+
+        // Upload logo if provided
+        if (logoFile) {
+          payload.logo_url = await uploadLogo(editItem.id);
+        }
+
         const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
         if (error) throw error;
       } else {
         const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
         if (error) throw error;
+
+        // Upload logo after creating empresa
+        if (logoFile) {
+          const logoUrl = await uploadLogo(newEmpresa.id);
+          if (logoUrl) {
+            await supabase.from("empresas").update({ logo_url: logoUrl } as any).eq("id", newEmpresa.id);
+          }
+        }
 
         if (form.email && form.senha) {
           const res = await supabase.functions.invoke("create-empresa-user", {
@@ -124,6 +149,8 @@ export default function Empresas() {
       toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
+      setLogoFile(null);
+      setLogoPreview(null);
       setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
