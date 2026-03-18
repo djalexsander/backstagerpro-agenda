@@ -35,7 +35,7 @@ import {
 
 export default function Agenda() {
   const navigate = useNavigate();
-  const { isAdmin, empresaId } = useAuth();
+  const { isAdmin, empresaId, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
