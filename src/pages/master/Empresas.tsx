@@ -219,14 +219,39 @@ export default function Empresas() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "Máximo 2MB", variant: "destructive" });
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const removeLogo = useMutation({
+    mutationFn: async (empresaId: string) => {
+      await supabase.from("empresas").update({ logo_url: null } as any).eq("id", empresaId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
+      toast({ title: "Logo removida!" });
+    },
+  });
+
   const openEdit = (e: any) => {
     setEditItem(e);
+    setLogoFile(null);
+    setLogoPreview(e.logo_url || null);
     setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa", vencimento: e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
+    setLogoFile(null);
+    setLogoPreview(null);
     setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     setAddOpen(true);
   };
