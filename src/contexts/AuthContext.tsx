@@ -78,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
           setRole(null);
           setEmpresaBloqueada(false);
+          setEmpresaLogoUrl(null);
+          setEmpresaNome(null);
         }
         setLoading(false);
       }
