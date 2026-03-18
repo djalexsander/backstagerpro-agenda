@@ -100,6 +100,33 @@ export default function EventForm() {
     },
   });
 
+  const { data: funcionarios = [] } = useQuery({
+    queryKey: ["funcionarios", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("funcionarios").select("id, nome, funcao, tipo").eq("empresa_id", empresaId).order("nome");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: existingTeam = [] } = useQuery({
+    queryKey: ["event-team", id],
+    enabled: !!isEditing,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_funcionarios").select("funcionario_id").eq("event_id", id!);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (existingTeam.length > 0) {
+      setSelectedFuncionarios(existingTeam.map((t: any) => t.funcionario_id));
+    }
+  }, [existingTeam]);
+
   useEffect(() => {
     if (existingEvent) {
       setForm({
