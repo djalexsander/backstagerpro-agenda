@@ -653,8 +653,11 @@ export default function EventForm() {
                       </label>
                     ))}
                   </div>
-                  <DialogFooter>
-                    <Button type="button" onClick={() => setTeamDialogOpen(false)}>Fechar</Button>
+                  <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={() => setTeamDialogOpen(false)}>Cancelar</Button>
+                    <Button type="button" onClick={() => setTeamDialogOpen(false)}>
+                      Confirmar ({selectedFuncionarios.length})
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
