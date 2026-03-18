@@ -337,6 +337,35 @@ export default function EventForm() {
         }
       }
 
+      // Handle event rider file deletions
+      for (const delId of deletedEventRiderIds) {
+        const fileToDelete = existingFiles.find((f) => f.id === delId);
+        if (fileToDelete) {
+          await supabase.storage.from("event-files").remove([fileToDelete.file_path]);
+          await supabase.from("event_files").delete().eq("id", delId);
+        }
+      }
+
+      // Upload new event rider files
+      for (const rdr of eventRiderFiles) {
+        if (rdr.file) {
+          if (rdr.isExisting && rdr.id && rdr.path) {
+            await supabase.storage.from("event-files").remove([rdr.path]);
+            await supabase.from("event_files").delete().eq("id", rdr.id);
+          }
+          const path = `${eventId}/rider_${Date.now()}_${rdr.file.name}`;
+          const { error: upErr } = await supabase.storage.from("event-files").upload(path, rdr.file);
+          if (upErr) throw upErr;
+          const { error: insErr } = await supabase.from("event_files").insert({
+            event_id: eventId,
+            file_type: "event_rider" as any,
+            file_path: path,
+            file_name: rdr.file.name,
+            empresa_id: empresaId,
+          } as any);
+          if (insErr) throw insErr;
+        }
+
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["event-days", eventId] });
