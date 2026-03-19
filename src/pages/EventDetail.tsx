@@ -116,6 +116,7 @@ export default function EventDetail() {
   const { isAdmin, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [downloadPending, setDownloadPending] = useState<{ path: string; name: string } | null>(null);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
@@ -172,17 +173,27 @@ export default function EventDetail() {
     },
   });
 
+  const requestDownload = (filePath: string, fileName: string) => {
+    setDownloadPending({ path: filePath, name: fileName });
+  };
 
-  const downloadFile = async (filePath: string, fileName: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    const response = await fetch(data.publicUrl);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
+  const confirmDownload = async () => {
+    if (!downloadPending) return;
+    const { path, name } = downloadPending;
+    setDownloadPending(null);
+    try {
+      const { data } = supabase.storage.from("event-files").getPublicUrl(path);
+      const response = await fetch(data.publicUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "Erro ao baixar arquivo", description: err.message, variant: "destructive" });
+    }
   };
 
   const handleUploadRider = async (dayId: string, file: File) => {
