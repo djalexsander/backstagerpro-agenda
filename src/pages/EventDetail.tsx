@@ -399,7 +399,7 @@ export default function EventDetail() {
             {files.length > 0 && (
               <div className="flex gap-2 pt-2">
                 {files.map((f) => (
-                  <Button key={f.id} variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                  <Button key={f.id} variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
                     <Download className="h-4 w-4 mr-1" /> {f.file_name}
                   </Button>
                 ))}
