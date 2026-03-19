@@ -79,20 +79,27 @@ export default function UserManagement() {
   });
 
   const updateRole = useMutation({
-    mutationFn: async ({ roleId, newRole, userId, newName }: { roleId: string; newRole: string; userId: string; newName: string }) => {
+    mutationFn: async ({ roleId, newRole, userId, newName }: { roleId?: string; newRole: string; userId: string; newName: string }) => {
+      // Update role
       if (roleId) {
         const roleRes = await supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId);
         if (roleRes.error) throw roleRes.error;
+      } else {
+        // Try upsert if no roleId
+        const roleRes = await supabase.from("user_roles").upsert({ user_id: userId, role: newRole as any } as any, { onConflict: "user_id,role" } as any);
+        if (roleRes.error) throw roleRes.error;
       }
+      // Update profile
       const profileRes = await supabase.from("profiles").update({ full_name: newName } as any).eq("user_id", userId);
       if (profileRes.error) throw profileRes.error;
       // Also update empresa_usuarios perfil
       if (empresaId) {
-        await supabase
+        const euRes = await supabase
           .from("empresa_usuarios")
           .update({ perfil: newRole } as any)
           .eq("empresa_id", empresaId)
           .eq("user_id", userId);
+        if (euRes.error) throw euRes.error;
       }
     },
     onSuccess: () => {
