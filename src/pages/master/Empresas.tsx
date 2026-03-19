@@ -158,6 +158,38 @@ export default function Empresas() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Get all event IDs for this empresa
+      const { data: events } = await supabase.from("events").select("id").eq("empresa_id", id);
+      const eventIds = (events || []).map((e: any) => e.id);
+
+      // Delete related data in correct order (FK constraints)
+      if (eventIds.length > 0) {
+        await supabase.from("event_funcionarios").delete().in("event_id", eventIds);
+        await supabase.from("event_files").delete().in("event_id", eventIds);
+        await supabase.from("event_days").delete().in("event_id", eventIds);
+        await supabase.from("financials").delete().in("event_id", eventIds);
+      }
+      await supabase.from("events").delete().eq("empresa_id", id);
+      await supabase.from("funcionarios").delete().eq("empresa_id", id);
+      await supabase.from("backups").delete().eq("empresa_id", id);
+      await supabase.from("generated_documents").delete().eq("empresa_id", id);
+      await supabase.from("document_templates").delete().eq("empresa_id", id);
+      await supabase.from("pagamentos").delete().eq("empresa_id", id);
+      await supabase.from("notificacoes_master").delete().eq("empresa_id", id);
+      await supabase.from("system_logs").delete().eq("empresa_id", id);
+
+      // Delete profiles and user_roles for users of this empresa
+      const { data: profiles } = await supabase.from("profiles").select("user_id").eq("empresa_id", id);
+      const userIds = (profiles || []).map((p: any) => p.user_id);
+      if (userIds.length > 0) {
+        await supabase.from("user_roles").delete().in("user_id", userIds);
+        await supabase.from("profiles").delete().eq("empresa_id", id);
+        // Delete auth users via edge function
+        for (const uid of userIds) {
+          await supabase.functions.invoke("delete-user", { body: { user_id: uid } });
+        }
+      }
+
       const { error } = await supabase.from("empresas").delete().eq("id", id);
       if (error) throw error;
     },
