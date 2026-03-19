@@ -17,7 +17,8 @@ Deno.serve(async (req) => {
     );
 
     // Verify caller is admin_empresa or master_admin
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Não autorizado");
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
     if (!caller) throw new Error("Não autorizado");
@@ -54,43 +55,47 @@ Deno.serve(async (req) => {
 
     if (createError) {
       if (createError.message?.includes("already been registered")) {
-        // User already exists - find them
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
-        if (listErr) throw listErr;
-        const existingUser = users.find((u: any) => u.email === normalizedEmail);
-        if (!existingUser) throw new Error("Usuário não encontrado");
+        // Find existing user via Auth API only - NO profiles dependency
+        const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        if (listErr) throw new Error("Erro ao buscar usuários: " + listErr.message);
+        
+        const existingUser = listData.users.find((u: any) => u.email === normalizedEmail);
+        if (!existingUser) throw new Error("Usuário não encontrado no sistema de autenticação");
+        
         userId = existingUser.id;
         isNewUser = false;
       } else {
-        throw createError;
+        throw new Error("Erro ao criar usuário: " + createError.message);
       }
     } else {
       userId = newUser.user!.id;
       isNewUser = true;
     }
 
-    // Link user to empresa via empresa_usuarios
+    // Check if link already exists
+    const { data: existingLink } = await supabaseAdmin
+      .from("empresa_usuarios")
+      .select("id")
+      .eq("empresa_id", empresa_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existingLink) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          isNewUser: false,
+          message: "Usuário já vinculado a esta empresa",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Link user to empresa
     const { error: linkError } = await supabaseAdmin
       .from("empresa_usuarios")
-      .upsert(
-        { empresa_id, user_id: userId, perfil: perfil || "usuario" },
-        { onConflict: "empresa_id,user_id" }
-      );
-    if (linkError) throw linkError;
-
-    // Also update profiles.empresa_id if not set (for backward compat)
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("empresa_id")
-      .eq("user_id", userId)
-      .single();
-
-    if (profile && !profile.empresa_id) {
-      await supabaseAdmin
-        .from("profiles")
-        .update({ empresa_id, full_name: full_name || normalizedEmail })
-        .eq("user_id", userId);
-    }
+      .insert({ empresa_id, user_id: userId, perfil: perfil || "usuario" });
+    if (linkError) throw new Error("Erro ao vincular usuário: " + linkError.message);
 
     // Ensure user_roles entry exists
     await supabaseAdmin
@@ -99,6 +104,13 @@ Deno.serve(async (req) => {
         { user_id: userId, role: perfil || "usuario" },
         { onConflict: "user_id,role" }
       );
+
+    // Update profile empresa_id if needed (backward compat, non-blocking)
+    await supabaseAdmin
+      .from("profiles")
+      .update({ empresa_id, full_name: full_name || normalizedEmail })
+      .eq("user_id", userId)
+      .is("empresa_id", null);
 
     // Log
     await supabaseAdmin.from("system_logs").insert({
@@ -122,10 +134,13 @@ Deno.serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || "Erro desconhecido" }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 });
