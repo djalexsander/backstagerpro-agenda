@@ -22,30 +22,56 @@ export default function UserManagement() {
   const [deleteUser, setDeleteUser] = useState<any>(null);
 
   const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState<string>("usuario");
 
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<string>("usuario");
 
+  // Fetch users linked to this empresa via empresa_usuarios
   const { data: users = [] } = useQuery({
     queryKey: ["users-management", empresaId],
     queryFn: async () => {
       if (!empresaId) return [];
-      const { data: profiles, error: pErr } = await supabase.from("profiles").select("*").eq("empresa_id", empresaId);
+
+      // Get users linked to this empresa
+      const { data: links, error: linkErr } = await supabase
+        .from("empresa_usuarios")
+        .select("*")
+        .eq("empresa_id", empresaId);
+      if (linkErr) throw linkErr;
+      if (!links || links.length === 0) return [];
+
+      const userIds = links.map((l: any) => l.user_id);
+
+      // Get profiles
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("user_id", userIds);
       if (pErr) throw pErr;
-      const userIds = profiles.map((p: any) => p.user_id);
-      if (userIds.length === 0) return [];
-      const { data: roles, error: rErr } = await supabase.from("user_roles").select("*").in("user_id", userIds);
+
+      // Get roles
+      const { data: roles, error: rErr } = await supabase
+        .from("user_roles")
+        .select("*")
+        .in("user_id", userIds);
       if (rErr) throw rErr;
-      // Filter out master_admin users
-      return profiles
-        .map((p: any) => ({
-          ...p,
-          role: roles.find((r: any) => r.user_id === p.user_id)?.role || "usuario",
-          roleId: roles.find((r: any) => r.user_id === p.user_id)?.id,
-        }))
+
+      return links
+        .map((link: any) => {
+          const profile = profiles?.find((p: any) => p.user_id === link.user_id);
+          const role = roles?.find((r: any) => r.user_id === link.user_id);
+          return {
+            ...profile,
+            user_id: link.user_id,
+            full_name: profile?.full_name || link.user_id,
+            perfil: link.perfil,
+            role: role?.role || link.perfil || "usuario",
+            roleId: role?.id,
+            linkId: link.id,
+          };
+        })
         .filter((u: any) => u.role !== "master_admin");
     },
     enabled: !!empresaId,
@@ -53,10 +79,20 @@ export default function UserManagement() {
 
   const updateRole = useMutation({
     mutationFn: async ({ roleId, newRole, userId, newName }: { roleId: string; newRole: string; userId: string; newName: string }) => {
-      const roleRes = await supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId);
-      if (roleRes.error) throw roleRes.error;
+      if (roleId) {
+        const roleRes = await supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId);
+        if (roleRes.error) throw roleRes.error;
+      }
       const profileRes = await supabase.from("profiles").update({ full_name: newName } as any).eq("user_id", userId);
       if (profileRes.error) throw profileRes.error;
+      // Also update empresa_usuarios perfil
+      if (empresaId) {
+        await supabase
+          .from("empresa_usuarios")
+          .update({ perfil: newRole } as any)
+          .eq("empresa_id", empresaId)
+          .eq("user_id", userId);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
@@ -68,23 +104,28 @@ export default function UserManagement() {
 
   const addUser = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("create-empresa-user", {
+      const { data, error } = await supabase.functions.invoke("create-user", {
         body: {
           empresa_id: empresaId,
           email: newEmail,
-          password: newPassword,
           full_name: newName,
-          role: newRole,
+          perfil: newRole,
         },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
-      toast({ title: "Usuário criado com sucesso!" });
+      toast({
+        title: data?.isNewUser ? "Usuário criado com sucesso!" : "Usuário vinculado à empresa!",
+        description: data?.message,
+      });
       setAddOpen(false);
-      setNewEmail(""); setNewPassword(""); setNewName(""); setNewRole("usuario");
+      setNewEmail("");
+      setNewName("");
+      setNewRole("usuario");
     },
     onError: (err: any) => toast({ title: "Erro ao criar usuário", description: err.message, variant: "destructive" }),
   });
@@ -136,10 +177,9 @@ export default function UserManagement() {
                 <Label>Email</Label>
                 <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="email@exemplo.com" />
               </div>
-              <div className="space-y-2">
-                <Label>Senha</Label>
-                <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                O usuário deverá acessar "Primeiro acesso" na tela de login para definir sua senha.
+              </p>
               <div className="space-y-2">
                 <Label>Perfil</Label>
                 <Select value={newRole} onValueChange={setNewRole}>
@@ -153,7 +193,7 @@ export default function UserManagement() {
             </div>
             <DialogFooter>
               <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-              <Button onClick={() => addUser.mutate()} disabled={addUser.isPending || !newEmail || !newPassword || !newName}>
+              <Button onClick={() => addUser.mutate()} disabled={addUser.isPending || !newEmail || !newName}>
                 {addUser.isPending ? "Criando..." : "Criar"}
               </Button>
             </DialogFooter>
@@ -226,7 +266,7 @@ export default function UserManagement() {
           </TableHeader>
           <TableBody>
             {users.map((u: any) => (
-              <TableRow key={u.id}>
+              <TableRow key={u.linkId || u.id}>
                 <TableCell><p className="font-medium">{u.full_name}</p></TableCell>
                 <TableCell>
                   <Badge variant={u.role === "admin_empresa" ? "default" : "secondary"} className="gap-1">
