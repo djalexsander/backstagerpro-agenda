@@ -6,7 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft, Users } from "lucide-react";
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -106,6 +116,7 @@ export default function EventDetail() {
   const { isAdmin, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [downloadPending, setDownloadPending] = useState<{ path: string; name: string } | null>(null);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
@@ -162,17 +173,27 @@ export default function EventDetail() {
     },
   });
 
+  const requestDownload = (filePath: string, fileName: string) => {
+    setDownloadPending({ path: filePath, name: fileName });
+  };
 
-  const downloadFile = async (filePath: string, fileName: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    const response = await fetch(data.publicUrl);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
+  const confirmDownload = async () => {
+    if (!downloadPending) return;
+    const { path, name } = downloadPending;
+    setDownloadPending(null);
+    try {
+      const { data } = supabase.storage.from("event-files").getPublicUrl(path);
+      const response = await fetch(data.publicUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "Erro ao baixar arquivo", description: err.message, variant: "destructive" });
+    }
   };
 
   const handleUploadRider = async (dayId: string, file: File) => {
@@ -281,7 +302,7 @@ export default function EventDetail() {
                         <div key={f.id} className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="text-sm truncate flex-1">{f.file_name}</span>
-                          <Button variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                          <Button variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
                             <Download className="h-3 w-3 mr-1" /> Baixar
                           </Button>
                         </div>
@@ -303,7 +324,7 @@ export default function EventDetail() {
                       <div key={f.id} className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="text-sm truncate flex-1">{f.file_name}</span>
-                        <Button variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                        <Button variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
                           <Download className="h-3 w-3 mr-1" /> Baixar
                         </Button>
                       </div>
@@ -359,7 +380,7 @@ export default function EventDetail() {
                   day={day}
                   dayFile={dayFile}
                   isAdmin={isAdmin}
-                  onDownload={downloadFile}
+                  onDownload={requestDownload}
                   onUpload={handleUploadRider}
                   onRemove={handleRemoveRider}
                 />
@@ -378,7 +399,7 @@ export default function EventDetail() {
             {files.length > 0 && (
               <div className="flex gap-2 pt-2">
                 {files.map((f) => (
-                  <Button key={f.id} variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                  <Button key={f.id} variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
                     <Download className="h-4 w-4 mr-1" /> {f.file_name}
                   </Button>
                 ))}
@@ -387,6 +408,22 @@ export default function EventDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Download Confirmation Dialog */}
+      <AlertDialog open={!!downloadPending} onOpenChange={(open) => { if (!open) setDownloadPending(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Download</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja baixar o arquivo <span className="font-medium text-foreground">"{downloadPending?.name}"</span>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDownload}>Baixar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
