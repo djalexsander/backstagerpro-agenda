@@ -99,7 +99,7 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  doc.save("agenda.pdf");
+  await smartSavePDF(doc, { tipo: "agenda" });
 }
 
 export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[]) {
