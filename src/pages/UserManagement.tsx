@@ -44,7 +44,7 @@ export default function UserManagement() {
 
       const userIds = links.map((l: any) => l.user_id);
 
-      // Get profiles
+      // Get profiles (including email)
       const { data: profiles, error: pErr } = await supabase
         .from("profiles")
         .select("*")
@@ -66,6 +66,7 @@ export default function UserManagement() {
             ...profile,
             user_id: link.user_id,
             full_name: profile?.full_name || link.user_id,
+            email: (profile as any)?.email || "",
             perfil: link.perfil,
             role: role?.role || link.perfil || "usuario",
             roleId: role?.id,
@@ -211,6 +212,10 @@ export default function UserManagement() {
                 <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
               </div>
               <div className="space-y-2">
+                <Label>Email</Label>
+                <Input value={editUser.email || ""} disabled className="opacity-60" />
+              </div>
+              <div className="space-y-2">
                 <Label>Perfil</Label>
                 <Select value={editRole} onValueChange={setEditRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -260,6 +265,7 @@ export default function UserManagement() {
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Perfil</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -268,6 +274,7 @@ export default function UserManagement() {
             {users.map((u: any) => (
               <TableRow key={u.linkId || u.id}>
                 <TableCell><p className="font-medium">{u.full_name}</p></TableCell>
+                <TableCell><p className="text-muted-foreground text-sm">{u.email || "—"}</p></TableCell>
                 <TableCell>
                   <Badge variant={u.role === "admin_empresa" ? "default" : "secondary"} className="gap-1">
                     {u.role === "admin_empresa" ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}

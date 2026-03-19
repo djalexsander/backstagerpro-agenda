@@ -717,6 +717,7 @@ export type Database = {
           ativado: boolean
           avatar_url: string | null
           created_at: string
+          email: string | null
           empresa_id: string | null
           full_name: string
           id: string
@@ -727,6 +728,7 @@ export type Database = {
           ativado?: boolean
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           empresa_id?: string | null
           full_name?: string
           id?: string
@@ -737,6 +739,7 @@ export type Database = {
           ativado?: boolean
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           empresa_id?: string | null
           full_name?: string
           id?: string

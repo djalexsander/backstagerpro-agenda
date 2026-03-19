@@ -105,12 +105,32 @@ Deno.serve(async (req) => {
         { onConflict: "user_id,role" }
       );
 
-    // Update profile empresa_id if needed (backward compat, non-blocking)
-    await supabaseAdmin
+    // Always update profile with name and email
+    const { data: existingProfile } = await supabaseAdmin
       .from("profiles")
-      .update({ empresa_id, full_name: full_name || normalizedEmail })
+      .select("id")
       .eq("user_id", userId)
-      .is("empresa_id", null);
+      .maybeSingle();
+
+    if (existingProfile) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ 
+          full_name: full_name || normalizedEmail, 
+          email: normalizedEmail,
+          empresa_id: empresa_id 
+        } as any)
+        .eq("user_id", userId);
+    } else {
+      await supabaseAdmin
+        .from("profiles")
+        .insert({ 
+          user_id: userId, 
+          full_name: full_name || normalizedEmail, 
+          email: normalizedEmail,
+          empresa_id 
+        } as any);
+    }
 
     // Log
     await supabaseAdmin.from("system_logs").insert({
