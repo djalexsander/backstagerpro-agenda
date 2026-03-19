@@ -68,18 +68,17 @@ export default function UserManagement() {
 
   const addUser = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.auth.signUp({
-        email: newEmail,
-        password: newPassword,
-        options: {
-          data: {
-            full_name: newName,
-            empresa_id: empresaId,
-            role: newRole,
-          },
+      const { data, error } = await supabase.functions.invoke("create-empresa-user", {
+        body: {
+          empresa_id: empresaId,
+          email: newEmail,
+          password: newPassword,
+          full_name: newName,
+          role: newRole,
         },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
