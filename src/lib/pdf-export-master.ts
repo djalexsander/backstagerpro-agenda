@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
+import { smartSavePDF } from "./pdf-save";
 
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
@@ -89,6 +90,5 @@ export async function exportMasterFinanceiroPDF(
     });
   }
 
-  const fileName = `financeiro-master-${periodTitle.toLowerCase().replace(/[\s\/]+/g, "-")}.pdf`;
-  doc.save(fileName);
+  await smartSavePDF(doc, { tipo: "financeiro-master", evento: periodTitle });
 }

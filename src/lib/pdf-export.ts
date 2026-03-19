@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { format, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
+import { smartSavePDF } from "./pdf-save";
 
 type Event = Tables<"events">;
 
@@ -98,7 +99,7 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  doc.save("agenda.pdf");
+  await smartSavePDF(doc, { tipo: "agenda" });
 }
 
 export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[]) {
@@ -168,7 +169,7 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     });
   }
 
-  doc.save(`evento-${event.name.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+  await smartSavePDF(doc, { tipo: "evento", evento: event.name, cidade: event.city, data: event.date });
 }
 
 export async function exportFinancialPDF(financial: any, branding?: PdfBranding) {
@@ -265,7 +266,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding)
     },
   });
 
-  doc.save(`financeiro-${eventName.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+  await smartSavePDF(doc, { tipo: "financeiro", evento: eventName });
 }
 
 export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding) {
@@ -341,5 +342,5 @@ export async function exportFinancialTotalPDF(financials: any[], periodTitle?: s
     },
   });
 
-  doc.save("financeiro-consolidado.pdf");
+  await smartSavePDF(doc, { tipo: "financeiro-consolidado" });
 }
