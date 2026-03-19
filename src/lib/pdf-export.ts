@@ -266,7 +266,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding)
     },
   });
 
-  doc.save(`financeiro-${eventName.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+  await smartSavePDF(doc, { tipo: "financeiro", evento: eventName });
 }
 
 export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding) {
