@@ -90,6 +90,5 @@ export async function exportMasterFinanceiroPDF(
     });
   }
 
-  const fileName = `financeiro-master-${periodTitle.toLowerCase().replace(/[\s\/]+/g, "-")}.pdf`;
-  doc.save(fileName);
+  await smartSavePDF(doc, { tipo: "financeiro-master", evento: periodTitle });
 }
