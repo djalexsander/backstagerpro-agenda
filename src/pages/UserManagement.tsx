@@ -66,6 +66,7 @@ export default function UserManagement() {
             ...profile,
             user_id: link.user_id,
             full_name: profile?.full_name || link.user_id,
+            email: (profile as any)?.email || "",
             perfil: link.perfil,
             role: role?.role || link.perfil || "usuario",
             roleId: role?.id,
