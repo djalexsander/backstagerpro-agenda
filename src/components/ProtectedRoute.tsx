@@ -24,8 +24,8 @@ export function ProtectedRoute({ children, adminOnly = false, masterOnly = false
   // Block access if empresa trial expired (master_admin is never blocked)
   if (empresaBloqueada && !isMasterAdmin) return <PlanoBloqueado />;
 
-  if (masterOnly && !isMasterAdmin) return <Navigate to="/dashboard" replace />;
-  if (adminOnly && !isAdmin) return <Navigate to="/dashboard" replace />;
+  if (masterOnly && !isMasterAdmin) return <Navigate to="/agenda" replace />;
+  if (adminOnly && !isAdmin) return <Navigate to="/agenda" replace />;
 
   return <>{children}</>;
 }

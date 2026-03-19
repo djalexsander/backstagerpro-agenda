@@ -21,18 +21,20 @@ export function AppSidebar() {
   const displayLogoUrl = isMasterAdmin ? platformLogoUrl : (empresaLogoUrl || platformLogoUrl);
   const displayName = isMasterAdmin ? platformName : (empresaNome || platformName);
 
-  const companyItems = [
-    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-    { title: "Agenda", url: "/agenda", icon: Calendar },
-    ...(isAdminEmpresa || isMasterAdmin ? [
-      { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-      { title: "Usuários", url: "/usuarios", icon: Users },
-      { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
-      { title: "Documentos", url: "/documentos", icon: FileText },
-      { title: "Funcionários", url: "/funcionarios", icon: HardHat },
-      { title: "Backups", url: "/backups", icon: Database },
-    ] : []),
-  ];
+  const isUsuario = !isMasterAdmin && !isAdminEmpresa;
+
+  const companyItems = isUsuario
+    ? [{ title: "Agenda", url: "/agenda", icon: Calendar }]
+    : [
+        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+        { title: "Agenda", url: "/agenda", icon: Calendar },
+        { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+        { title: "Usuários", url: "/usuarios", icon: Users },
+        { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
+        { title: "Documentos", url: "/documentos", icon: FileText },
+        { title: "Funcionários", url: "/funcionarios", icon: HardHat },
+        { title: "Backups", url: "/backups", icon: Database },
+      ];
 
   const masterItems = [
     { title: "Painel Master", url: "/master", icon: Globe },

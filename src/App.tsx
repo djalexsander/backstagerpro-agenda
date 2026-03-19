@@ -43,9 +43,9 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/agenda" replace />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
                 <Route path="/agenda" element={<Agenda />} />
                 <Route path="/evento/:id" element={<EventDetail />} />
                 <Route path="/evento/:id/editar" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
