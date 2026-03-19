@@ -302,7 +302,7 @@ export default function EventDetail() {
                         <div key={f.id} className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="text-sm truncate flex-1">{f.file_name}</span>
-                          <Button variant="outline" size="sm" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                          <Button variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
                             <Download className="h-3 w-3 mr-1" /> Baixar
                           </Button>
                         </div>
