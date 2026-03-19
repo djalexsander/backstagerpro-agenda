@@ -169,7 +169,7 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     });
   }
 
-  doc.save(`evento-${event.name.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+  await smartSavePDF(doc, { tipo: "evento", evento: event.name, cidade: event.city, data: event.date });
 }
 
 export async function exportFinancialPDF(financial: any, branding?: PdfBranding) {
