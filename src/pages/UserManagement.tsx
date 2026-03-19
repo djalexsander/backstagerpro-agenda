@@ -44,7 +44,7 @@ export default function UserManagement() {
 
       const userIds = links.map((l: any) => l.user_id);
 
-      // Get profiles
+      // Get profiles (including email)
       const { data: profiles, error: pErr } = await supabase
         .from("profiles")
         .select("*")
