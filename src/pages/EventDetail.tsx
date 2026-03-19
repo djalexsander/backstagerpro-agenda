@@ -380,7 +380,7 @@ export default function EventDetail() {
                   day={day}
                   dayFile={dayFile}
                   isAdmin={isAdmin}
-                  onDownload={downloadFile}
+                  onDownload={requestDownload}
                   onUpload={handleUploadRider}
                   onRemove={handleRemoveRider}
                 />
