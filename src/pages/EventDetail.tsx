@@ -408,6 +408,22 @@ export default function EventDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Download Confirmation Dialog */}
+      <AlertDialog open={!!downloadPending} onOpenChange={(open) => { if (!open) setDownloadPending(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Download</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja baixar o arquivo <span className="font-medium text-foreground">"{downloadPending?.name}"</span>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDownload}>Baixar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
