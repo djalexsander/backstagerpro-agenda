@@ -261,6 +261,7 @@ export default function UserManagement() {
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Perfil</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
