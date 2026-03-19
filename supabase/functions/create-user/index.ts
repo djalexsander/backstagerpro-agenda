@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -55,7 +55,6 @@ Deno.serve(async (req) => {
 
     if (createError) {
       if (createError.message?.includes("already been registered")) {
-        // Find existing user via Auth API only - NO profiles dependency
         const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
         if (listErr) throw new Error("Erro ao buscar usuários: " + listErr.message);
         
@@ -105,7 +104,10 @@ Deno.serve(async (req) => {
         { onConflict: "user_id,role" }
       );
 
-    // Always update profile with name and email
+    // Always ensure profile exists with name and email
+    // Wait a moment for the trigger to potentially create the profile
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const { data: existingProfile } = await supabaseAdmin
       .from("profiles")
       .select("id")

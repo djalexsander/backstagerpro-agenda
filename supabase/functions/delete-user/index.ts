@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -20,7 +20,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify the caller is admin or master_admin
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -39,7 +38,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check caller has admin or master role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: callerRole } = await adminClient
@@ -72,7 +70,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Prevent deleting yourself
     if (user_id === caller.id) {
       return new Response(
         JSON.stringify({ error: "Você não pode excluir a si mesmo" }),
@@ -83,7 +80,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // If admin_empresa, verify target user belongs to same empresa
     if (callerRole.role === "admin_empresa") {
       const { data: callerProfile } = await adminClient
         .from("profiles")
@@ -91,17 +87,14 @@ Deno.serve(async (req) => {
         .eq("user_id", caller.id)
         .single();
 
-      const { data: targetProfile } = await adminClient
-        .from("profiles")
+      const { data: targetLink } = await adminClient
+        .from("empresa_usuarios")
         .select("empresa_id")
         .eq("user_id", user_id)
-        .single();
+        .eq("empresa_id", callerProfile?.empresa_id || "")
+        .maybeSingle();
 
-      if (
-        !callerProfile?.empresa_id ||
-        !targetProfile?.empresa_id ||
-        callerProfile.empresa_id !== targetProfile.empresa_id
-      ) {
+      if (!callerProfile?.empresa_id || !targetLink) {
         return new Response(
           JSON.stringify({
             error: "Sem permissão para excluir este usuário",
@@ -114,7 +107,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Delete profile and role (cascade will handle, but let's be explicit)
+    // Delete from empresa_usuarios, user_roles, profiles (ignore errors if not found)
+    await adminClient.from("empresa_usuarios").delete().eq("user_id", user_id);
     await adminClient.from("user_roles").delete().eq("user_id", user_id);
     await adminClient.from("profiles").delete().eq("user_id", user_id);
 
