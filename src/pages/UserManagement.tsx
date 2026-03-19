@@ -212,6 +212,10 @@ export default function UserManagement() {
                 <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
               </div>
               <div className="space-y-2">
+                <Label>Email</Label>
+                <Input value={editUser.email || ""} disabled className="opacity-60" />
+              </div>
+              <div className="space-y-2">
                 <Label>Perfil</Label>
                 <Select value={editRole} onValueChange={setEditRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
