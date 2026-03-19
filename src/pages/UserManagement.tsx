@@ -237,7 +237,7 @@ export default function UserManagement() {
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
             <Button
-              onClick={() => editUser?.roleId && updateRole.mutate({ roleId: editUser.roleId, newRole: editRole, userId: editUser.user_id, newName: editName })}
+              onClick={() => editUser && updateRole.mutate({ roleId: editUser.roleId, newRole: editRole, userId: editUser.user_id, newName: editName })}
               disabled={updateRole.isPending}
             >
               {updateRole.isPending ? "Salvando..." : "Salvar"}
