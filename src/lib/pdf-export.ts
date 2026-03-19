@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { format, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
+import { smartSavePDF } from "./pdf-save";
 
 type Event = Tables<"events">;
 
