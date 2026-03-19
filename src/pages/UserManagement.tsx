@@ -270,6 +270,7 @@ export default function UserManagement() {
             {users.map((u: any) => (
               <TableRow key={u.linkId || u.id}>
                 <TableCell><p className="font-medium">{u.full_name}</p></TableCell>
+                <TableCell><p className="text-muted-foreground text-sm">{u.email || "—"}</p></TableCell>
                 <TableCell>
                   <Badge variant={u.role === "admin_empresa" ? "default" : "secondary"} className="gap-1">
                     {u.role === "admin_empresa" ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
