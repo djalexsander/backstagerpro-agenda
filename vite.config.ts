@@ -27,17 +27,7 @@ export default defineConfig(({ mode }) => ({
   ...(isTauri && {
     build: {
       // Tauri v2 uses system webview; target modern browsers
-      target: ["es2021", "chrome100", "safari14"],
-      // Produce smaller chunks for desktop
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            vendor: ["react", "react-dom", "react-router-dom"],
-            supabase: ["@supabase/supabase-js"],
-            ui: ["@radix-ui/react-dialog", "@radix-ui/react-popover", "@radix-ui/react-select"],
-          },
-        },
-      },
+      target: ["es2021", "chrome100", "safari14"] as any,
     },
   }),
   // Prevent Vite from obscuring Rust errors in Tauri dev
