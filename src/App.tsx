@@ -7,6 +7,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
 import { UpdateProvider, UpdateBanner } from "@/features/update";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import Login from "@/pages/Login";
 import PrimeiroAcesso from "@/pages/PrimeiroAcesso";
 import Dashboard from "@/pages/Dashboard";
