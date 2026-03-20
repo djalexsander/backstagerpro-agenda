@@ -26,11 +26,26 @@ Deno.serve(async (req) => {
       throw new Error("A senha deve ter pelo menos 6 caracteres");
     }
 
-    // Find user by email
-    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
-    if (listErr) throw listErr;
+    // Find user by email using filter (avoids pagination issues with listUsers)
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+      perPage: 1,
+      page: 1,
+    });
 
-    const user = users.find((u: any) => u.email === email);
+    // listUsers doesn't support email filter, so we search manually with pagination
+    let user = null;
+    let page = 1;
+    const perPage = 500;
+    while (!user) {
+      const { data: { users: batch }, error: batchErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+      if (batchErr) throw batchErr;
+      if (batch.length === 0) break;
+      user = batch.find((u: any) => u.email === normalizedEmail);
+      if (batch.length < perPage) break;
+      page++;
+    }
+
     if (!user) {
       throw new Error("Email não encontrado no sistema. Verifique com o administrador.");
     }
