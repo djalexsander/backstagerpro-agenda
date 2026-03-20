@@ -11,6 +11,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import Login from "@/pages/Login";
 import PrimeiroAcesso from "@/pages/PrimeiroAcesso";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Agenda from "@/pages/Agenda";
 import EventDetail from "@/pages/EventDetail";
