@@ -81,7 +81,7 @@ export default function Login() {
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="remember" checked={remember} onCheckedChange={(v) => setRemember(!!v)} />
-                <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">Lembrar meus dados</Label>
+                <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">Lembrar meu e-mail</Label>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Carregando..." : "Entrar"}
