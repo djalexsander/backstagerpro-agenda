@@ -87,7 +87,11 @@ export default function Login() {
                 {loading ? "Carregando..." : "Entrar"}
               </Button>
             </form>
-            <div className="mt-4 text-center">
+            <div className="mt-4 text-center space-y-1">
+              <Button variant="link" className="text-sm text-muted-foreground" onClick={() => navigate("/esqueci-senha")}>
+                Esqueci minha senha
+              </Button>
+              <br />
               <Button variant="link" className="text-sm text-muted-foreground" onClick={() => navigate("/primeiro-acesso")}>
                 Primeiro acesso? Ative sua conta aqui
               </Button>
