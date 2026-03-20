@@ -15,17 +15,15 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, role } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { platformLogoUrl, platformName } = usePlatformBranding();
 
   useEffect(() => {
-    const saved = localStorage.getItem("backstage_saved_login");
-    if (saved) {
-      const { email, password } = JSON.parse(saved);
-      setEmail(email);
-      setPassword(password);
+    const savedEmail = localStorage.getItem("backstage_saved_email");
+    if (savedEmail) {
+      setEmail(savedEmail);
       setRemember(true);
     }
   }, []);
@@ -35,16 +33,18 @@ export default function Login() {
     setLoading(true);
 
     if (remember) {
-      localStorage.setItem("backstage_saved_login", JSON.stringify({ email, password }));
+      localStorage.setItem("backstage_saved_email", email);
     } else {
-      localStorage.removeItem("backstage_saved_login");
+      localStorage.removeItem("backstage_saved_email");
     }
+    // Remove legacy insecure storage
+    localStorage.removeItem("backstage_saved_login");
 
     const { error } = await signIn(email, password);
     if (error) {
       toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
     } else {
-      navigate("/dashboard");
+      navigate("/agenda");
     }
     setLoading(false);
   };
