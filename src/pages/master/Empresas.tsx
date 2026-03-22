@@ -367,12 +367,6 @@ export default function Empresas() {
               <Label>Telefone</Label>
               <Input value={form.telefone} onChange={(e) => setForm(p => ({ ...p, telefone: e.target.value }))} />
             </div>
-            {!editItem && (
-              <div className="space-y-2">
-                <Label>Senha de Acesso *</Label>
-                <Input type="password" value={form.senha} onChange={(e) => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mínimo 6 caracteres" />
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Plano</Label>
