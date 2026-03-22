@@ -24,7 +24,7 @@ export default function Empresas() {
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [detailEmpresa, setDetailEmpresa] = useState<any>(null);
-  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date });
+  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -129,12 +129,11 @@ export default function Empresas() {
           }
         }
 
-        if (form.email && form.senha) {
+        if (form.email) {
           const res = await supabase.functions.invoke("create-empresa-user", {
             body: {
               empresa_id: newEmpresa.id,
               email: form.email,
-              password: form.senha,
               full_name: form.nome_empresa,
               role: form.papel,
             },
@@ -151,7 +150,7 @@ export default function Empresas() {
       setEditItem(null);
       setLogoFile(null);
       setLogoPreview(null);
-      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
+      setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -276,7 +275,7 @@ export default function Empresas() {
     setEditItem(e);
     setLogoFile(null);
     setLogoPreview(e.logo_url || null);
-    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", senha: "", papel: "admin_empresa", vencimento: e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1) });
+    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", papel: "admin_empresa", vencimento: e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
@@ -284,7 +283,7 @@ export default function Empresas() {
     setEditItem(null);
     setLogoFile(null);
     setLogoPreview(null);
-    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
+    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
@@ -368,12 +367,6 @@ export default function Empresas() {
               <Label>Telefone</Label>
               <Input value={form.telefone} onChange={(e) => setForm(p => ({ ...p, telefone: e.target.value }))} />
             </div>
-            {!editItem && (
-              <div className="space-y-2">
-                <Label>Senha de Acesso *</Label>
-                <Input type="password" value={form.senha} onChange={(e) => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mínimo 6 caracteres" />
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Plano</Label>
@@ -440,7 +433,7 @@ export default function Empresas() {
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome_empresa || (!editItem && (!form.email || form.senha.length < 6))}>
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome_empresa || (!editItem && !form.email)}>
               {saveMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
