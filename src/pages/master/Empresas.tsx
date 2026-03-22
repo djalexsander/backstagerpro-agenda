@@ -129,12 +129,11 @@ export default function Empresas() {
           }
         }
 
-        if (form.email && form.senha) {
+        if (form.email) {
           const res = await supabase.functions.invoke("create-empresa-user", {
             body: {
               empresa_id: newEmpresa.id,
               email: form.email,
-              password: form.senha,
               full_name: form.nome_empresa,
               role: form.papel,
             },
