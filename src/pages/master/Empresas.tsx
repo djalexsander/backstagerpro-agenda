@@ -283,7 +283,7 @@ export default function Empresas() {
     setEditItem(null);
     setLogoFile(null);
     setLogoPreview(null);
-    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", senha: "", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
+    setForm({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", papel: "admin_empresa", vencimento: addMonths(new Date(), 1) });
     setAddOpen(true);
   };
 
