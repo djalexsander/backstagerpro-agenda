@@ -233,9 +233,9 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
               <p className="font-medium">{c.eventName}</p>
               <div className="grid grid-cols-2 gap-1 text-muted-foreground">
                 {c.transport > 0 && <span>Transporte: {fmt(c.transport)}</span>}
-                {c.food > 0 && <span>Alimentação: {fmt(c.food)}</span>}
                 {c.lodging > 0 && <span>Hospedagem: {fmt(c.lodging)}</span>}
-                {c.employees > 0 && <span>Funcionários: {fmt(c.employees)}</span>}
+                {c.employeesCache > 0 && <span>Funcionários: {fmt(c.employeesCache)}</span>}
+                {c.employeesFood > 0 && <span>Alimentação: {fmt(c.employeesFood)}</span>}
                 {c.extras > 0 && <span>Extras: {fmt(c.extras)}</span>}
               </div>
               <p className="text-destructive font-medium">Total: {fmt(c.total)}</p>
