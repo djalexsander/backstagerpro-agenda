@@ -111,11 +111,31 @@ export default function Dashboard() {
     const arr = Array.isArray(raw) ? raw : [];
     return arr.reduce((s: number, e: any) => s + (e.value || 0), 0);
   };
+  const parseEmployees = (raw: any): number => {
+    if (!raw) return 0;
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr.reduce((s: number, e: any) => s + (e.cache || 0) + (e.food || 0), 0);
+  };
 
-  const totalReceita = financials.reduce((s, f) => s + (f.cache || 0), 0);
+  const getCachePago = (f: any): number => {
+    const detail = f.cache_detail as any;
+    if (!detail) return f.cache || 0;
+    let pago = 0;
+    if (detail.entrada > 0 && detail.entradaPaga) pago += detail.entrada;
+    if (detail.parcelado) {
+      (detail.parcelas || []).forEach((p: any) => { if (p.pago) pago += p.valor; });
+    } else if (detail.recebimentoPago) {
+      pago += detail.valorTotal - (detail.entrada || 0);
+    }
+    return pago;
+  };
+
+  const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
+  const totalRecebido = financials.reduce((s, f) => s + getCachePago(f), 0);
+  const totalPendente = totalCache - totalRecebido;
   const totalDespesas = financials.reduce((s, f) =>
-    s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs), 0);
-  const totalLucro = totalReceita - totalDespesas;
+    s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache), 0);
+  const totalLucro = totalRecebido - totalDespesas;
 
   // Monthly chart data (last 6 months)
   const monthlyData = useMemo(() => {
