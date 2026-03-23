@@ -30,6 +30,12 @@ function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
   if (Array.isArray(raw)) return raw;
   try { return JSON.parse(raw); } catch { return []; }
 }
+function sumEmployeeCache(emps: EmployeeExpense[]): number {
+  return emps.reduce((s, e) => s + (e.cache || 0), 0);
+}
+function sumEmployeeFood(emps: EmployeeExpense[]): number {
+  return emps.reduce((s, e) => s + (e.food || 0), 0);
+}
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
   return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
