@@ -47,7 +47,7 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
   const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
   const totalCachePago = financials.reduce((s, f) => s + getCachePago(f), 0);
   const totalCachePendente = totalCache - totalCachePago;
-  const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0), 0);
+  const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0), 0);
   const totalExtraCosts = financials.reduce((s, f) => s + sumExtraCosts(parseExtraCosts(f.extra_costs)), 0);
   const totalEmployeeCosts = financials.reduce((s, f) => s + sumEmployeeExpenses(parseEmployeeExpenses(f.funcionarios_cache)), 0);
   const totalCosts = totalFixedCosts + totalExtraCosts + totalEmployeeCosts;
@@ -91,7 +91,7 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
       lodging: f.lodging || 0,
       employees: sumEmployeeExpenses(emps),
       extras: sumExtraCosts(extras),
-      total: (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
+      total: (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
     };
   });
 
