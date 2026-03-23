@@ -177,6 +177,8 @@ export function NotificacoesEmpresa() {
     return list;
   }, [events, empresa, today, navigate]);
 
+  const alertas = allAlertas.filter((a) => !dismissed.has(a.id));
+
   const urgentCount = alertas.filter(
     (a) => a.tipo === "evento_hoje" || a.tipo === "plano_vencido" || a.tipo === "trial_expirando" || a.tipo === "plano_vencendo"
   ).length;
