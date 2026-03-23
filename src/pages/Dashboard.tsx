@@ -134,7 +134,7 @@ export default function Dashboard() {
   const totalRecebido = financials.reduce((s, f) => s + getCachePago(f), 0);
   const totalPendente = totalCache - totalRecebido;
   const totalDespesas = financials.reduce((s, f) =>
-    s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache), 0);
+    s + (f.transport || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache), 0);
   const totalLucro = totalRecebido - totalDespesas;
 
   // Monthly chart data (last 6 months)
