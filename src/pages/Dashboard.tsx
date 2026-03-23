@@ -111,11 +111,31 @@ export default function Dashboard() {
     const arr = Array.isArray(raw) ? raw : [];
     return arr.reduce((s: number, e: any) => s + (e.value || 0), 0);
   };
+  const parseEmployees = (raw: any): number => {
+    if (!raw) return 0;
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr.reduce((s: number, e: any) => s + (e.cache || 0) + (e.food || 0), 0);
+  };
 
-  const totalReceita = financials.reduce((s, f) => s + (f.cache || 0), 0);
+  const getCachePago = (f: any): number => {
+    const detail = f.cache_detail as any;
+    if (!detail) return f.cache || 0;
+    let pago = 0;
+    if (detail.entrada > 0 && detail.entradaPaga) pago += detail.entrada;
+    if (detail.parcelado) {
+      (detail.parcelas || []).forEach((p: any) => { if (p.pago) pago += p.valor; });
+    } else if (detail.recebimentoPago) {
+      pago += detail.valorTotal - (detail.entrada || 0);
+    }
+    return pago;
+  };
+
+  const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
+  const totalRecebido = financials.reduce((s, f) => s + getCachePago(f), 0);
+  const totalPendente = totalCache - totalRecebido;
   const totalDespesas = financials.reduce((s, f) =>
-    s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs), 0);
-  const totalLucro = totalReceita - totalDespesas;
+    s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache), 0);
+  const totalLucro = totalRecebido - totalDespesas;
 
   // Monthly chart data (last 6 months)
   const monthlyData = useMemo(() => {
@@ -126,17 +146,17 @@ export default function Dashboard() {
       const mEnd = endOfMonth(monthDate);
       const label = MONTH_NAMES[monthDate.getMonth()];
 
-      let receita = 0, despesas = 0;
+      let recebido = 0, despesas = 0;
       financials.forEach((f) => {
         const eventDate = (f as any).events?.date;
         if (!eventDate) return;
         const d = parseISO(eventDate);
         if (d >= mStart && d <= mEnd) {
-          receita += f.cache || 0;
-          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs);
+          recebido += getCachePago(f);
+          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache);
         }
       });
-      months.push({ name: label, receita, despesas, lucro: receita - despesas });
+      months.push({ name: label, receita: recebido, despesas, lucro: recebido - despesas });
     }
     return months;
   }, [financials, today]);
@@ -203,12 +223,20 @@ export default function Dashboard() {
       </div>
 
       {/* Financial summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center"><DollarSign className="h-4 w-4 text-accent" /></div>
-              <div><p className="text-lg font-bold text-accent">{fmt(totalReceita)}</p><p className="text-xs text-muted-foreground">Receita total</p></div>
+              <div><p className="text-lg font-bold text-accent">{fmt(totalRecebido)}</p><p className="text-xs text-muted-foreground">Recebido</p></div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-[hsl(var(--warning))]/10 flex items-center justify-center"><Clock className="h-4 w-4 text-[hsl(var(--warning))]" /></div>
+              <div><p className="text-lg font-bold text-[hsl(var(--warning))]">{fmt(totalPendente)}</p><p className="text-xs text-muted-foreground">Pendente</p></div>
             </div>
           </CardContent>
         </Card>
@@ -216,7 +244,7 @@ export default function Dashboard() {
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center"><TrendingDown className="h-4 w-4 text-destructive" /></div>
-              <div><p className="text-lg font-bold text-destructive">{fmt(totalDespesas)}</p><p className="text-xs text-muted-foreground">Despesas total</p></div>
+              <div><p className="text-lg font-bold text-destructive">{fmt(totalDespesas)}</p><p className="text-xs text-muted-foreground">Despesas</p></div>
             </div>
           </CardContent>
         </Card>
