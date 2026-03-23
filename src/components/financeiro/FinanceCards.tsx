@@ -93,11 +93,11 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
     return {
       eventName: f.events?.name || "Evento",
       transport: f.transport || 0,
-      food: f.food || 0,
       lodging: f.lodging || 0,
-      employees: sumEmployeeExpenses(emps),
+      employeesCache: sumEmployeeCache(emps),
+      employeesFood: sumEmployeeFood(emps),
       extras: sumExtraCosts(extras),
-      total: (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
+      total: (f.transport || 0) + (f.lodging || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
     };
   });
 
