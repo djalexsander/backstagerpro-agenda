@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Bell, Calendar, AlertTriangle, Clock, CreditCard } from "lucide-react";
+import { Bell, Calendar, AlertTriangle, Clock, CreditCard, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
