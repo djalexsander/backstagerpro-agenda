@@ -35,7 +35,7 @@ import {
 
 export default function Agenda() {
   const navigate = useNavigate();
-  const { isAdmin, empresaId, empresaNome, empresaLogoUrl } = useAuth();
+  const { isAdmin, isUsuario, empresaId, empresaNome, empresaLogoUrl } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -57,10 +57,14 @@ export default function Agenda() {
   const [exportEnd, setExportEnd] = useState("");
 
   const { data: events = [] } = useQuery({
-    queryKey: ["events", empresaId],
+    queryKey: ["events", empresaId, isUsuario],
     queryFn: async () => {
       if (!empresaId) return [];
-      const { data, error } = await supabase.from("events").select("*").order("date", { ascending: true }).eq("empresa_id", empresaId);
+      let query = supabase.from("events").select("*").order("date", { ascending: true }).eq("empresa_id", empresaId);
+      if (isUsuario) {
+        query = query.eq("status", "confirmado");
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
