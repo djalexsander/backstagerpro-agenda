@@ -146,17 +146,17 @@ export default function Dashboard() {
       const mEnd = endOfMonth(monthDate);
       const label = MONTH_NAMES[monthDate.getMonth()];
 
-      let receita = 0, despesas = 0;
+      let recebido = 0, despesas = 0;
       financials.forEach((f) => {
         const eventDate = (f as any).events?.date;
         if (!eventDate) return;
         const d = parseISO(eventDate);
         if (d >= mStart && d <= mEnd) {
-          receita += f.cache || 0;
-          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs);
+          recebido += getCachePago(f);
+          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache);
         }
       });
-      months.push({ name: label, receita, despesas, lucro: receita - despesas });
+      months.push({ name: label, receita: recebido, despesas, lucro: recebido - despesas });
     }
     return months;
   }, [financials, today]);
