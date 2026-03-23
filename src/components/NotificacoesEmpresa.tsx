@@ -59,7 +59,13 @@ export function NotificacoesEmpresa() {
     refetchInterval: 10 * 60 * 1000,
   });
 
-  const alertas = useMemo<Alerta[]>(() => {
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const handleDismiss = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissed((prev) => new Set(prev).add(id));
+  }, []);
+
+  const allAlertas = useMemo<Alerta[]>(() => {
     const list: Alerta[] = [];
 
     // Event alerts
