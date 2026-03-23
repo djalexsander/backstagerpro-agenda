@@ -30,6 +30,12 @@ function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
   if (Array.isArray(raw)) return raw;
   try { return JSON.parse(raw); } catch { return []; }
 }
+function sumEmployeeCache(emps: EmployeeExpense[]): number {
+  return emps.reduce((s, e) => s + (e.cache || 0), 0);
+}
+function sumEmployeeFood(emps: EmployeeExpense[]): number {
+  return emps.reduce((s, e) => s + (e.food || 0), 0);
+}
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
   return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
@@ -47,7 +53,7 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
   const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);
   const totalCachePago = financials.reduce((s, f) => s + getCachePago(f), 0);
   const totalCachePendente = totalCache - totalCachePago;
-  const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0), 0);
+  const totalFixedCosts = financials.reduce((s, f) => s + (f.transport || 0) + (f.lodging || 0), 0);
   const totalExtraCosts = financials.reduce((s, f) => s + sumExtraCosts(parseExtraCosts(f.extra_costs)), 0);
   const totalEmployeeCosts = financials.reduce((s, f) => s + sumEmployeeExpenses(parseEmployeeExpenses(f.funcionarios_cache)), 0);
   const totalCosts = totalFixedCosts + totalExtraCosts + totalEmployeeCosts;
@@ -87,11 +93,11 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
     return {
       eventName: f.events?.name || "Evento",
       transport: f.transport || 0,
-      food: f.food || 0,
       lodging: f.lodging || 0,
-      employees: sumEmployeeExpenses(emps),
+      employeesCache: sumEmployeeCache(emps),
+      employeesFood: sumEmployeeFood(emps),
       extras: sumExtraCosts(extras),
-      total: (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
+      total: (f.transport || 0) + (f.lodging || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
     };
   });
 
@@ -227,9 +233,9 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
               <p className="font-medium">{c.eventName}</p>
               <div className="grid grid-cols-2 gap-1 text-muted-foreground">
                 {c.transport > 0 && <span>Transporte: {fmt(c.transport)}</span>}
-                {c.food > 0 && <span>Alimentação: {fmt(c.food)}</span>}
                 {c.lodging > 0 && <span>Hospedagem: {fmt(c.lodging)}</span>}
-                {c.employees > 0 && <span>Funcionários: {fmt(c.employees)}</span>}
+                {c.employeesCache > 0 && <span>Funcionários: {fmt(c.employeesCache)}</span>}
+                {c.employeesFood > 0 && <span>Alimentação: {fmt(c.employeesFood)}</span>}
                 {c.extras > 0 && <span>Extras: {fmt(c.extras)}</span>}
               </div>
               <p className="text-destructive font-medium">Total: {fmt(c.total)}</p>

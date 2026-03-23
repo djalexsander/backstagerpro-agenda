@@ -134,7 +134,7 @@ export default function Dashboard() {
   const totalRecebido = financials.reduce((s, f) => s + getCachePago(f), 0);
   const totalPendente = totalCache - totalRecebido;
   const totalDespesas = financials.reduce((s, f) =>
-    s + (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache), 0);
+    s + (f.transport || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache), 0);
   const totalLucro = totalRecebido - totalDespesas;
 
   // Monthly chart data (last 6 months)
@@ -153,7 +153,7 @@ export default function Dashboard() {
         const d = parseISO(eventDate);
         if (d >= mStart && d <= mEnd) {
           recebido += getCachePago(f);
-          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache);
+          despesas += (f.transport || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache);
         }
       });
       months.push({ name: label, receita: recebido, despesas, lucro: recebido - despesas });
