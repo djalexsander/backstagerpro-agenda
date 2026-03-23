@@ -153,7 +153,7 @@ export default function Dashboard() {
         const d = parseISO(eventDate);
         if (d >= mStart && d <= mEnd) {
           recebido += getCachePago(f);
-          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache);
+          despesas += (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + parseExtras((f as any).extra_costs) + parseEmployees((f as any).funcionarios_cache);
         }
       });
       months.push({ name: label, receita: recebido, despesas, lucro: recebido - despesas });

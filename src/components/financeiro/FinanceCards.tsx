@@ -91,7 +91,7 @@ export function FinanceCards({ financials, getCachePago, getCachePendente, onTog
       lodging: f.lodging || 0,
       employees: sumEmployeeExpenses(emps),
       extras: sumExtraCosts(extras),
-      total: (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + (f.other_costs || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
+      total: (f.transport || 0) + (f.food || 0) + (f.lodging || 0) + sumExtraCosts(extras) + sumEmployeeExpenses(emps),
     };
   });
 
