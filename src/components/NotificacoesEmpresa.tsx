@@ -106,9 +106,11 @@ export function NotificacoesEmpresa() {
       }
     });
 
-    // Plan/trial alerts
+    // Plan/trial alerts — only show trial alerts if no plan is assigned yet
     if (empresa) {
-      if (empresa.trial_expires_at) {
+      const hasActivePlan = !!empresa.plano_id;
+
+      if (empresa.trial_expires_at && !hasActivePlan) {
         const trialEnd = new Date(empresa.trial_expires_at);
         const diasTrial = differenceInDays(trialEnd, today);
         if (diasTrial < 0) {
@@ -134,7 +136,9 @@ export function NotificacoesEmpresa() {
         }
       }
 
-      if (empresa.vencimento) {
+      // Only show vencimento alerts if payment status is not 'pago'
+      const isPago = empresa.status_pagamento === "pago";
+      if (empresa.vencimento && !isPago) {
         const venc = new Date(empresa.vencimento);
         const diasVenc = differenceInDays(venc, today);
         if (diasVenc < 0) {
