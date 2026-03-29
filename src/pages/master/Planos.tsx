@@ -154,9 +154,14 @@ export default function Planos() {
                   </span>
                 )}
               </div>
-              <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => openEdit(p)}>
-                <Pencil className="h-4 w-4 mr-1" /> Editar
-              </Button>
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(p)}>
+                  <Pencil className="h-4 w-4 mr-1" /> Editar
+                </Button>
+                <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={() => deleteMutation.mutate(p.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           );
         })}
