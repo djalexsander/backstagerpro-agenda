@@ -65,6 +65,7 @@ export default function Login() {
             {platformName}
           </h1>
         </div>
+        <p className="text-xs text-muted-foreground -mt-6 mb-6 text-center">v{appVersion.version}</p>
         <Card>
           <CardHeader className="text-center">
             <CardTitle>Entrar</CardTitle>
