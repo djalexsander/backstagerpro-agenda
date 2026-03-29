@@ -1,0 +1,1 @@
+UPDATE public.planos SET periodicidade = 'vitalicio' WHERE LOWER(nome) = 'vitalício' OR LOWER(nome) = 'vitalicio';
