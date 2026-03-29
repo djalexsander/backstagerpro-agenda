@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, DollarSign, Clock } from "lucide-react";
@@ -21,7 +22,20 @@ interface Plano {
   max_eventos: number;
   trial_days: number;
   ativo: boolean;
+  periodicidade: string;
 }
+
+const PERIODICIDADE_LABELS: Record<string, string> = {
+  mensal: "Mensal",
+  anual: "Anual",
+  vitalicio: "Vitalício",
+};
+
+const PERIODICIDADE_SUFFIX: Record<string, string> = {
+  mensal: "/mês",
+  anual: "/ano",
+  vitalicio: "",
+};
 
 export default function Planos() {
   const { toast } = useToast();
@@ -29,7 +43,7 @@ export default function Planos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<Plano | null>(null);
   const [form, setForm] = useState({
-    nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true,
+    nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true, periodicidade: "mensal",
   });
 
   const { data: planos = [] } = useQuery({
@@ -51,6 +65,7 @@ export default function Planos() {
         max_eventos: parseInt(form.max_eventos) || 50,
         trial_days: parseInt(form.trial_days) || 0,
         ativo: form.ativo,
+        periodicidade: form.periodicidade,
       };
       if (editItem) {
         const { error } = await supabase.from("planos").update(payload as any).eq("id", editItem.id);
@@ -86,19 +101,27 @@ export default function Planos() {
     setForm({
       nome: p.nome, valor: String(p.valor), descricao: p.descricao || "",
       max_usuarios: String(p.max_usuarios), max_eventos: String(p.max_eventos),
-      trial_days: String(p.trial_days), ativo: p.ativo,
+      trial_days: String(p.trial_days), ativo: p.ativo, periodicidade: p.periodicidade || "mensal",
     });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true });
+    setForm({ nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true, periodicidade: "mensal" });
     setDialogOpen(true);
   };
 
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const getValorLabel = () => {
+    switch (form.periodicidade) {
+      case "anual": return "Valor Anual (R$) *";
+      case "vitalicio": return "Valor Único (R$) *";
+      default: return "Valor Mensal (R$) *";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -109,28 +132,34 @@ export default function Planos() {
 
       {/* Cards overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {planos.filter(p => p.ativo).map((p) => (
-          <div key={p.id} className="rounded-xl border bg-card p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold capitalize text-lg">{p.nome}</h3>
-              <Badge variant={p.ativo ? "default" : "secondary"}>{p.ativo ? "Ativo" : "Inativo"}</Badge>
+        {planos.filter(p => p.ativo).map((p) => {
+          const suffix = PERIODICIDADE_SUFFIX[p.periodicidade] || "/mês";
+          return (
+            <div key={p.id} className="rounded-xl border bg-card p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold capitalize text-lg">{p.nome}</h3>
+                <Badge variant={p.ativo ? "default" : "secondary"}>{p.ativo ? "Ativo" : "Inativo"}</Badge>
+              </div>
+              <p className="text-3xl font-bold text-primary">
+                {formatCurrency(p.valor)}
+                {suffix && <span className="text-sm font-normal text-muted-foreground">{suffix}</span>}
+              </p>
+              {p.descricao && <p className="text-sm text-muted-foreground">{p.descricao}</p>}
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                <span>Até {p.max_usuarios} usuários</span>
+                <span>Até {p.max_eventos} eventos</span>
+                {p.trial_days > 0 && (
+                  <span className="flex items-center gap-1 text-[hsl(var(--warning))]">
+                    <Clock className="h-3 w-3" /> Teste grátis: {p.trial_days} dias
+                  </span>
+                )}
+              </div>
+              <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => openEdit(p)}>
+                <Pencil className="h-4 w-4 mr-1" /> Editar
+              </Button>
             </div>
-            <p className="text-3xl font-bold text-primary">{formatCurrency(p.valor)}<span className="text-sm font-normal text-muted-foreground">/mês</span></p>
-            {p.descricao && <p className="text-sm text-muted-foreground">{p.descricao}</p>}
-            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-              <span>Até {p.max_usuarios} usuários</span>
-              <span>Até {p.max_eventos} eventos</span>
-              {p.trial_days > 0 && (
-                <span className="flex items-center gap-1 text-[hsl(var(--warning))]">
-                  <Clock className="h-3 w-3" /> Teste grátis: {p.trial_days} dias
-                </span>
-              )}
-            </div>
-            <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => openEdit(p)}>
-              <Pencil className="h-4 w-4 mr-1" /> Editar
-            </Button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Table */}
@@ -139,7 +168,8 @@ export default function Planos() {
           <TableHeader>
             <TableRow>
               <TableHead>Plano</TableHead>
-              <TableHead>Valor Mensal</TableHead>
+              <TableHead>Periodicidade</TableHead>
+              <TableHead>Valor</TableHead>
               <TableHead>Máx. Usuários</TableHead>
               <TableHead>Máx. Eventos</TableHead>
               <TableHead>Trial (dias)</TableHead>
@@ -149,11 +179,14 @@ export default function Planos() {
           </TableHeader>
           <TableBody>
             {planos.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum plano cadastrado.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhum plano cadastrado.</TableCell></TableRow>
             ) : (
               planos.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium capitalize">{p.nome}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{PERIODICIDADE_LABELS[p.periodicidade] || "Mensal"}</Badge>
+                  </TableCell>
                   <TableCell className="font-semibold">{formatCurrency(p.valor)}</TableCell>
                   <TableCell>{p.max_usuarios}</TableCell>
                   <TableCell>{p.max_eventos}</TableCell>
@@ -184,7 +217,20 @@ export default function Planos() {
               <Input value={form.nome} onChange={(e) => setForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: basico" />
             </div>
             <div className="space-y-2">
-              <Label>Valor Mensal (R$) *</Label>
+              <Label>Periodicidade *</Label>
+              <Select value={form.periodicidade} onValueChange={(v) => setForm(p => ({ ...p, periodicidade: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mensal">Mensal</SelectItem>
+                  <SelectItem value="anual">Anual</SelectItem>
+                  <SelectItem value="vitalicio">Vitalício</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{getValorLabel()}</Label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input type="number" step="0.01" min="0" className="pl-9" value={form.valor} onChange={(e) => setForm(p => ({ ...p, valor: e.target.value }))} placeholder="99.90" />
