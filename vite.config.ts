@@ -44,6 +44,8 @@ export default defineConfig(({ mode }) => ({
           navigateFallbackDenylist: [/^\/~oauth/],
           globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+          skipWaiting: true,
+          clientsClaim: true,
         },
         manifest: {
           name: "Backstage Pro — Gestão de Eventos",
