@@ -53,13 +53,11 @@ function NotificacoesMaster() {
   const handleUpgradeAction = useMutation({
     mutationFn: async ({ notif, accepted }: { notif: any; accepted: boolean }) => {
       const empresaId = notif.empresa_id;
-      const planoSolicitado = notif.dados?.plano_solicitado;
 
-      if (accepted && planoSolicitado) {
-        // Update empresa plan
+      if (accepted && notif.dados?.plano_id_solicitado) {
         await supabase
           .from("empresas")
-          .update({ plano: planoSolicitado })
+          .update({ plano_id: notif.dados.plano_id_solicitado, plano: notif.dados.plano_solicitado })
           .eq("id", empresaId);
       }
 
