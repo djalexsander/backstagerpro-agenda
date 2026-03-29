@@ -54,11 +54,17 @@ function NotificacoesMaster() {
     mutationFn: async ({ notif, accepted }: { notif: any; accepted: boolean }) => {
       const empresaId = notif.empresa_id;
 
-      if (accepted && notif.dados?.plano_id_solicitado) {
-        await supabase
-          .from("empresas")
-          .update({ plano_id: notif.dados.plano_id_solicitado, plano: notif.dados.plano_solicitado })
-          .eq("id", empresaId);
+      if (accepted) {
+        const planoId = notif.dados?.plano_id_solicitado;
+        const planoNome = notif.dados?.plano_solicitado;
+
+        if (planoId) {
+          const { error } = await supabase
+            .from("empresas")
+            .update({ plano_id: planoId, plano: planoNome })
+            .eq("id", empresaId);
+          if (error) throw error;
+        }
       }
 
       // Mark notification as read
@@ -70,8 +76,12 @@ function NotificacoesMaster() {
     onSuccess: (_, { accepted }) => {
       queryClient.invalidateQueries({ queryKey: ["notificacoes-master"] });
       queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
-      toast.success(accepted ? "Upgrade aceito com sucesso!" : "Solicitação rejeitada.");
+      queryClient.invalidateQueries({ queryKey: ["empresa-plano"] });
+      queryClient.invalidateQueries({ queryKey: ["plano-atual"] });
+      toast.success(accepted ? "Upgrade aceito! Plano da empresa atualizado." : "Solicitação rejeitada.");
     },
+    onError: () => toast.error("Erro ao processar solicitação."),
+  });
   });
 
   const unreadCount = notificacoes.filter((n: any) => !n.lida).length;
