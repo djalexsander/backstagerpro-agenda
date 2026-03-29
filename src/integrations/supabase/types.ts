@@ -679,6 +679,7 @@ export type Database = {
           max_eventos: number | null
           max_usuarios: number | null
           nome: string
+          periodicidade: string
           storage_limit: number | null
           trial_days: number
           updated_at: string
@@ -692,6 +693,7 @@ export type Database = {
           max_eventos?: number | null
           max_usuarios?: number | null
           nome: string
+          periodicidade?: string
           storage_limit?: number | null
           trial_days?: number
           updated_at?: string
@@ -705,6 +707,7 @@ export type Database = {
           max_eventos?: number | null
           max_usuarios?: number | null
           nome?: string
+          periodicidade?: string
           storage_limit?: number | null
           trial_days?: number
           updated_at?: string

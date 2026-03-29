@@ -1,0 +1,1 @@
+ALTER TABLE public.planos ADD COLUMN IF NOT EXISTS periodicidade text NOT NULL DEFAULT 'mensal';
