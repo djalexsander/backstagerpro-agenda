@@ -303,35 +303,41 @@ export default function PlanoAssinatura() {
 
       {/* Upgrade Plan Dialog */}
       <Dialog open={showUpgrade} onOpenChange={setShowUpgrade}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Selecionar Plano</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 py-4">
-            {planos?.map((plano) => (
-              <Card
-                key={plano.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedPlanoId === plano.id ? "ring-2 ring-primary" : ""
-                } ${empresa?.plano_id === plano.id ? "opacity-60" : ""}`}
-                onClick={() => setSelectedPlanoId(plano.id)}
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{plano.nome}</CardTitle>
-                  <CardDescription>R${Number(plano.valor).toFixed(2)}/mês</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  <p className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {plano.max_eventos ?? "∞"} eventos</p>
-                  <p className="flex items-center gap-1"><Users className="h-3 w-3" /> {plano.max_usuarios ?? "∞"} usuários</p>
-                  <p className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {(plano as any).storage_limit ?? 5}GB</p>
-                  {empresa?.plano_id === plano.id && (
-                    <Badge variant="secondary" className="mt-2">Plano Atual</Badge>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex-1 overflow-y-auto">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 py-4">
+              {planos?.map((plano) => {
+                const periodicidade = (plano as any).periodicidade || "mensal";
+                const sufixo = periodicidade === "vitalicio" ? "" : periodicidade === "anual" ? "/ano" : "/mês";
+                return (
+                  <Card
+                    key={plano.id}
+                    className={`cursor-pointer transition-all hover:shadow-md ${
+                      selectedPlanoId === plano.id ? "ring-2 ring-primary" : ""
+                    } ${empresa?.plano_id === plano.id ? "opacity-60" : ""}`}
+                    onClick={() => setSelectedPlanoId(plano.id)}
+                  >
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">{plano.nome}</CardTitle>
+                      <CardDescription>R${Number(plano.valor).toFixed(2)}{sufixo}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                      <p className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {plano.max_eventos ?? "∞"} eventos</p>
+                      <p className="flex items-center gap-1"><Users className="h-3 w-3" /> {plano.max_usuarios ?? "∞"} usuários</p>
+                      <p className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {(plano as any).storage_limit ?? 5}GB</p>
+                      {empresa?.plano_id === plano.id && (
+                        <Badge variant="secondary" className="mt-2">Plano Atual</Badge>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button
               disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id}
               onClick={() => setShowConfirm(true)}

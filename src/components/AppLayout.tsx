@@ -194,7 +194,7 @@ export function AppLayout() {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b bg-card px-4 shrink-0">
+          <header className="h-14 flex items-center justify-between border-b bg-card px-4 shrink-0 sticky top-0 z-30">
             <SidebarTrigger className="mr-4" />
             <div className="flex items-center gap-2">
               {!isMasterAdmin && <NotificacoesEmpresa />}
