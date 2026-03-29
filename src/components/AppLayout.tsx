@@ -114,7 +114,7 @@ function NotificacoesMaster() {
               <div
                 key={n.id}
                 className={`relative p-3 border-b last:border-0 text-sm hover:bg-muted/50 transition-colors ${!n.lida ? "bg-primary/5" : ""}`}
-                onClick={() => !n.lida && markRead.mutate(n.id)}
+                onClick={() => !n.lida && n.tipo !== "upgrade_plano" && markRead.mutate(n.id)}
               >
                 {/* Delete button */}
                 <button
