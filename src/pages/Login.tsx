@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import appVersion from "../../package.json";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
