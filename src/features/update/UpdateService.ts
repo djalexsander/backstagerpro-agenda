@@ -20,9 +20,11 @@ export const registerPWAUpdate = (callback: UpdateCallback) => {
     onRegisteredSW(_swUrl, registration) {
       console.log("[UpdateService] Service Worker registrado");
       if (registration) {
+        // Check for updates every 2 minutes for faster detection
         setInterval(() => {
+          console.log("[UpdateService] Verificando atualizações...");
           registration.update();
-        }, 5 * 60 * 1000);
+        }, 2 * 60 * 1000);
       }
     },
   });
