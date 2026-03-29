@@ -115,17 +115,13 @@ export default function PlanoAssinatura() {
   const upgradeMutation = useMutation({
     mutationFn: async (planoId: string) => {
       const selectedPlano = planos?.find((p) => p.id === planoId);
-      const { error } = await supabase
-        .from("empresas")
-        .update({ plano_id: planoId })
-        .eq("id", empresaId!);
-      if (error) throw error;
 
-      // Notify master admin
+      // Notify master admin (don't update plan yet — master must accept)
       await supabase.from("notificacoes_master").insert({
         empresa_id: empresaId!,
         tipo: "upgrade_plano",
         mensagem: `${empresa?.nome_empresa} solicitou upgrade para o plano ${selectedPlano?.nome || ""}`,
+        dados: { plano_solicitado: selectedPlano?.nome, plano_id_solicitado: planoId },
       });
     },
     onSuccess: () => {
@@ -134,9 +130,9 @@ export default function PlanoAssinatura() {
       setShowUpgrade(false);
       setShowConfirm(false);
       setSelectedPlanoId(null);
-      toast.success("Plano atualizado com sucesso!");
+      toast.success("Solicitação de upgrade enviada! Aguarde aprovação.");
     },
-    onError: () => toast.error("Erro ao atualizar plano."),
+    onError: () => toast.error("Erro ao solicitar upgrade."),
   });
 
   // Register payment mutation

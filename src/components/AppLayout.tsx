@@ -127,7 +127,7 @@ function NotificacoesMaster() {
                 </p>
 
                 {/* Upgrade accept/reject buttons */}
-                {n.tipo === "upgrade_solicitado" && !n.lida && (
+                {n.tipo === "upgrade_plano" && !n.lida && (
                   <div className="flex gap-2 mt-2">
                     <Button
                       variant="default"
