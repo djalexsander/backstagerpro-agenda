@@ -6,11 +6,12 @@ import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificacoesEmpresa } from "@/components/NotificacoesEmpresa";
-import { Bell, Eye } from "lucide-react";
+import { Bell, Eye, X, Check, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 function NotificacoesMaster() {
   const queryClient = useQueryClient();
@@ -40,6 +41,39 @@ function NotificacoesMaster() {
       await supabase.from("notificacoes_master").update({ lida: true }).eq("lida", false);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notificacoes-master"] }),
+  });
+
+  const deleteNotification = useMutation({
+    mutationFn: async (id: string) => {
+      await supabase.from("notificacoes_master").delete().eq("id", id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notificacoes-master"] }),
+  });
+
+  const handleUpgradeAction = useMutation({
+    mutationFn: async ({ notif, accepted }: { notif: any; accepted: boolean }) => {
+      const empresaId = notif.empresa_id;
+      const planoSolicitado = notif.dados?.plano_solicitado;
+
+      if (accepted && planoSolicitado) {
+        // Update empresa plan
+        await supabase
+          .from("empresas")
+          .update({ plano: planoSolicitado })
+          .eq("id", empresaId);
+      }
+
+      // Mark notification as read
+      await supabase
+        .from("notificacoes_master")
+        .update({ lida: true })
+        .eq("id", notif.id);
+    },
+    onSuccess: (_, { accepted }) => {
+      queryClient.invalidateQueries({ queryKey: ["notificacoes-master"] });
+      queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
+      toast.success(accepted ? "Upgrade aceito com sucesso!" : "Solicitação rejeitada.");
+    },
   });
 
   const unreadCount = notificacoes.filter((n: any) => !n.lida).length;
@@ -72,13 +106,55 @@ function NotificacoesMaster() {
             notificacoes.map((n: any) => (
               <div
                 key={n.id}
-                className={`p-3 border-b last:border-0 text-sm cursor-pointer hover:bg-muted/50 transition-colors ${!n.lida ? "bg-primary/5" : ""}`}
+                className={`relative p-3 border-b last:border-0 text-sm hover:bg-muted/50 transition-colors ${!n.lida ? "bg-primary/5" : ""}`}
                 onClick={() => !n.lida && markRead.mutate(n.id)}
               >
-                <p className={`${!n.lida ? "font-medium" : "text-muted-foreground"}`}>{n.mensagem}</p>
+                {/* Delete button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteNotification.mutate(n.id);
+                  }}
+                  className="absolute top-2 right-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  title="Excluir"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+
+                <p className={`pr-6 ${!n.lida ? "font-medium" : "text-muted-foreground"}`}>{n.mensagem}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {format(new Date(n.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                 </p>
+
+                {/* Upgrade accept/reject buttons */}
+                {n.tipo === "upgrade_solicitado" && !n.lida && (
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="text-xs h-7 flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUpgradeAction.mutate({ notif: n, accepted: true });
+                      }}
+                    >
+                      <Check className="h-3 w-3 mr-1" /> Aceitar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="text-xs h-7 flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUpgradeAction.mutate({ notif: n, accepted: false });
+                      }}
+                    >
+                      <XCircle className="h-3 w-3 mr-1" /> Rejeitar
+                    </Button>
+                  </div>
+                )}
+
+                {/* View receipt button */}
                 {n.tipo === "comprovante_pagamento" && n.dados?.comprovante_path && (
                   <Button
                     variant="outline"
