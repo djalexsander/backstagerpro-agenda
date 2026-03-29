@@ -82,7 +82,6 @@ function NotificacoesMaster() {
     },
     onError: () => toast.error("Erro ao processar solicitação."),
   });
-  });
 
   const unreadCount = notificacoes.filter((n: any) => !n.lida).length;
 
