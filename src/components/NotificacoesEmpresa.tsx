@@ -49,7 +49,7 @@ export function NotificacoesEmpresa() {
       if (!empresaId) return null;
       const { data, error } = await supabase
         .from("empresas")
-        .select("trial_expires_at, vencimento, plano, plano_bloqueado, status_pagamento")
+        .select("trial_expires_at, vencimento, plano, plano_bloqueado, status_pagamento, plano_id")
         .eq("id", empresaId)
         .single();
       if (error) throw error;
