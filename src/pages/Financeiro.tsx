@@ -75,7 +75,7 @@ function sumExtraCosts(extras: ExtraCost[]): number {
 export default function Financeiro() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl, empresaReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
@@ -389,9 +389,11 @@ export default function Financeiro() {
               <FileDown className="h-4 w-4 mr-1" /> Exportar
             </Button>
           )}
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar
-          </Button>
+          {!empresaReadOnly && (
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1067,12 +1069,16 @@ export default function Financeiro() {
                         <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f, { empresaNome, empresaLogoUrl })} title="Exportar PDF">
                           <FileDown className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!empresaReadOnly && (
+                          <>
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

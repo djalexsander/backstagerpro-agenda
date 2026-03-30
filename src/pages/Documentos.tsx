@@ -133,7 +133,7 @@ function fmtCurrency(n: number | null) {
 export default function Documentos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl, empresaReadOnly } = useAuth();
 
   const [tab, setTab] = useState("templates");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -444,17 +444,19 @@ export default function Documentos() {
 
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => openNewTemplate("contrato")}>
-              <Plus className="h-4 w-4 mr-1" /> Contrato
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => openNewTemplate("rider")}>
-              <Plus className="h-4 w-4 mr-1" /> Rider Técnico
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => openNewTemplate("termo")}>
-              <Plus className="h-4 w-4 mr-1" /> Termo
-            </Button>
-          </div>
+          {!empresaReadOnly && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => openNewTemplate("contrato")}>
+                <Plus className="h-4 w-4 mr-1" /> Contrato
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => openNewTemplate("rider")}>
+                <Plus className="h-4 w-4 mr-1" /> Rider Técnico
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => openNewTemplate("termo")}>
+                <Plus className="h-4 w-4 mr-1" /> Termo
+              </Button>
+            </div>
+          )}
 
           {templates.length === 0 ? (
             <Card>
@@ -493,15 +495,19 @@ export default function Documentos() {
                       }}>
                         <FilePlus className="h-3 w-3 mr-1" /> Gerar
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => duplicateTemplate(tmpl)} title="Duplicar template">
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openEditTemplate(tmpl)}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteConfirm(tmpl.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      {!empresaReadOnly && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => duplicateTemplate(tmpl)} title="Duplicar template">
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openEditTemplate(tmpl)}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteConfirm(tmpl.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -555,9 +561,11 @@ export default function Documentos() {
                       <Button size="sm" variant="outline" onClick={() => exportDOCX(doc.nome, doc.conteudo_final)} title="Exportar Word">
                         <FileDown className="h-3 w-3" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteDocConfirm(doc.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      {!empresaReadOnly && (
+                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteDocConfirm(doc.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

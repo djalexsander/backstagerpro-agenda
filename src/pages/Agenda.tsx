@@ -35,7 +35,7 @@ import {
 
 export default function Agenda() {
   const navigate = useNavigate();
-  const { isAdmin, isUsuario, empresaId, empresaNome, empresaLogoUrl } = useAuth();
+  const { isAdmin, isUsuario, empresaId, empresaNome, empresaLogoUrl, empresaReadOnly } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -165,7 +165,7 @@ export default function Agenda() {
             <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
               <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
             </Button>
-            {isAdmin && (
+            {isAdmin && !empresaReadOnly && (
               <Button size="sm" onClick={() => navigate("/evento/novo")}>
                 <Plus className="h-4 w-4 mr-1" /> Criar Evento
               </Button>
@@ -386,7 +386,7 @@ export default function Agenda() {
                                 </TooltipTrigger>
                                 <TooltipContent>Ver detalhes</TooltipContent>
                               </Tooltip>
-                              {isAdmin && (
+                              {isAdmin && !empresaReadOnly && (
                                 <>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
