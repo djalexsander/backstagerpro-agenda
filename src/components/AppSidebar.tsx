@@ -14,7 +14,7 @@ const APP_VERSION = appVersion.version;
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { isMasterAdmin, isAdminEmpresa, profile, signOut, empresaLogoUrl, empresaNome } = useAuth();
+  const { isMasterAdmin, isAdminEmpresa, profile, signOut, empresaLogoUrl, empresaNome, empresaReadOnly } = useAuth();
   const { platformLogoUrl, platformName } = usePlatformBranding();
 
   // For company users, show empresa logo/name; for master, show platform branding
@@ -24,7 +24,19 @@ export function AppSidebar() {
   const isUsuario = !isMasterAdmin && !isAdminEmpresa;
 
   const companyItems = isUsuario
-    ? [{ title: "Agenda", url: "/agenda", icon: Calendar }]
+    ? [
+        { title: "Agenda", url: "/agenda", icon: Calendar },
+        ...(empresaReadOnly ? [{ title: "Plano / Assinatura", url: "/plano", icon: CreditCard }] : []),
+      ]
+    : empresaReadOnly
+    ? [
+        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+        { title: "Agenda", url: "/agenda", icon: Calendar },
+        { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+        { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
+        { title: "Documentos", url: "/documentos", icon: FileText },
+        { title: "Funcionários", url: "/funcionarios", icon: HardHat },
+      ]
     : [
         { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { title: "Agenda", url: "/agenda", icon: Calendar },
