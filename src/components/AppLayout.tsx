@@ -6,6 +6,8 @@ import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificacoesEmpresa } from "@/components/NotificacoesEmpresa";
+import { ReadOnlyBanner } from "@/components/PlanoBloqueado";
+import { Bell, Eye, X, Check, XCircle } from "lucide-react";
 import { Bell, Eye, X, Check, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -201,6 +203,7 @@ export function AppLayout() {
               {isMasterAdmin && <NotificacoesMaster />}
             </div>
           </header>
+          <ReadOnlyBanner />
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             <Outlet />
           </main>
