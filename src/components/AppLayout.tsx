@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { NotificacoesEmpresa } from "@/components/NotificacoesEmpresa";
 import { ReadOnlyBanner } from "@/components/PlanoBloqueado";
 import { Bell, Eye, X, Check, XCircle } from "lucide-react";
-import { Bell, Eye, X, Check, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
