@@ -13,6 +13,7 @@ interface AuthContextType {
   role: AppRole | null;
   empresaId: string | null;
   empresaBloqueada: boolean;
+  empresaReadOnly: boolean;
   isMasterAdmin: boolean;
   isAdminEmpresa: boolean;
   isUsuario: boolean;
@@ -45,12 +46,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileRes.data.empresa_id) {
         const { data: empresa } = await supabase
           .from("empresas")
-          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa")
+          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status")
           .eq("id", profileRes.data.empresa_id)
           .single();
         if (empresa) {
           const isExpired = empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date();
-          setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired);
+          const isInactive = (empresa as any).status === "inativo";
+          setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired || isInactive);
           setEmpresaLogoUrl((empresa as any).logo_url || null);
           setEmpresaNome((empresa as any).nome_empresa || null);
         } else {
@@ -134,10 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const empresaId = profile?.empresa_id ?? null;
 
   return (
+    const empresaReadOnlyValue = isMasterAdmin ? false : empresaBloqueada;
+
+    return (
     <AuthContext.Provider value={{
       user, session, profile, role, empresaId,
       empresaLogoUrl, empresaNome,
-      empresaBloqueada: isMasterAdmin ? false : empresaBloqueada,
+      empresaBloqueada: empresaReadOnlyValue,
+      empresaReadOnly: empresaReadOnlyValue,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
       loading, signIn, signOut,
