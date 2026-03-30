@@ -135,10 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isUsuario = role === "usuario";
   const empresaId = profile?.empresa_id ?? null;
 
-  return (
-    const empresaReadOnlyValue = isMasterAdmin ? false : empresaBloqueada;
+  const empresaReadOnlyValue = isMasterAdmin ? false : empresaBloqueada;
 
-    return (
+  return (
     <AuthContext.Provider value={{
       user, session, profile, role, empresaId,
       empresaLogoUrl, empresaNome,
