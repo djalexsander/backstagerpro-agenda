@@ -17,7 +17,7 @@ const fmt = (n: number) =>
 export default function Funcionarios() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId } = useAuth();
+  const { empresaId, empresaReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [nome, setNome] = useState("");
@@ -119,14 +119,16 @@ export default function Funcionarios() {
                 <TableCell>{f.funcao || "—"}</TableCell>
                 <TableCell className="text-right">{fmt(Number(f.cache_padrao))}</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {!empresaReadOnly && (
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -191,9 +193,11 @@ export default function Funcionarios() {
             <Users className="h-5 w-5 text-primary" />
             Equipe ({equipe.length})
           </CardTitle>
-          <Button size="sm" variant="outline" onClick={() => openAdd("equipe")}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar
-          </Button>
+          {!empresaReadOnly && (
+            <Button size="sm" variant="outline" onClick={() => openAdd("equipe")}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+          )}
         </CardHeader>
         <CardContent>{renderTable(equipe)}</CardContent>
       </Card>
@@ -205,9 +209,11 @@ export default function Funcionarios() {
             <UserPlus className="h-5 w-5 text-accent" />
             Freelancers ({freelancers.length})
           </CardTitle>
-          <Button size="sm" variant="outline" onClick={() => openAdd("freelancer")}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar
-          </Button>
+          {!empresaReadOnly && (
+            <Button size="sm" variant="outline" onClick={() => openAdd("freelancer")}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+          )}
         </CardHeader>
         <CardContent>{renderTable(freelancers)}</CardContent>
       </Card>
