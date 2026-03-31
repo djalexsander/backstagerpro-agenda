@@ -314,7 +314,7 @@ export default function ConfiguracoesSistema() {
               <Shield className="h-5 w-5 text-primary" />
               Segurança & Manutenção
             </CardTitle>
-            <CardDescription>Controles de acesso ao sistema.</CardDescription>
+            <CardDescription>Controles de acesso e atualização do sistema.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -330,6 +330,27 @@ export default function ConfiguracoesSistema() {
                   updateField("maintenance_mode", checked ? "true" : "false")
                 }
               />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label>Modo de Atualização</Label>
+              <p className="text-xs text-muted-foreground">
+                Define como as empresas recebem novas versões do aplicativo.
+              </p>
+              <Select
+                value={form.update_mode ?? "manual"}
+                onValueChange={(val) => updateField("update_mode", val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o modo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual — Exibe banner para atualizar</SelectItem>
+                  <SelectItem value="auto">Automático — Atualiza sem interação</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>

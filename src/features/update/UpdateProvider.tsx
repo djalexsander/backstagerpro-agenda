@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import {
   isTauri,
   registerPWAUpdate,
@@ -6,6 +6,7 @@ import {
   checkForTauriUpdate,
   installTauriUpdate,
 } from "./UpdateService";
+import { supabase } from "@/integrations/supabase/client";
 
 interface UpdateContextType {
   updateAvailable: boolean;
@@ -28,10 +29,10 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isUpdating, setIsUpdating] = useState(false);
   const [newVersion, setNewVersion] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const autoInstallTriggered = useRef(false);
 
   useEffect(() => {
     if (isTauri()) {
-      // Tauri: check immediately + every 5 min
       const checkTauri = async () => {
         const result = await checkForTauriUpdate();
         if (result.available) {
@@ -44,7 +45,6 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const interval = setInterval(checkTauri, 5 * 60 * 1000);
       return () => clearInterval(interval);
     } else {
-      // PWA: register service worker
       registerPWAUpdate((available) => {
         if (available) {
           setUpdateAvailable(true);
@@ -54,6 +54,35 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     }
   }, []);
+
+  // Auto-install when update_mode is "auto"
+  useEffect(() => {
+    if (!updateAvailable || autoInstallTriggered.current) return;
+
+    const checkAutoMode = async () => {
+      try {
+        const { data } = await supabase
+          .from("system_settings")
+          .select("value")
+          .eq("key", "update_mode")
+          .maybeSingle();
+
+        if (data?.value === "auto") {
+          autoInstallTriggered.current = true;
+          setIsUpdating(true);
+          if (isTauri()) {
+            await installTauriUpdate();
+          } else {
+            await installPWAUpdate();
+          }
+        }
+      } catch (err) {
+        console.warn("[UpdateProvider] Erro ao verificar modo de atualização:", err);
+      }
+    };
+
+    checkAutoMode();
+  }, [updateAvailable]);
 
   const installUpdate = useCallback(async () => {
     setIsUpdating(true);
