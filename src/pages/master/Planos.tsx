@@ -218,11 +218,11 @@ export default function Planos() {
           <DialogHeader><DialogTitle>{editItem ? "Editar Plano" : "Novo Plano"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Nome do Plano *</Label>
-              <Input value={form.nome} onChange={(e) => setForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: basico" />
+              <Label>Nome <span className="text-destructive">*</span></Label>
+              <Input value={form.nome} onChange={(e) => setForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Plano Básico" />
             </div>
             <div className="space-y-2">
-              <Label>Periodicidade *</Label>
+              <Label>Tipo</Label>
               <Select value={form.periodicidade} onValueChange={(v) => setForm(p => ({ ...p, periodicidade: v }))}>
                 <SelectTrigger>
                   <SelectValue />
@@ -234,41 +234,26 @@ export default function Planos() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>{getValorLabel()}</Label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input type="number" step="0.01" min="0" className="pl-9" value={form.valor} onChange={(e) => setForm(p => ({ ...p, valor: e.target.value }))} placeholder="99.90" />
+            {form.periodicidade !== "vitalicio" && (
+              <div className="space-y-2">
+                <Label>Duração (dias)</Label>
+                <Input type="number" min="0" value={form.trial_days} onChange={(e) => setForm(p => ({ ...p, trial_days: e.target.value }))} placeholder="30" />
               </div>
+            )}
+            <div className="space-y-2">
+              <Label>Preço (R$)</Label>
+              <Input type="number" step="0.01" min="0" value={form.valor} onChange={(e) => setForm(p => ({ ...p, valor: e.target.value }))} placeholder="99.90" />
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
-              <Textarea value={form.descricao} onChange={(e) => setForm(p => ({ ...p, descricao: e.target.value }))} rows={2} />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Máx. Usuários</Label>
-                <Input type="number" min="1" value={form.max_usuarios} onChange={(e) => setForm(p => ({ ...p, max_usuarios: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Máx. Eventos</Label>
-                <Input type="number" min="1" value={form.max_eventos} onChange={(e) => setForm(p => ({ ...p, max_eventos: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Trial (dias)</Label>
-                <Input type="number" min="0" value={form.trial_days} onChange={(e) => setForm(p => ({ ...p, trial_days: e.target.value }))} placeholder="0 = sem trial" />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={form.ativo} onCheckedChange={(v) => setForm(p => ({ ...p, ativo: v }))} />
-              <Label>Plano ativo</Label>
+              <Textarea value={form.descricao} onChange={(e) => setForm(p => ({ ...p, descricao: e.target.value }))} rows={2} placeholder="Ex: Acesso completo por 30 dias" />
             </div>
           </div>
           <DialogFooter>
-            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome || !form.valor}>
               {saveMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>
+            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>

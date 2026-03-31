@@ -212,8 +212,13 @@ export default function PlanoAssinatura() {
               <div className="flex items-center gap-3">
                 <CreditCard className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Valor Mensal</p>
-                  <p className="font-semibold">R${Number(planoAtual.valor).toFixed(2)}/mês</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(planoAtual as any).periodicidade === "vitalicio" ? "Valor Único" : (planoAtual as any).periodicidade === "anual" ? "Valor Anual" : "Valor Mensal"}
+                  </p>
+                  <p className="font-semibold">
+                    R${Number(planoAtual.valor).toFixed(2)}
+                    {(planoAtual as any).periodicidade === "vitalicio" ? "" : (planoAtual as any).periodicidade === "anual" ? "/ano" : "/mês"}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
