@@ -49,6 +49,8 @@ export default function Agenda() {
   const [periodEnd, setPeriodEnd] = useState("");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [agendaPage, setAgendaPage] = useState(0);
+  const AGENDA_PAGE_SIZE = 25;
 
   // Export dialog state
   const [exportOpen, setExportOpen] = useState(false);
