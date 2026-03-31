@@ -288,6 +288,10 @@ export default function EventForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isEditing && !canCreateEvent) {
+      toast({ title: "Limite atingido", description: "Seu plano não permite criar mais eventos. Faça upgrade.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
 
     try {
