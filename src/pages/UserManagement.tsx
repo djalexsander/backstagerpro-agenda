@@ -18,6 +18,7 @@ export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { empresaId, isMasterAdmin, user } = useAuth();
+  const { canCreateUser, maxUsuarios, currentUsuarios } = usePlanLimits();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [deleteUser, setDeleteUser] = useState<any>(null);
