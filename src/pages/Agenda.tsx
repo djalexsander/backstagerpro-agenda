@@ -149,6 +149,13 @@ export default function Agenda() {
     return matchesSearch && matchesStatus && matchesCity && matchesDate && matchesPeriod;
   });
 
+  // Reset page when filters change
+  const filteredKey = `${search}${statusFilter}${cityFilter}${selectedDate}${periodStart}${periodEnd}`;
+  useEffect(() => { setAgendaPage(0); }, [filteredKey]);
+
+  const agendaTotalPages = Math.max(1, Math.ceil(filtered.length / AGENDA_PAGE_SIZE));
+  const paginatedFiltered = filtered.slice(agendaPage * AGENDA_PAGE_SIZE, (agendaPage + 1) * AGENDA_PAGE_SIZE);
+
   // Stats for current month
   const now = new Date();
   const monthEvents = events.filter((e) => e.date && isSameMonth(parseISO(e.date), now));
