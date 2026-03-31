@@ -47,6 +47,7 @@ export default function EventForm() {
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
   const { user, empresaId, isAdmin } = useAuth();
+  const { canCreateEvent } = usePlanLimits();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
