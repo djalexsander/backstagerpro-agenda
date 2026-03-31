@@ -275,8 +275,9 @@ export default function EventForm() {
   };
 
   const downloadMaterialFile = async (filePath: string, fileName: string) => {
-    const { data } = supabase.storage.from("event-files").getPublicUrl(filePath);
-    const response = await fetch(data.publicUrl);
+    const { data, error: signError } = await supabase.storage.from("event-files").createSignedUrl(filePath, 3600);
+    if (signError || !data?.signedUrl) throw signError || new Error("Erro ao gerar URL");
+    const response = await fetch(data.signedUrl);
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
