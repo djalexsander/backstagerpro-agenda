@@ -582,7 +582,7 @@ export default function Documentos() {
             <DialogTitle>{editTemplate ? "Editar Template" : "Novo Template"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome do Template</Label>
                 <Input value={formNome} onChange={(e) => setFormNome(e.target.value)} placeholder="Ex: Contrato Padrão Show" />
