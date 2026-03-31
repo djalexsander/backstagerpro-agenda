@@ -168,9 +168,26 @@ export default function Agenda() {
               <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
             </Button>
             {isAdmin && !empresaReadOnly && (
-              <Button size="sm" onClick={() => navigate("/evento/novo")}>
-                <Plus className="h-4 w-4 mr-1" /> Criar Evento
-              </Button>
+              canCreateEvent ? (
+                <Button size="sm" onClick={() => navigate("/evento/novo")}>
+                  <Plus className="h-4 w-4 mr-1" /> Criar Evento
+                </Button>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button size="sm" disabled>
+                          <Plus className="h-4 w-4 mr-1" /> Criar Evento
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Limite atingido: {currentEventos}/{maxEventos} eventos. Faça upgrade do plano.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )
             )}
           </div>
         </div>
