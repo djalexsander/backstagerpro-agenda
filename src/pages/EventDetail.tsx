@@ -182,8 +182,9 @@ export default function EventDetail() {
     const { path, name } = downloadPending;
     setDownloadPending(null);
     try {
-      const { data } = supabase.storage.from("event-files").getPublicUrl(path);
-      const response = await fetch(data.publicUrl);
+      const { data, error: signError } = await supabase.storage.from("event-files").createSignedUrl(path, 3600);
+      if (signError || !data?.signedUrl) throw signError || new Error("Erro ao gerar URL");
+      const response = await fetch(data.signedUrl);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
