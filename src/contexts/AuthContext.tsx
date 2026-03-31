@@ -46,11 +46,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileRes.data.empresa_id) {
         const { data: empresa } = await supabase
           .from("empresas")
-          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status")
+          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento")
           .eq("id", profileRes.data.empresa_id)
           .single();
         if (empresa) {
-          const isExpired = empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date();
+          const hasPlano = !!(empresa as any).plano_id;
+          const vencimento = (empresa as any).vencimento;
+          // If company has a plan, check vencimento; otherwise check trial_expires_at
+          const isExpired = hasPlano
+            ? (vencimento && new Date(vencimento) < new Date())
+            : (empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date());
           const isInactive = (empresa as any).status === "inativo";
           setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired || isInactive);
           setEmpresaLogoUrl((empresa as any).logo_url || null);
