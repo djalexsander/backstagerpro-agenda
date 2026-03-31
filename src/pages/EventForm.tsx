@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ export default function EventForm() {
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
   const { user, empresaId, isAdmin } = useAuth();
+  const { canCreateEvent } = usePlanLimits();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -286,6 +288,10 @@ export default function EventForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isEditing && !canCreateEvent) {
+      toast({ title: "Limite atingido", description: "Seu plano não permite criar mais eventos. Faça upgrade.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
 
     try {

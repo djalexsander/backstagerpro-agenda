@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportAgendaPDF } from "@/lib/pdf-export";
@@ -36,6 +37,7 @@ import {
 export default function Agenda() {
   const navigate = useNavigate();
   const { isAdmin, isUsuario, empresaId, empresaNome, empresaLogoUrl, empresaReadOnly } = useAuth();
+  const { canCreateEvent, maxEventos, currentEventos } = usePlanLimits();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -166,9 +168,26 @@ export default function Agenda() {
               <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
             </Button>
             {isAdmin && !empresaReadOnly && (
-              <Button size="sm" onClick={() => navigate("/evento/novo")}>
-                <Plus className="h-4 w-4 mr-1" /> Criar Evento
-              </Button>
+              canCreateEvent ? (
+                <Button size="sm" onClick={() => navigate("/evento/novo")}>
+                  <Plus className="h-4 w-4 mr-1" /> Criar Evento
+                </Button>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button size="sm" disabled>
+                          <Plus className="h-4 w-4 mr-1" /> Criar Evento
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Limite atingido: {currentEventos}/{maxEventos} eventos. Faça upgrade do plano.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )
             )}
           </div>
         </div>

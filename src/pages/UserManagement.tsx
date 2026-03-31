@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { empresaId, isMasterAdmin, user } = useAuth();
+  const { canCreateUser, maxUsuarios, currentUsuarios } = usePlanLimits();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [deleteUser, setDeleteUser] = useState<any>(null);
@@ -170,9 +172,12 @@ export default function UserManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Gerenciamento de Usuários</h1>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        {!canCreateUser && (
+          <p className="text-sm text-destructive">Limite atingido: {currentUsuarios}/{maxUsuarios} usuários. Faça upgrade do plano.</p>
+        )}
+        <Dialog open={addOpen} onOpenChange={(open) => { if (!canCreateUser && open) return; setAddOpen(open); }}>
           <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Usuário</Button>
+            <Button size="sm" disabled={!canCreateUser}><Plus className="h-4 w-4 mr-1" /> Novo Usuário</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Adicionar Usuário</DialogTitle></DialogHeader>

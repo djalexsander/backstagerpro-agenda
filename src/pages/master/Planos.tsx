@@ -244,6 +244,16 @@ export default function Planos() {
               <Label>Preço (R$)</Label>
               <Input type="number" step="0.01" min="0" value={form.valor} onChange={(e) => setForm(p => ({ ...p, valor: e.target.value }))} placeholder="99.90" />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Máx. Usuários</Label>
+                <Input type="number" min="1" value={form.max_usuarios} onChange={(e) => setForm(p => ({ ...p, max_usuarios: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Máx. Eventos</Label>
+                <Input type="number" min="1" value={form.max_eventos} onChange={(e) => setForm(p => ({ ...p, max_eventos: e.target.value }))} />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
               <Textarea value={form.descricao} onChange={(e) => setForm(p => ({ ...p, descricao: e.target.value }))} rows={2} placeholder="Ex: Acesso completo por 30 dias" />
