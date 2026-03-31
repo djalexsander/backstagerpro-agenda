@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
@@ -49,6 +49,8 @@ export default function Agenda() {
   const [periodEnd, setPeriodEnd] = useState("");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [agendaPage, setAgendaPage] = useState(0);
+  const AGENDA_PAGE_SIZE = 25;
 
   // Export dialog state
   const [exportOpen, setExportOpen] = useState(false);
@@ -146,6 +148,13 @@ export default function Agenda() {
     }
     return matchesSearch && matchesStatus && matchesCity && matchesDate && matchesPeriod;
   });
+
+  // Reset page when filters change
+  const filteredKey = `${search}${statusFilter}${cityFilter}${selectedDate}${periodStart}${periodEnd}`;
+  useEffect(() => { setAgendaPage(0); }, [filteredKey]);
+
+  const agendaTotalPages = Math.max(1, Math.ceil(filtered.length / AGENDA_PAGE_SIZE));
+  const paginatedFiltered = filtered.slice(agendaPage * AGENDA_PAGE_SIZE, (agendaPage + 1) * AGENDA_PAGE_SIZE);
 
   // Stats for current month
   const now = new Date();
@@ -354,7 +363,7 @@ export default function Agenda() {
                   {filtered.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum evento encontrado.</TableCell></TableRow>
                   ) : (
-                    filtered.map((event) => {
+                    paginatedFiltered.map((event) => {
                       const artists = getEventArtists(event.id);
                       const displayArtists = getEventArtistsDisplay(event.id, event.artist);
                       const allArtistsText = artists.length > 0 ? artists.join(", ") : event.artist;
@@ -435,12 +444,32 @@ export default function Agenda() {
               </Table>
 
               {/* Expanded rows rendered outside table for layout */}
-              {filtered.map((event) =>
+              {paginatedFiltered.map((event) =>
                 expandedRow === event.id && empresaId ? (
                   <div key={`exp-${event.id}`} className="border-t">
                     <EventRowExpansion eventId={event.id} numDays={event.num_days || 1} empresaId={empresaId} />
                   </div>
                 ) : null
+              )}
+
+              {/* Pagination */}
+              {agendaTotalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Mostrando {agendaPage * AGENDA_PAGE_SIZE + 1}–{Math.min((agendaPage + 1) * AGENDA_PAGE_SIZE, filtered.length)} de {filtered.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={agendaPage === 0} onClick={() => setAgendaPage(p => p - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {agendaPage + 1} / {agendaTotalPages}
+                    </span>
+                    <Button variant="outline" size="sm" disabled={agendaPage >= agendaTotalPages - 1} onClick={() => setAgendaPage(p => p + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
