@@ -579,9 +579,9 @@ export default function Empresas() {
                               </TableCell>
                               <TableCell className="text-right space-x-1">
                                 {p.comprovante_path && (
-                                  <Button size="sm" variant="outline" className="text-primary border-primary hover:bg-primary/10" onClick={() => {
-                                    const { data } = supabase.storage.from("comprovantes").getPublicUrl(p.comprovante_path);
-                                    window.open(data.publicUrl, "_blank");
+                                  <Button size="sm" variant="outline" className="text-primary border-primary hover:bg-primary/10" onClick={async () => {
+                                    const { data } = await supabase.storage.from("comprovantes").createSignedUrl(p.comprovante_path, 3600);
+                                    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
                                   }}>
                                     <FileCheck className="h-4 w-4 mr-1" /> Ver
                                   </Button>
