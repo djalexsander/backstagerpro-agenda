@@ -172,9 +172,12 @@ export default function UserManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Gerenciamento de Usuários</h1>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        {!canCreateUser && (
+          <p className="text-sm text-destructive">Limite atingido: {currentUsuarios}/{maxUsuarios} usuários. Faça upgrade do plano.</p>
+        )}
+        <Dialog open={addOpen} onOpenChange={(open) => { if (!canCreateUser && open) return; setAddOpen(open); }}>
           <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Usuário</Button>
+            <Button size="sm" disabled={!canCreateUser}><Plus className="h-4 w-4 mr-1" /> Novo Usuário</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Adicionar Usuário</DialogTitle></DialogHeader>
