@@ -363,7 +363,7 @@ export default function Agenda() {
                   {filtered.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum evento encontrado.</TableCell></TableRow>
                   ) : (
-                    filtered.map((event) => {
+                    paginatedFiltered.map((event) => {
                       const artists = getEventArtists(event.id);
                       const displayArtists = getEventArtistsDisplay(event.id, event.artist);
                       const allArtistsText = artists.length > 0 ? artists.join(", ") : event.artist;
