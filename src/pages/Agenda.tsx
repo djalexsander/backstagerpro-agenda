@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportAgendaPDF } from "@/lib/pdf-export";
