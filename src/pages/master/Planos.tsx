@@ -148,9 +148,9 @@ export default function Planos() {
               <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                 <span>Até {p.max_usuarios} usuários</span>
                 <span>Até {p.max_eventos} eventos</span>
-                {p.trial_days > 0 && (
-                  <span className="flex items-center gap-1 text-[hsl(var(--warning))]">
-                    <Clock className="h-3 w-3" /> Teste grátis: {p.trial_days} dias
+                {p.trial_days > 0 && p.periodicidade !== "vitalicio" && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Duração: {p.trial_days} dias
                   </span>
                 )}
               </div>
