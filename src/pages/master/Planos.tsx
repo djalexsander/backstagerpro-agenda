@@ -133,7 +133,7 @@ export default function Planos() {
       {/* Cards overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {planos.filter(p => p.ativo).map((p) => {
-          const suffix = PERIODICIDADE_SUFFIX[p.periodicidade] || "/mês";
+          const suffix = p.periodicidade in PERIODICIDADE_SUFFIX ? PERIODICIDADE_SUFFIX[p.periodicidade] : "/mês";
           return (
             <div key={p.id} className="rounded-xl border bg-card p-5 space-y-3">
               <div className="flex items-center justify-between">
