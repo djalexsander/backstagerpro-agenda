@@ -126,7 +126,7 @@ export default function Funcionarios() {
                       <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
+                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(f.id)} title="Excluir">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
