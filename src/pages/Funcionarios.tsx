@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, Users, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,6 +21,7 @@ export default function Funcionarios() {
   const { empresaId, empresaReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [nome, setNome] = useState("");
   const [funcao, setFuncao] = useState("");
   const [cachePadrao, setCachePadrao] = useState("");
@@ -124,7 +126,7 @@ export default function Funcionarios() {
                       <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteMutation.mutate(f.id)} title="Excluir">
+                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(f.id)} title="Excluir">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -142,6 +144,22 @@ export default function Funcionarios() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Funcionários</h1>
       </div>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir funcionário?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita. O funcionário será removido permanentemente.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (deleteId) { deleteMutation.mutate(deleteId); setDeleteId(null); } }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
