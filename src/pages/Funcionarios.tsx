@@ -21,6 +21,7 @@ export default function Funcionarios() {
   const { empresaId, empresaReadOnly } = useAuth();
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [nome, setNome] = useState("");
   const [funcao, setFuncao] = useState("");
   const [cachePadrao, setCachePadrao] = useState("");
