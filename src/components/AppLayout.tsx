@@ -168,10 +168,10 @@ function NotificacoesMaster() {
                     variant="outline"
                     size="sm"
                     className="mt-2 text-xs"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      const { data } = supabase.storage.from("comprovantes").getPublicUrl(n.dados.comprovante_path);
-                      window.open(data.publicUrl, "_blank");
+                      const { data, error } = await supabase.storage.from("comprovantes").createSignedUrl(n.dados.comprovante_path, 3600);
+                      if (data?.signedUrl) window.open(data.signedUrl, "_blank");
                     }}
                   >
                     <Eye className="h-3 w-3 mr-1" /> Ver Comprovante
