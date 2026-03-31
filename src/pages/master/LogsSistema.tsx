@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollText, RefreshCw, Search, Filter } from "lucide-react";
+import { ScrollText, RefreshCw, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -41,31 +41,45 @@ const TIPO_COLORS: Record<string, string> = {
   info: "bg-muted text-muted-foreground border-border",
 };
 
+const PAGE_SIZE = 50;
+
 export default function LogsSistema() {
   const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroBusca, setFiltroBusca] = useState("");
   const [empresas, setEmpresas] = useState<{ id: string; nome_empresa: string }[]>([]);
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
   const fetchLogs = async () => {
     setLoading(true);
+
+    // Count query
+    let countQuery = supabase
+      .from("system_logs")
+      .select("id", { count: "exact", head: true });
+
+    if (filtroTipo !== "todos") countQuery = countQuery.eq("tipo", filtroTipo);
+    if (filtroEmpresa) countQuery = countQuery.eq("empresa_id", filtroEmpresa);
+    if (filtroBusca) countQuery = countQuery.ilike("descricao", `%${filtroBusca}%`);
+
+    const { count } = await countQuery;
+    setTotalCount(count ?? 0);
+
+    // Data query with pagination
     let query = supabase
       .from("system_logs")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    if (filtroTipo !== "todos") {
-      query = query.eq("tipo", filtroTipo);
-    }
-    if (filtroEmpresa) {
-      query = query.eq("empresa_id", filtroEmpresa);
-    }
-    if (filtroBusca) {
-      query = query.ilike("descricao", `%${filtroBusca}%`);
-    }
+    if (filtroTipo !== "todos") query = query.eq("tipo", filtroTipo);
+    if (filtroEmpresa) query = query.eq("empresa_id", filtroEmpresa);
+    if (filtroBusca) query = query.ilike("descricao", `%${filtroBusca}%`);
 
     const { data } = await query;
     setLogs((data as any) || []);
@@ -81,9 +95,14 @@ export default function LogsSistema() {
     fetchEmpresas();
   }, []);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [filtroTipo, filtroEmpresa, filtroBusca]);
+
   useEffect(() => {
     fetchLogs();
-  }, [filtroTipo, filtroEmpresa, filtroBusca]);
+  }, [filtroTipo, filtroEmpresa, filtroBusca, page]);
 
   return (
     <div className="space-y-6">
@@ -146,7 +165,7 @@ export default function LogsSistema() {
           <CardTitle className="text-base flex items-center gap-2">
             <ScrollText className="h-4 w-4 text-muted-foreground" />
             Registros de Atividade
-            <Badge variant="secondary" className="ml-auto">{logs.length}</Badge>
+            <Badge variant="secondary" className="ml-auto">{totalCount}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -159,38 +178,60 @@ export default function LogsSistema() {
               Nenhum registro encontrado.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">Data/Hora</TableHead>
-                  <TableHead className="w-[120px]">Tipo</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="w-[150px]">Usuário</TableHead>
-                  <TableHead className="w-[150px]">Empresa</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                      {format(new Date(log.created_at), "dd/MM/yy HH:mm:ss", { locale: ptBR })}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={TIPO_COLORS[log.tipo] || TIPO_COLORS.info}>
-                        {TIPO_LABELS[log.tipo] || log.tipo}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{log.descricao}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground truncate max-w-[150px]">
-                      {log.user_name || "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground truncate max-w-[150px]">
-                      {log.empresa_nome || "—"}
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[160px]">Data/Hora</TableHead>
+                    <TableHead className="w-[120px]">Tipo</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead className="w-[150px]">Usuário</TableHead>
+                    <TableHead className="w-[150px]">Empresa</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(log.created_at), "dd/MM/yy HH:mm:ss", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={TIPO_COLORS[log.tipo] || TIPO_COLORS.info}>
+                          {TIPO_LABELS[log.tipo] || log.tipo}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{log.descricao}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[150px]">
+                        {log.user_name || "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[150px]">
+                        {log.empresa_nome || "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} de {totalCount}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {page + 1} / {totalPages}
+                    </span>
+                    <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
