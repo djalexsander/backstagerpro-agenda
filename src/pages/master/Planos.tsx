@@ -130,43 +130,6 @@ export default function Planos() {
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" /> Novo Plano</Button>
       </div>
 
-      {/* Cards overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {planos.filter(p => p.ativo).map((p) => {
-          const suffix = p.periodicidade in PERIODICIDADE_SUFFIX ? PERIODICIDADE_SUFFIX[p.periodicidade] : "/mês";
-          return (
-            <div key={p.id} className="rounded-xl border bg-card p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold capitalize text-lg">{p.nome}</h3>
-                <Badge variant={p.ativo ? "default" : "secondary"}>{p.ativo ? "Ativo" : "Inativo"}</Badge>
-              </div>
-              <p className="text-3xl font-bold text-primary">
-                {formatCurrency(p.valor)}
-                {suffix && <span className="text-sm font-normal text-muted-foreground">{suffix}</span>}
-              </p>
-              {p.descricao && <p className="text-sm text-muted-foreground">{p.descricao}</p>}
-              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                <span>Até {p.max_usuarios} usuários</span>
-                <span>Até {p.max_eventos} eventos</span>
-                {p.trial_days > 0 && p.periodicidade !== "vitalicio" && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> Duração: {p.trial_days} dias
-                  </span>
-                )}
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(p)}>
-                  <Pencil className="h-4 w-4 mr-1" /> Editar
-                </Button>
-                <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={() => deleteMutation.mutate(p.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Table */}
       <div className="rounded-lg border bg-card">
         <Table>
