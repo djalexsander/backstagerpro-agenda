@@ -444,12 +444,32 @@ export default function Agenda() {
               </Table>
 
               {/* Expanded rows rendered outside table for layout */}
-              {filtered.map((event) =>
+              {paginatedFiltered.map((event) =>
                 expandedRow === event.id && empresaId ? (
                   <div key={`exp-${event.id}`} className="border-t">
                     <EventRowExpansion eventId={event.id} numDays={event.num_days || 1} empresaId={empresaId} />
                   </div>
                 ) : null
+              )}
+
+              {/* Pagination */}
+              {agendaTotalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Mostrando {agendaPage * AGENDA_PAGE_SIZE + 1}–{Math.min((agendaPage + 1) * AGENDA_PAGE_SIZE, filtered.length)} de {filtered.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={agendaPage === 0} onClick={() => setAgendaPage(p => p - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {agendaPage + 1} / {agendaTotalPages}
+                    </span>
+                    <Button variant="outline" size="sm" disabled={agendaPage >= agendaTotalPages - 1} onClick={() => setAgendaPage(p => p + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
