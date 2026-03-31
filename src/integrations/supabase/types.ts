@@ -862,6 +862,7 @@ export type Database = {
         Returns: boolean
       }
       is_master_admin: { Args: { _user_id: string }; Returns: boolean }
+      user_owns_event_file: { Args: { file_path: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user" | "master_admin" | "admin_empresa" | "usuario"
