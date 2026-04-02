@@ -372,14 +372,21 @@ export default function Empresas() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Plano</Label>
-                <Select value={form.plano} onValueChange={(v) => setForm(p => ({ ...p, plano: v }))}>
+                <Select value={form.plano} onValueChange={(v) => {
+                  const selectedPlano = planos.find((p: any) => p.nome === v);
+                  const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+                  setForm(p => ({ ...p, plano: v, vencimento: isVitalicio ? null : p.vencimento || addMonths(new Date(), 1) }));
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {planos.map((p: any) => (
-                      <SelectItem key={p.nome} value={p.nome} className="capitalize">
-                        {p.nome} — R$ {Number(p.valor).toFixed(2)}/mês
-                      </SelectItem>
-                    ))}
+                    {planos.map((p: any) => {
+                      const sufixo = p.periodicidade === "vitalicio" ? "" : p.periodicidade === "anual" ? "/ano" : "/mês";
+                      return (
+                        <SelectItem key={p.nome} value={p.nome} className="capitalize">
+                          {p.nome} — R$ {Number(p.valor).toFixed(2)}{sufixo}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
