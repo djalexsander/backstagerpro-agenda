@@ -412,32 +412,44 @@ export default function Empresas() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Data de Vencimento</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !form.vencimento && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {form.vencimento ? format(form.vencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={form.vencimento}
-                      onSelect={(date) => date && setForm(p => ({ ...p, vencimento: date }))}
-                      initialFocus
-                      className={cn("p-3 pointer-events-auto")}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
+              {(() => {
+                const selectedPlano = planos.find((p: any) => p.nome === form.plano);
+                const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+                if (isVitalicio) return (
+                  <div className="space-y-2">
+                    <Label>Data de Vencimento</Label>
+                    <p className="text-sm text-muted-foreground pt-2">Plano vitalício não possui vencimento</p>
+                  </div>
+                );
+                return (
+                  <div className="space-y-2">
+                    <Label>Data de Vencimento</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !form.vencimento && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {form.vencimento ? format(form.vencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={form.vencimento ?? undefined}
+                          onSelect={(date) => date && setForm(p => ({ ...p, vencimento: date }))}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter>
