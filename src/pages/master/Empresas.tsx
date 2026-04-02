@@ -75,7 +75,9 @@ export default function Empresas() {
       const plano = planos.find((p: any) => p.nome === form.plano);
       const trialDays = plano?.trial_days || 0;
 
-      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: form.vencimento.toISOString() };
+      const selectedPlano = planos.find((p: any) => p.nome === form.plano);
+      const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null) };
 
       if (!editItem) {
         const today = new Date();
