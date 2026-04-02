@@ -540,7 +540,9 @@ export default function Empresas() {
                           <CalendarDays className={`h-4 w-4 ${vencido ? "text-destructive" : "text-muted-foreground"}`} />
                           <div>
                             <p className="text-muted-foreground text-xs">Vencimento do Plano</p>
-                            {detailEmpresa.vencimento ? (
+                            {planoInfo?.periodicidade === "vitalicio" ? (
+                              <p className="font-medium text-accent">Vitalício</p>
+                            ) : detailEmpresa.vencimento ? (
                               <p className={`font-medium ${vencido ? "text-destructive" : ""}`}>
                                 {format(new Date(detailEmpresa.vencimento), "dd/MM/yyyy", { locale: ptBR })}
                                 {vencido && <span className="text-xs ml-1">(Vencido!)</span>}
