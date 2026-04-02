@@ -82,7 +82,7 @@ export default function Empresas() {
       if (!editItem) {
         const today = new Date();
         payload.data_contrato = format(today, "yyyy-MM-dd");
-        payload.vencimento = form.vencimento.toISOString();
+        payload.vencimento = isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null);
         payload.plano_bloqueado = false;
 
         if (trialDays > 0) {
