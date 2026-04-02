@@ -667,13 +667,17 @@ export default function Empresas() {
                     <TableCell>{e.email || "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{e.plano}</Badge></TableCell>
                     <TableCell>
-                      {e.vencimento ? (
-                        <span className={`text-xs ${vencido ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                          {vencido ? "Vencido " : ""}{format(new Date(e.vencimento), "dd/MM/yyyy", { locale: ptBR })}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      {(() => {
+                        const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
+                        if (planoInfo?.periodicidade === "vitalicio") return <span className="text-xs font-medium text-accent">Vitalício</span>;
+                        return e.vencimento ? (
+                          <span className={`text-xs ${vencido ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                            {vencido ? "Vencido " : ""}{format(new Date(e.vencimento), "dd/MM/yyyy", { locale: ptBR })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {blocked ? (
