@@ -218,18 +218,26 @@ export default function Empresas() {
       const { error } = await supabase.from("pagamentos").update({ status: "pago" } as any).eq("id", pagamento.id);
       if (error) throw error;
 
-      // Renew empresa vencimento: extend by 1 month from current vencimento
+      // Renew empresa vencimento: extend by 1 month from current vencimento (skip for vitalicio)
       const empresa = empresas.find((e: any) => e.id === pagamento.empresa_id);
       if (empresa) {
-        const currentVencimento = empresa.vencimento ? new Date(empresa.vencimento) : new Date();
-        const baseDate = currentVencimento < new Date() ? new Date() : currentVencimento;
-        const newVencimento = addMonths(baseDate, 1);
+        const planoInfo = planos.find((p: any) => p.nome === empresa.plano || p.id === empresa.plano_id);
+        const isVitalicio = planoInfo?.periodicidade === "vitalicio";
         
-        await supabase.from("empresas").update({
-          vencimento: newVencimento.toISOString(),
+        const updatePayload: any = {
           plano_bloqueado: false,
           status_pagamento: "pago",
-        } as any).eq("id", pagamento.empresa_id);
+        };
+
+        if (!isVitalicio) {
+          const currentVencimento = empresa.vencimento ? new Date(empresa.vencimento) : new Date();
+          const baseDate = currentVencimento < new Date() ? new Date() : currentVencimento;
+          updatePayload.vencimento = addMonths(baseDate, 1).toISOString();
+        } else {
+          updatePayload.vencimento = null;
+        }
+        
+        await supabase.from("empresas").update(updatePayload).eq("id", pagamento.empresa_id);
       }
     },
     onSuccess: () => {
