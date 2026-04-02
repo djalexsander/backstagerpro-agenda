@@ -24,7 +24,7 @@ export default function Empresas() {
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [detailEmpresa, setDetailEmpresa] = useState<any>(null);
-  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date });
+  const [form, setForm] = useState({ nome_empresa: "", email: "", telefone: "", plano: "basico", status: "ativo", papel: "admin_empresa" as string, vencimento: addMonths(new Date(), 1) as Date | null });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -75,12 +75,14 @@ export default function Empresas() {
       const plano = planos.find((p: any) => p.nome === form.plano);
       const trialDays = plano?.trial_days || 0;
 
-      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: form.vencimento.toISOString() };
+      const selectedPlano = planos.find((p: any) => p.nome === form.plano);
+      const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null) };
 
       if (!editItem) {
         const today = new Date();
         payload.data_contrato = format(today, "yyyy-MM-dd");
-        payload.vencimento = form.vencimento.toISOString();
+        payload.vencimento = isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null);
         payload.plano_bloqueado = false;
 
         if (trialDays > 0) {
@@ -216,18 +218,26 @@ export default function Empresas() {
       const { error } = await supabase.from("pagamentos").update({ status: "pago" } as any).eq("id", pagamento.id);
       if (error) throw error;
 
-      // Renew empresa vencimento: extend by 1 month from current vencimento
+      // Renew empresa vencimento: extend by 1 month from current vencimento (skip for vitalicio)
       const empresa = empresas.find((e: any) => e.id === pagamento.empresa_id);
       if (empresa) {
-        const currentVencimento = empresa.vencimento ? new Date(empresa.vencimento) : new Date();
-        const baseDate = currentVencimento < new Date() ? new Date() : currentVencimento;
-        const newVencimento = addMonths(baseDate, 1);
+        const planoInfo = planos.find((p: any) => p.nome === empresa.plano || p.id === empresa.plano_id);
+        const isVitalicio = planoInfo?.periodicidade === "vitalicio";
         
-        await supabase.from("empresas").update({
-          vencimento: newVencimento.toISOString(),
+        const updatePayload: any = {
           plano_bloqueado: false,
           status_pagamento: "pago",
-        } as any).eq("id", pagamento.empresa_id);
+        };
+
+        if (!isVitalicio) {
+          const currentVencimento = empresa.vencimento ? new Date(empresa.vencimento) : new Date();
+          const baseDate = currentVencimento < new Date() ? new Date() : currentVencimento;
+          updatePayload.vencimento = addMonths(baseDate, 1).toISOString();
+        } else {
+          updatePayload.vencimento = null;
+        }
+        
+        await supabase.from("empresas").update(updatePayload).eq("id", pagamento.empresa_id);
       }
     },
     onSuccess: () => {
@@ -275,7 +285,9 @@ export default function Empresas() {
     setEditItem(e);
     setLogoFile(null);
     setLogoPreview(e.logo_url || null);
-    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", papel: "admin_empresa", vencimento: e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1) });
+    const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
+    const isVitalicio = planoInfo?.periodicidade === "vitalicio";
+    setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", papel: "admin_empresa", vencimento: isVitalicio ? null : (e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1)) });
     setAddOpen(true);
   };
 
@@ -370,14 +382,21 @@ export default function Empresas() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Plano</Label>
-                <Select value={form.plano} onValueChange={(v) => setForm(p => ({ ...p, plano: v }))}>
+                <Select value={form.plano} onValueChange={(v) => {
+                  const selectedPlano = planos.find((p: any) => p.nome === v);
+                  const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+                  setForm(p => ({ ...p, plano: v, vencimento: isVitalicio ? null : p.vencimento || addMonths(new Date(), 1) }));
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {planos.map((p: any) => (
-                      <SelectItem key={p.nome} value={p.nome} className="capitalize">
-                        {p.nome} — R$ {Number(p.valor).toFixed(2)}/mês
-                      </SelectItem>
-                    ))}
+                    {planos.map((p: any) => {
+                      const sufixo = p.periodicidade === "vitalicio" ? "" : p.periodicidade === "anual" ? "/ano" : "/mês";
+                      return (
+                        <SelectItem key={p.nome} value={p.nome} className="capitalize">
+                          {p.nome} — R$ {Number(p.valor).toFixed(2)}{sufixo}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -403,32 +422,44 @@ export default function Empresas() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Data de Vencimento</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !form.vencimento && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {form.vencimento ? format(form.vencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={form.vencimento}
-                      onSelect={(date) => date && setForm(p => ({ ...p, vencimento: date }))}
-                      initialFocus
-                      className={cn("p-3 pointer-events-auto")}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
+              {(() => {
+                const selectedPlano = planos.find((p: any) => p.nome === form.plano);
+                const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+                if (isVitalicio) return (
+                  <div className="space-y-2">
+                    <Label>Data de Vencimento</Label>
+                    <p className="text-sm text-muted-foreground pt-2">Plano vitalício não possui vencimento</p>
+                  </div>
+                );
+                return (
+                  <div className="space-y-2">
+                    <Label>Data de Vencimento</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !form.vencimento && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {form.vencimento ? format(form.vencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={form.vencimento ?? undefined}
+                          onSelect={(date) => date && setForm(p => ({ ...p, vencimento: date }))}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter>
@@ -509,7 +540,9 @@ export default function Empresas() {
                           <CalendarDays className={`h-4 w-4 ${vencido ? "text-destructive" : "text-muted-foreground"}`} />
                           <div>
                             <p className="text-muted-foreground text-xs">Vencimento do Plano</p>
-                            {detailEmpresa.vencimento ? (
+                            {planoInfo?.periodicidade === "vitalicio" ? (
+                              <p className="font-medium text-accent">Vitalício</p>
+                            ) : detailEmpresa.vencimento ? (
                               <p className={`font-medium ${vencido ? "text-destructive" : ""}`}>
                                 {format(new Date(detailEmpresa.vencimento), "dd/MM/yyyy", { locale: ptBR })}
                                 {vencido && <span className="text-xs ml-1">(Vencido!)</span>}
@@ -634,13 +667,17 @@ export default function Empresas() {
                     <TableCell>{e.email || "—"}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{e.plano}</Badge></TableCell>
                     <TableCell>
-                      {e.vencimento ? (
-                        <span className={`text-xs ${vencido ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                          {vencido ? "Vencido " : ""}{format(new Date(e.vencimento), "dd/MM/yyyy", { locale: ptBR })}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      {(() => {
+                        const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
+                        if (planoInfo?.periodicidade === "vitalicio") return <span className="text-xs font-medium text-accent">Vitalício</span>;
+                        return e.vencimento ? (
+                          <span className={`text-xs ${vencido ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                            {vencido ? "Vencido " : ""}{format(new Date(e.vencimento), "dd/MM/yyyy", { locale: ptBR })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {blocked ? (
