@@ -8,11 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings, Save, Upload, Globe, Shield, Image } from "lucide-react";
+import { Save, Upload, Globe, Shield, Image, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
 
 type SettingsMap = Record<string, string | null>;
+
+/** Keys that are actively used and should be saved */
+const SAVEABLE_KEYS = [
+  "platform_name",
+  "platform_logo_url",
+  "maintenance_mode",
+  "update_mode",
+  "pix_tipo_chave",
+  "pix_chave",
+  "pix_nome_recebedor",
+  "pix_cidade",
+  "pix_banco",
+];
 
 export default function ConfiguracoesSistema() {
   const queryClient = useQueryClient();
@@ -26,6 +39,7 @@ export default function ConfiguracoesSistema() {
 
   useEffect(() => {
     if (settings) {
+      console.log("[ConfigSistema] Settings loaded from DB:", settings);
       setForm(settings);
       if (settings.platform_logo_url) {
         setLogoPreview(settings.platform_logo_url);
@@ -35,21 +49,33 @@ export default function ConfiguracoesSistema() {
 
   const saveMutation = useMutation({
     mutationFn: async (updates: SettingsMap) => {
-      const promises = Object.entries(updates).map(([key, value]) =>
+      // Only save keys that are actively used — never overwrite with empty/null
+      const entries = Object.entries(updates).filter(
+        ([key, value]) => SAVEABLE_KEYS.includes(key) && value !== undefined
+      );
+
+      console.log("[ConfigSistema] Saving settings:", entries);
+
+      const promises = entries.map(([key, value]) =>
         supabase
           .from("system_settings")
-          .update({ value })
+          .update({ value, updated_at: new Date().toISOString() })
           .eq("key", key)
       );
       const results = await Promise.all(promises);
       const err = results.find(r => r.error);
       if (err?.error) throw err.error;
+
+      console.log("[ConfigSistema] Settings saved successfully");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["system-settings"] });
       toast.success("Configurações salvas com sucesso!");
     },
-    onError: () => toast.error("Erro ao salvar configurações."),
+    onError: (e) => {
+      console.error("[ConfigSistema] Error saving settings:", e);
+      toast.error("Erro ao salvar configurações.");
+    },
   });
 
   const handleLogoUpload = async () => {
@@ -188,48 +214,6 @@ export default function ConfiguracoesSistema() {
                 <Upload className="h-4 w-4 mr-1" />
                 {isUploadingLogo ? "Enviando..." : "Enviar"}
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Parâmetros Globais */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Settings className="h-5 w-5 text-primary" />
-              Parâmetros Globais
-            </CardTitle>
-            <CardDescription>Limites e padrões do sistema.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="default_trial_days">Dias de Trial Padrão</Label>
-              <Input
-                id="default_trial_days"
-                type="number"
-                min={0}
-                value={form.default_trial_days ?? "7"}
-                onChange={(e) => updateField("default_trial_days", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Período de teste padrão ao criar uma nova empresa.
-              </p>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label htmlFor="max_empresas">Máximo de Empresas</Label>
-              <Input
-                id="max_empresas"
-                type="number"
-                min={1}
-                value={form.max_empresas ?? "100"}
-                onChange={(e) => updateField("max_empresas", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Limite total de empresas cadastradas na plataforma.
-              </p>
             </div>
           </CardContent>
         </Card>
