@@ -85,11 +85,11 @@ export default function ConfiguracoesSistema() {
 
     try {
       const ext = logoFile.name.split(".").pop()?.toLowerCase() || "png";
-      const path = `system/logo-${Date.now()}.${ext}`;
+      const path = `platform-logo-${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("event-files")
-        .upload(path, logoFile, { upsert: false });
+        .from("logos")
+        .upload(path, logoFile, { upsert: true });
 
       if (uploadError) {
         toast.error(`Erro ao fazer upload da logo: ${uploadError.message}`);
@@ -97,7 +97,7 @@ export default function ConfiguracoesSistema() {
       }
 
       const { data: urlData } = supabase.storage
-        .from("event-files")
+        .from("logos")
         .getPublicUrl(path);
 
       const url = `${urlData.publicUrl}?v=${Date.now()}`;
