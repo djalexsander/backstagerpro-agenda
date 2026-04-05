@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3, FileDown, FilterX } from "lucide-react";
+import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3, FileDown, FilterX, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { format, subMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportMasterFinanceiroPDF } from "@/lib/pdf-export-master";
@@ -125,6 +127,19 @@ export default function FinanceiroMaster() {
   const clearFilters = () => {
     setFilterMonth("all");
     setFilterYear(String(new Date().getFullYear()));
+  };
+
+  const queryClient = useQueryClient();
+
+  const handleDeletePagamento = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este pagamento?")) return;
+    const { error } = await supabase.from("pagamentos").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir pagamento");
+    } else {
+      toast.success("Pagamento excluído com sucesso");
+      queryClient.invalidateQueries({ queryKey: ["master-pagamentos"] });
+    }
   };
 
   const handleExportPDF = (type: "filtered" | "all") => {
@@ -277,6 +292,7 @@ export default function FinanceiroMaster() {
                     <th className="pb-3 font-medium text-muted-foreground">Status</th>
                     <th className="pb-3 font-medium text-muted-foreground">Data</th>
                     <th className="pb-3 font-medium text-muted-foreground">Descrição</th>
+                    <th className="pb-3 font-medium text-muted-foreground text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -294,6 +310,11 @@ export default function FinanceiroMaster() {
                           {format(new Date(p.created_at), "dd/MM/yyyy", { locale: ptBR })}
                         </td>
                         <td className="py-3 text-muted-foreground max-w-[200px] truncate">{p.descricao || "—"}</td>
+                        <td className="py-3 text-center">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeletePagamento(p.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
                       </tr>
                     );
                   })}
