@@ -292,6 +292,7 @@ export default function FinanceiroMaster() {
                     <th className="pb-3 font-medium text-muted-foreground">Status</th>
                     <th className="pb-3 font-medium text-muted-foreground">Data</th>
                     <th className="pb-3 font-medium text-muted-foreground">Descrição</th>
+                    <th className="pb-3 font-medium text-muted-foreground text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
