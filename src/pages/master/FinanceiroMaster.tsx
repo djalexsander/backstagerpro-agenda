@@ -310,6 +310,11 @@ export default function FinanceiroMaster() {
                           {format(new Date(p.created_at), "dd/MM/yyyy", { locale: ptBR })}
                         </td>
                         <td className="py-3 text-muted-foreground max-w-[200px] truncate">{p.descricao || "—"}</td>
+                        <td className="py-3 text-center">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeletePagamento(p.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
                       </tr>
                     );
                   })}
