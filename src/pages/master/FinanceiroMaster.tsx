@@ -129,6 +129,19 @@ export default function FinanceiroMaster() {
     setFilterYear(String(new Date().getFullYear()));
   };
 
+  const queryClient = useQueryClient();
+
+  const handleDeletePagamento = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este pagamento?")) return;
+    const { error } = await supabase.from("pagamentos").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir pagamento");
+    } else {
+      toast.success("Pagamento excluído com sucesso");
+      queryClient.invalidateQueries({ queryKey: ["master-pagamentos"] });
+    }
+  };
+
   const handleExportPDF = (type: "filtered" | "all") => {
     const data = type === "all" ? pagamentos : filteredPagamentos;
     const title = type === "all" ? "Geral" : filterLabel;
