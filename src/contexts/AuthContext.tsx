@@ -141,6 +141,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const refreshProfile = async () => {
+    if (user) await fetchUserData(user.id);
+  };
+
   const isMasterAdmin = role === "master_admin";
   const isAdminEmpresa = role === "admin_empresa";
   const isUsuario = role === "usuario";
@@ -154,9 +158,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       empresaLogoUrl, empresaNome,
       empresaBloqueada: empresaReadOnlyValue,
       empresaReadOnly: empresaReadOnlyValue,
+      precisaEscolherPlano: isMasterAdmin ? false : precisaEscolherPlano,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
-      loading, signIn, signOut,
+      loading, signIn, signOut, refreshProfile,
     }}>
       {children}
     </AuthContext.Provider>
