@@ -48,6 +48,8 @@ Deno.serve(async (req) => {
         email: normalizedEmail,
         telefone: telefone?.trim() || null,
         status: "ativo",
+        plano: null,
+        plano_id: null,
         plano_bloqueado: false,
         precisa_escolher_plano: true,
         data_contrato: new Date().toISOString().split("T")[0],
