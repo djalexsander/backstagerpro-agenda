@@ -41,10 +41,14 @@ Deno.serve(async (req) => {
       await supabaseAdmin
         .from("empresas")
         .update({
+          plano: "Teste Free 7 dias",
+          plano_id: null,
           trial_expires_at: trialEnd.toISOString(),
+          vencimento: trialEnd.toISOString(),
           precisa_escolher_plano: false,
           plano_bloqueado: false,
           status: "ativo",
+          status_pagamento: null,
         })
         .eq("id", profile.empresa_id);
 
@@ -75,6 +79,7 @@ Deno.serve(async (req) => {
           precisa_escolher_plano: false,
           plano_bloqueado: true,
           status_pagamento: "pendente",
+          plano: plano?.nome || null,
         })
         .eq("id", profile.empresa_id);
 
