@@ -61,10 +61,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             : (empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date());
           const isInactive = (empresa as any).status === "inativo";
           setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired || isInactive);
+          setPrecisaEscolherPlano(!!(empresa as any).precisa_escolher_plano);
           setEmpresaLogoUrl((empresa as any).logo_url || null);
           setEmpresaNome((empresa as any).nome_empresa || null);
         } else {
           setEmpresaBloqueada(false);
+          setPrecisaEscolherPlano(false);
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
         }
