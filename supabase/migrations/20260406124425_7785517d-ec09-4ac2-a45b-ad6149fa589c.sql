@@ -1,0 +1,1 @@
+ALTER TABLE public.empresas ADD COLUMN precisa_escolher_plano boolean NOT NULL DEFAULT false;

@@ -14,6 +14,7 @@ interface AuthContextType {
   empresaId: string | null;
   empresaBloqueada: boolean;
   empresaReadOnly: boolean;
+  precisaEscolherPlano: boolean;
   isMasterAdmin: boolean;
   isAdminEmpresa: boolean;
   isUsuario: boolean;
@@ -21,6 +22,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [empresaBloqueada, setEmpresaBloqueada] = useState(false);
+  const [precisaEscolherPlano, setPrecisaEscolherPlano] = useState(false);
   const [empresaLogoUrl, setEmpresaLogoUrl] = useState<string | null>(null);
   const [empresaNome, setEmpresaNome] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileRes.data.empresa_id) {
         const { data: empresa } = await supabase
           .from("empresas")
-          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento")
+          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento, precisa_escolher_plano")
           .eq("id", profileRes.data.empresa_id)
           .single();
         if (empresa) {
@@ -58,10 +61,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             : (empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date());
           const isInactive = (empresa as any).status === "inativo";
           setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired || isInactive);
+          setPrecisaEscolherPlano(!!(empresa as any).precisa_escolher_plano);
           setEmpresaLogoUrl((empresa as any).logo_url || null);
           setEmpresaNome((empresa as any).nome_empresa || null);
         } else {
           setEmpresaBloqueada(false);
+          setPrecisaEscolherPlano(false);
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
         }
@@ -85,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
           setRole(null);
           setEmpresaBloqueada(false);
+          setPrecisaEscolherPlano(false);
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
         }
@@ -135,6 +141,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const refreshProfile = async () => {
+    if (user) await fetchUserData(user.id);
+  };
+
   const isMasterAdmin = role === "master_admin";
   const isAdminEmpresa = role === "admin_empresa";
   const isUsuario = role === "usuario";
@@ -148,9 +158,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       empresaLogoUrl, empresaNome,
       empresaBloqueada: empresaReadOnlyValue,
       empresaReadOnly: empresaReadOnlyValue,
+      precisaEscolherPlano: isMasterAdmin ? false : precisaEscolherPlano,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
-      loading, signIn, signOut,
+      loading, signIn, signOut, refreshProfile,
     }}>
       {children}
     </AuthContext.Provider>

@@ -142,6 +142,7 @@ export type Database = {
           plano: string | null
           plano_bloqueado: boolean
           plano_id: string | null
+          precisa_escolher_plano: boolean
           status: string | null
           status_pagamento: string | null
           telefone: string | null
@@ -158,6 +159,7 @@ export type Database = {
           plano?: string | null
           plano_bloqueado?: boolean
           plano_id?: string | null
+          precisa_escolher_plano?: boolean
           status?: string | null
           status_pagamento?: string | null
           telefone?: string | null
@@ -174,6 +176,7 @@ export type Database = {
           plano?: string | null
           plano_bloqueado?: boolean
           plano_id?: string | null
+          precisa_escolher_plano?: boolean
           status?: string | null
           status_pagamento?: string | null
           telefone?: string | null

@@ -23,6 +23,9 @@ import PlanoAssinatura from "@/pages/PlanoAssinatura";
 import Backups from "@/pages/Backups";
 import Documentos from "@/pages/Documentos";
 import Funcionarios from "@/pages/Funcionarios";
+import Cadastro from "@/pages/Cadastro";
+import EscolherPlano from "@/pages/EscolherPlano";
+import PagamentoPlano from "@/pages/PagamentoPlano";
 
 import PainelMaster from "@/pages/master/PainelMaster";
 import Empresas from "@/pages/master/Empresas";
@@ -48,9 +51,12 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/cadastro" element={<Cadastro />} />
                 <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
                 <Route path="/esqueci-senha" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/escolher-plano" element={<ProtectedRoute skipPlanCheck><EscolherPlano /></ProtectedRoute>} />
+                <Route path="/pagamento-plano/:planoId" element={<ProtectedRoute skipPlanCheck><PagamentoPlano /></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/agenda" replace />} />
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
