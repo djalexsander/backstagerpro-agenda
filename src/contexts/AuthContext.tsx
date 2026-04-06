@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileRes.data.empresa_id) {
         const { data: empresa } = await supabase
           .from("empresas")
-          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento")
+          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento, precisa_escolher_plano")
           .eq("id", profileRes.data.empresa_id)
           .single();
         if (empresa) {
