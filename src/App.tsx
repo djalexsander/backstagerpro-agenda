@@ -23,6 +23,9 @@ import PlanoAssinatura from "@/pages/PlanoAssinatura";
 import Backups from "@/pages/Backups";
 import Documentos from "@/pages/Documentos";
 import Funcionarios from "@/pages/Funcionarios";
+import Cadastro from "@/pages/Cadastro";
+import EscolherPlano from "@/pages/EscolherPlano";
+import PagamentoPlano from "@/pages/PagamentoPlano";
 
 import PainelMaster from "@/pages/master/PainelMaster";
 import Empresas from "@/pages/master/Empresas";
