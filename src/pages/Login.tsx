@@ -44,9 +44,9 @@ export default function Login() {
     const { error } = await signIn(email, password);
     if (error) {
       toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
-    } else {
-      navigate("/agenda");
     }
+    // Navigation is handled by ProtectedRoute (redirects to /escolher-plano if needed, or /agenda)
+    if (!error) navigate("/agenda");
     setLoading(false);
   };
 

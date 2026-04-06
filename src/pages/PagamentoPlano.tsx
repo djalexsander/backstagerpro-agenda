@@ -180,7 +180,7 @@ export default function PagamentoPlano() {
               <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
                 <p><strong>Plano:</strong> {plano?.nome}</p>
                 <p><strong>Valor:</strong> R$ {Number(plano?.valor || 0).toFixed(2)}{sufixo}</p>
-                <p><strong>Status:</strong> <span className="text-yellow-600 font-medium">Pendente</span></p>
+                <p><strong>Status:</strong> <span className="text-warning font-medium">Pendente</span></p>
               </div>
               <Button variant="outline" onClick={() => navigate("/login", { replace: true })}>
                 Voltar ao Login
