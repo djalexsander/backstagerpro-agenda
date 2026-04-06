@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<AuthContextType["profile"]>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [empresaBloqueada, setEmpresaBloqueada] = useState(false);
+  const [precisaEscolherPlano, setPrecisaEscolherPlano] = useState(false);
   const [empresaLogoUrl, setEmpresaLogoUrl] = useState<string | null>(null);
   const [empresaNome, setEmpresaNome] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
