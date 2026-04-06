@@ -98,6 +98,11 @@ export default function Login() {
                 Primeiro acesso? Ative sua conta aqui
               </Button>
             </div>
+            <div className="mt-2">
+              <Button variant="outline" className="w-full" onClick={() => navigate("/cadastro")}>
+                Criar Conta
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

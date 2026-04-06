@@ -51,9 +51,12 @@ const App = () => (
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/cadastro" element={<Cadastro />} />
                 <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
                 <Route path="/esqueci-senha" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/escolher-plano" element={<ProtectedRoute skipPlanCheck><EscolherPlano /></ProtectedRoute>} />
+                <Route path="/pagamento-plano/:planoId" element={<ProtectedRoute skipPlanCheck><PagamentoPlano /></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/agenda" replace />} />
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
