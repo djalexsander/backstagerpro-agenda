@@ -90,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
           setRole(null);
           setEmpresaBloqueada(false);
+          setPrecisaEscolherPlano(false);
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
         }
