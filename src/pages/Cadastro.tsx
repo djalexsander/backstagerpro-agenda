@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Music, ArrowLeft } from "lucide-react";
+import { Music, ArrowLeft, Upload, X, ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
@@ -15,10 +15,30 @@ export default function Cadastro() {
   const [telefone, setTelefone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { platformLogoUrl, platformName } = usePlatformBranding();
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "Máximo 2MB", variant: "destructive" });
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const removeLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (logoInputRef.current) logoInputRef.current.value = "";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +50,7 @@ export default function Cadastro() {
 
     setLoading(true);
     try {
+      // 1. Create empresa + user via edge function
       const res = await supabase.functions.invoke("self-register", {
         body: { nome_empresa: nomeEmpresa, email, telefone, password },
       });
@@ -37,9 +58,26 @@ export default function Cadastro() {
       if (res.error) throw new Error(res.error.message || "Erro ao criar conta");
       if (res.data?.error) throw new Error(res.data.error);
 
-      // Auto sign-in
+      const empresaId = res.data.empresa_id;
+
+      // 2. Auto sign-in
       const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
       if (signInErr) throw signInErr;
+
+      // 3. Upload logo if provided (after sign-in so we have auth)
+      if (logoFile && empresaId) {
+        try {
+          const ext = logoFile.name.split(".").pop();
+          const path = `${empresaId}/logo.${ext}`;
+          await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
+          const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
+          if (urlData?.publicUrl) {
+            await supabase.from("empresas").update({ logo_url: urlData.publicUrl + "?t=" + Date.now() } as any).eq("id", empresaId);
+          }
+        } catch {
+          // Logo upload is non-blocking
+        }
+      }
 
       toast({ title: "Conta criada com sucesso!", description: "Escolha um plano para começar." });
       navigate("/escolher-plano", { replace: true });
@@ -73,6 +111,42 @@ export default function Cadastro() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Logo Upload */}
+              <div className="space-y-2">
+                <Label>Logo da Empresa</Label>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml"
+                  className="hidden"
+                  onChange={handleLogoSelect}
+                />
+                <div className="flex items-center gap-3">
+                  {logoPreview ? (
+                    <div className="relative h-16 w-16 rounded-lg border border-border overflow-hidden bg-muted">
+                      <img src={logoPreview} alt="Preview" className="h-full w-full object-contain p-1" />
+                      <button
+                        type="button"
+                        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                        onClick={removeLogo}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/50">
+                      <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1">
+                    <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                      <Upload className="h-4 w-4 mr-1" /> {logoPreview ? "Trocar" : "Upload"}
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground">PNG, JPG ou SVG • Máx 2MB</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="nomeEmpresa">Nome da Empresa *</Label>
                 <Input
