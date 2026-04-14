@@ -13,11 +13,12 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Music, Package, Zap, HardDrive, CheckCircle, ArrowRight, ShoppingCart, Layers, Sparkles,
+  Music, Package, Zap, HardDrive, CheckCircle, ArrowRight, ShoppingCart, Sparkles, Star,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 import type { ModuleCatalogRow } from "@/types/subscription";
+import { MODULE_CATEGORIES, getCategoryLabel, getBadgeInfo } from "@/constants/module-categories";
 
 export default function OnboardingModulos() {
   const { empresaId, refreshProfile } = useAuth();
@@ -29,7 +30,6 @@ export default function OnboardingModulos() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch catalog
   const { data: catalog = [], isLoading: loadingCatalog } = useQuery({
     queryKey: ["module-catalog-onboarding"],
     queryFn: async () => {
@@ -39,11 +39,10 @@ export default function OnboardingModulos() {
         .eq("ativo", true)
         .order("ordem", { ascending: true });
       if (error) throw error;
-      return data as ModuleCatalogRow[];
+      return data as (ModuleCatalogRow & { categoria?: string; badge?: string | null; texto_venda?: string | null; destaque?: boolean })[];
     },
   });
 
-  // Fetch already assigned modules for this empresa
   const { data: existingModules = [] } = useQuery({
     queryKey: ["empresa-modules-onboarding", empresaId],
     queryFn: async () => {
@@ -58,7 +57,6 @@ export default function OnboardingModulos() {
     enabled: !!empresaId,
   });
 
-  // Fetch plano base info
   const { data: empresa } = useQuery({
     queryKey: ["onboarding-empresa-plano", empresaId],
     queryFn: async () => {
@@ -83,6 +81,31 @@ export default function OnboardingModulos() {
     () => catalog.filter((c) => !existingModuleIds.has(c.id)),
     [catalog, existingModuleIds]
   );
+
+  // Group modules by category
+  const groupedModules = useMemo(() => {
+    const groups = new Map<string, typeof availableModules>();
+    for (const mod of availableModules) {
+      const cat = (mod as any).categoria || "operacional";
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(mod);
+    }
+    // Sort by MODULE_CATEGORIES order
+    const ordered: { category: string; label: string; modules: typeof availableModules }[] = [];
+    for (const c of MODULE_CATEGORIES) {
+      const mods = groups.get(c.value);
+      if (mods && mods.length > 0) {
+        ordered.push({ category: c.value, label: c.label, modules: mods });
+      }
+    }
+    // Any uncategorized
+    for (const [key, mods] of groups) {
+      if (!MODULE_CATEGORIES.some((c) => c.value === key)) {
+        ordered.push({ category: key, label: getCategoryLabel(key), modules: mods });
+      }
+    }
+    return ordered;
+  }, [availableModules]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -126,7 +149,6 @@ export default function OnboardingModulos() {
         const { error } = await supabase.from("empresa_modules").insert(rows);
         if (error) throw error;
 
-        // Create notification for master admin
         await supabase.from("notificacoes_master").insert({
           empresa_id: empresaId,
           tipo: "modulos_onboarding",
@@ -199,69 +221,81 @@ export default function OnboardingModulos() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Module list */}
-          <div className="lg:col-span-2 space-y-4">
-            {availableModules.length === 0 ? (
+          {/* Module list grouped by category */}
+          <div className="lg:col-span-2 space-y-6">
+            {groupedModules.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
                   Nenhum módulo disponível no momento.
                 </CardContent>
               </Card>
             ) : (
-              availableModules.map((mod) => {
-                const isSelected = selected.has(mod.id);
-                return (
-                  <Card
-                    key={mod.id}
-                    className={`cursor-pointer transition-all border-2 ${
-                      isSelected ? "border-primary bg-primary/5 shadow-md" : "border-transparent hover:border-border"
-                    }`}
-                    onClick={() => toggle(mod.id)}
-                  >
-                    <CardContent className="flex items-start gap-4 p-5">
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggle(mod.id)}
-                        className="mt-1 shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <h3 className="font-semibold text-base">{mod.nome}</h3>
-                          <Badge variant="outline" className="text-xs">
-                            {mod.is_capacity_module ? (
-                              <><HardDrive className="h-3 w-3 mr-1" /> Capacidade</>
-                            ) : (
-                              <><Zap className="h-3 w-3 mr-1" /> Funcionalidade</>
-                            )}
-                          </Badge>
-                        </div>
-                        {mod.descricao && (
-                          <p className="text-sm text-muted-foreground mb-2">{mod.descricao}</p>
-                        )}
-                        {mod.is_capacity_module && (
-                          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                            {mod.capacidade_extra_usuarios > 0 && (
-                              <span>+{mod.capacidade_extra_usuarios} usuários</span>
-                            )}
-                            {mod.capacidade_extra_eventos > 0 && (
-                              <span>+{mod.capacidade_extra_eventos} eventos</span>
-                            )}
-                            {Number(mod.capacidade_extra_storage) > 0 && (
-                              <span>+{Number(mod.capacidade_extra_storage)} GB</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-lg font-bold">
-                          R$ {Number(mod.valor).toFixed(2)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">/{mod.periodicidade}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
+              groupedModules.map((group) => (
+                <div key={group.category}>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                    {group.label}
+                  </h3>
+                  <div className="space-y-3">
+                    {group.modules.map((mod) => {
+                      const isSelected = selected.has(mod.id);
+                      const badgeInfo = getBadgeInfo((mod as any).badge);
+                      const isDestaque = (mod as any).destaque;
+                      return (
+                        <Card
+                          key={mod.id}
+                          className={`cursor-pointer transition-all border-2 ${
+                            isSelected
+                              ? "border-primary bg-primary/5 shadow-md"
+                              : isDestaque
+                                ? "border-amber-300/50 hover:border-amber-400"
+                                : "border-transparent hover:border-border"
+                          }`}
+                          onClick={() => toggle(mod.id)}
+                        >
+                          <CardContent className="flex items-start gap-4 p-5">
+                            <Checkbox checked={isSelected} onCheckedChange={() => toggle(mod.id)} className="mt-1 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <h3 className="font-semibold text-base">{mod.nome}</h3>
+                                {isDestaque && (
+                                  <Star className="h-4 w-4 fill-amber-400 text-amber-400 shrink-0" />
+                                )}
+                                {badgeInfo && (
+                                  <Badge className={`text-[10px] px-1.5 py-0 ${badgeInfo.className}`}>{badgeInfo.label}</Badge>
+                                )}
+                                <Badge variant="outline" className="text-xs">
+                                  {mod.is_capacity_module ? (
+                                    <><HardDrive className="h-3 w-3 mr-1" /> Capacidade</>
+                                  ) : (
+                                    <><Zap className="h-3 w-3 mr-1" /> Funcionalidade</>
+                                  )}
+                                </Badge>
+                              </div>
+                              {(mod as any).texto_venda && (
+                                <p className="text-sm text-primary/80 font-medium mb-1">{(mod as any).texto_venda}</p>
+                              )}
+                              {mod.descricao && (
+                                <p className="text-sm text-muted-foreground mb-2">{mod.descricao}</p>
+                              )}
+                              {mod.is_capacity_module && (
+                                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                  {mod.capacidade_extra_usuarios > 0 && <span>+{mod.capacidade_extra_usuarios} usuários</span>}
+                                  {mod.capacidade_extra_eventos > 0 && <span>+{mod.capacidade_extra_eventos} eventos</span>}
+                                  {Number(mod.capacidade_extra_storage) > 0 && <span>+{Number(mod.capacidade_extra_storage)} GB</span>}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-lg font-bold">R$ {Number(mod.valor).toFixed(2)}</p>
+                              <p className="text-xs text-muted-foreground">/{mod.periodicidade}</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
             )}
           </div>
 
@@ -276,28 +310,20 @@ export default function OnboardingModulos() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Plano base */}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Plano Base</span>
                     <span className="font-medium">
                       {planoInfo ? (
-                        <>
-                          {planoInfo.nome} — R$ {Number(planoInfo.valor).toFixed(2)}
-                        </>
-                      ) : (
-                        "—"
-                      )}
+                        <>{planoInfo.nome} — R$ {Number(planoInfo.valor).toFixed(2)}</>
+                      ) : "—"}
                     </span>
                   </div>
 
                   <Separator />
 
-                  {/* Selected modules */}
                   {selectedModules.length > 0 ? (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Módulos Selecionados
-                      </p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Módulos Selecionados</p>
                       {selectedModules.map((m) => (
                         <div key={m.id} className="flex items-center justify-between text-sm">
                           <span className="truncate mr-2">{m.nome}</span>
@@ -306,19 +332,14 @@ export default function OnboardingModulos() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground text-center py-2">
-                      Nenhum módulo selecionado
-                    </p>
+                    <p className="text-sm text-muted-foreground text-center py-2">Nenhum módulo selecionado</p>
                   )}
 
                   <Separator />
 
-                  {/* Total */}
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">Total Mensal</span>
-                    <span className="text-xl font-bold text-primary">
-                      R$ {totalGeral.toFixed(2)}
-                    </span>
+                    <span className="text-xl font-bold text-primary">R$ {totalGeral.toFixed(2)}</span>
                   </div>
 
                   {selectedModules.length > 0 && (
@@ -327,12 +348,7 @@ export default function OnboardingModulos() {
                     </p>
                   )}
 
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                  >
+                  <Button className="w-full" size="lg" onClick={handleSubmit} disabled={submitting}>
                     {submitting ? (
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                     ) : selected.size > 0 ? (
