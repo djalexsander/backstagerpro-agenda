@@ -34,6 +34,7 @@ import ConfiguracoesSistema from "@/pages/master/ConfiguracoesSistema";
 import LogsSistema from "@/pages/master/LogsSistema";
 import Planos from "@/pages/master/Planos";
 import FinanceiroMaster from "@/pages/master/FinanceiroMaster";
+import Modulos from "@/pages/master/Modulos";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -79,6 +80,7 @@ const App = () => (
                   <Route path="/master/planos" element={<ProtectedRoute masterOnly><Planos /></ProtectedRoute>} />
                   <Route path="/master/configuracoes" element={<ProtectedRoute masterOnly><ConfiguracoesSistema /></ProtectedRoute>} />
                   <Route path="/master/financeiro" element={<ProtectedRoute masterOnly><FinanceiroMaster /></ProtectedRoute>} />
+                  <Route path="/master/modulos" element={<ProtectedRoute masterOnly><Modulos /></ProtectedRoute>} />
                   <Route path="/master/logs" element={<ProtectedRoute masterOnly><LogsSistema /></ProtectedRoute>} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
