@@ -72,7 +72,7 @@ function getCachePendente(f: any): number {
 }
 
 const fmtBRL = (n: number | null) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).formatDate(n || 0);
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
 export type ExportFormat = "pdf" | "png";
 
