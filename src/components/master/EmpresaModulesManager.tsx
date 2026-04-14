@@ -261,15 +261,22 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
                       )}
                     </TableCell>
                     <TableCell>
-                      {isCort ? (
-                        <Badge variant="outline" className="text-[10px] gap-0.5 border-primary text-primary">
-                          <Gift className="h-2.5 w-2.5" /> Cortesia
-                        </Badge>
-                      ) : isManual ? (
-                        <Badge variant="outline" className="text-[10px]">Manual</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px]">Contratado</Badge>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {em.trial_granted && (
+                          <Badge variant="outline" className="text-[10px] gap-0.5 border-[hsl(var(--warning))] text-[hsl(var(--warning))]">
+                            <Clock className="h-2.5 w-2.5" /> Trial
+                          </Badge>
+                        )}
+                        {isCort ? (
+                          <Badge variant="outline" className="text-[10px] gap-0.5 border-primary text-primary">
+                            <Gift className="h-2.5 w-2.5" /> Cortesia
+                          </Badge>
+                        ) : isManual ? (
+                          <Badge variant="outline" className="text-[10px]">Manual</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">Contratado</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {em.activated_at ? format(new Date(em.activated_at), "dd/MM/yy", { locale: ptBR }) : "—"}
