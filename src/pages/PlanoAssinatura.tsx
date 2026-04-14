@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,6 +53,41 @@ export default function PlanoAssinatura() {
   } | null>(null);
   const [generatingModuleCharge, setGeneratingModuleCharge] = useState(false);
   const [showModulePix, setShowModulePix] = useState(false);
+
+  // Fetch pending Asaas payments for this empresa
+  const { data: pendingAsaasPayments = [], refetch: refetchPending } = useQuery({
+    queryKey: ["asaas-pending-payments", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("asaas_payments")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .eq("source_app", "backstage_pro")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+    refetchInterval: 15000, // Poll every 15s to check if payment was confirmed via webhook
+  });
+
+  const pendingPlanPayment = pendingAsaasPayments.find(p => p.payment_type === "base_plan");
+  const pendingModulePayment = pendingAsaasPayments.find(p => p.payment_type === "modules");
+
+  // When a pending payment disappears (confirmed via webhook), refresh everything
+  const prevPendingRef = useRef(pendingAsaasPayments.length);
+  useEffect(() => {
+    if (prevPendingRef.current > 0 && pendingAsaasPayments.length < prevPendingRef.current) {
+      queryClient.invalidateQueries({ queryKey: ["empresa-plano"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-empresa"] });
+      queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["company-modules"] });
+      toast.success("Pagamento confirmado! Acesso liberado.");
+    }
+    prevPendingRef.current = pendingAsaasPayments.length;
+  }, [pendingAsaasPayments.length, queryClient]);
 
   // Fetch empresa
   const { data: empresa } = useQuery({
@@ -175,6 +210,9 @@ export default function PlanoAssinatura() {
         invoice_url: res.data.invoice_url,
       });
       setShowPix(true);
+      // Refresh pending payments list so banner appears
+      queryClient.invalidateQueries({ queryKey: ["asaas-pending-payments"] });
+      toast.success("Cobrança gerada! Aguardando pagamento.");
     } catch (err: any) {
       toast.error(`Erro ao gerar cobrança: ${err.message}`);
     } finally {
@@ -327,11 +365,48 @@ export default function PlanoAssinatura() {
             </div>
           </div>
 
+          {/* Pending payment banner */}
+          {pendingPlanPayment && (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-warning">
+                <Clock className="h-5 w-5 animate-pulse" />
+                <span className="font-semibold">Aguardando confirmação do pagamento...</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Cobrança de <strong>R$ {Number(pendingPlanPayment.amount).toFixed(2)}</strong> gerada em{" "}
+                {format(new Date(pendingPlanPayment.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+                O acesso será liberado automaticamente após a confirmação.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {pendingPlanPayment.pix_copy_paste && (
+                  <Button variant="outline" size="sm" onClick={() => {
+                    navigator.clipboard.writeText(pendingPlanPayment.pix_copy_paste!);
+                    toast.success("Código PIX copiado!");
+                  }}>
+                    <Copy className="h-4 w-4 mr-1" /> Copiar PIX
+                  </Button>
+                )}
+                {pendingPlanPayment.invoice_url && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={pendingPlanPayment.invoice_url} target="_blank" rel="noopener noreferrer">
+                      <CreditCard className="h-4 w-4 mr-1" /> Abrir link de pagamento
+                    </a>
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => refetchPending()}>
+                  <Loader2 className="h-4 w-4 mr-1" /> Verificar status
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 pt-1">
-            <Button onClick={handlePagar} disabled={!sub.planoBase || generatingCharge} size="lg">
+            <Button onClick={handlePagar} disabled={!sub.planoBase || generatingCharge || !!pendingPlanPayment} size="lg">
               {generatingCharge ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando cobrança...</>
+              ) : pendingPlanPayment ? (
+                <><Clock className="h-4 w-4 mr-2" /> Pagamento pendente</>
               ) : (
                 <><QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}</>
               )}
@@ -342,6 +417,39 @@ export default function PlanoAssinatura() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ─── PENDING MODULE PAYMENT BANNER ─── */}
+      {pendingModulePayment && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <div className="flex items-center gap-2 text-warning">
+              <Clock className="h-5 w-5 animate-pulse" />
+              <span className="font-semibold">Pagamento de módulos pendente</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Cobrança de <strong>R$ {Number(pendingModulePayment.amount).toFixed(2)}</strong> aguardando confirmação.
+              Os módulos serão ativados automaticamente após o pagamento.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {pendingModulePayment.pix_copy_paste && (
+                <Button variant="outline" size="sm" onClick={() => {
+                  navigator.clipboard.writeText(pendingModulePayment.pix_copy_paste!);
+                  toast.success("Código PIX copiado!");
+                }}>
+                  <Copy className="h-4 w-4 mr-1" /> Copiar PIX
+                </Button>
+              )}
+              {pendingModulePayment.invoice_url && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={pendingModulePayment.invoice_url} target="_blank" rel="noopener noreferrer">
+                    <CreditCard className="h-4 w-4 mr-1" /> Abrir link de pagamento
+                  </a>
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── MÓDULOS ATIVOS ─── */}
       <div className="space-y-4">
@@ -816,6 +924,8 @@ export default function PlanoAssinatura() {
                 setShowModulePix(true);
 
                 queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+                queryClient.invalidateQueries({ queryKey: ["asaas-pending-payments"] });
+                toast.success("Cobrança gerada! Aguardando pagamento dos módulos.");
                 setSelectedModuleIds(new Set());
                 setBatchObservacao("");
               } catch (err: any) {
