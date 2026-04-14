@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileUp, FileText, Trash2, Eye, Upload, CheckCircle2, X, Loader2 } from "lucide-react";
+import { FileUp, FileText, FileSpreadsheet, Trash2, Eye, Upload, CheckCircle2, X, Loader2 } from "lucide-react";
 import { CHECKLIST_CATEGORIES, type ChecklistCategory } from "@/hooks/useEventChecklist";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -70,7 +70,6 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
       const pageText = content.items
         .map((item: any) => item.str)
         .join(" ");
-      // Split by newlines and common list separators
       const pageLines = pageText
         .split(/[\n\r]+/)
         .flatMap((l: string) => l.split(/[;•\-–—]\s+/))
@@ -79,23 +78,60 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
       lines.push(...pageLines);
     }
 
-    return [...new Set(lines)]; // deduplicate
+    return [...new Set(lines)];
   }, []);
+
+  const extractTextFromExcel = useCallback(async (file: File): Promise<string[]> => {
+    const XLSX = await import("xlsx");
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    const lines: string[] = [];
+
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      for (const row of rows) {
+        const text = row
+          .map((cell: any) => String(cell ?? "").trim())
+          .filter((c: string) => c.length > 0)
+          .join(" — ");
+        if (text.length > 2) lines.push(text);
+      }
+    }
+
+    return [...new Set(lines)];
+  }, []);
+
+  const ACCEPTED_TYPES = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+  ];
+
+  const isExcel = (file: File) =>
+    file.name.endsWith(".xlsx") || file.name.endsWith(".xls") ||
+    file.type.includes("spreadsheet") || file.type.includes("excel");
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== "application/pdf") {
-      toast({ title: "Selecione um arquivo PDF", variant: "destructive" });
+
+    const isPdf = file.type === "application/pdf";
+    const isXls = isExcel(file);
+
+    if (!isPdf && !isXls) {
+      toast({ title: "Selecione um arquivo PDF ou Excel (.xlsx)", variant: "destructive" });
       return;
     }
 
     setExtracting(true);
     try {
-      // Extract text
-      const lines = await extractTextFromPdf(file);
+      const lines = isPdf
+        ? await extractTextFromPdf(file)
+        : await extractTextFromExcel(file);
+
       if (lines.length === 0) {
-        toast({ title: "Nenhum texto encontrado no PDF", variant: "destructive" });
+        toast({ title: "Nenhum conteúdo encontrado no arquivo", variant: "destructive" });
         setExtracting(false);
         return;
       }
@@ -119,9 +155,9 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
       if (insErr) throw insErr;
 
       queryClient.invalidateQueries({ queryKey: ["checklist-pdfs", eventId] });
-      toast({ title: "PDF anexado ao evento" });
+      toast({ title: `${isPdf ? "PDF" : "Excel"} anexado ao evento` });
     } catch (err: any) {
-      toast({ title: "Erro ao processar PDF", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao processar arquivo", description: err.message, variant: "destructive" });
     } finally {
       setUploading(false);
       setExtracting(false);
@@ -201,7 +237,7 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileUp className="h-4 w-4" />
-            Importar PDF de Lista de Material
+            Importar Lista de Material (PDF / Excel)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -217,17 +253,17 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
               ) : (
                 <Upload className="h-4 w-4 mr-1" />
               )}
-              {extracting ? "Extraindo..." : "Enviar PDF"}
+              {extracting ? "Extraindo..." : "Enviar PDF / Excel"}
             </Button>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf"
+              accept=".pdf,.xlsx,.xls"
               className="hidden"
               onChange={handleFileSelect}
             />
             <span className="text-xs text-muted-foreground">
-              O PDF será anexado e o conteúdo extraído para importação
+              PDF ou Excel será anexado e o conteúdo extraído para importação
             </span>
           </div>
 
@@ -240,7 +276,11 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
                   key={f.id}
                   className="flex items-center gap-2 p-2 rounded-md border bg-muted/30 text-sm"
                 >
-                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  {f.file_name?.endsWith(".xlsx") || f.file_name?.endsWith(".xls") ? (
+                    <FileSpreadsheet className="h-4 w-4 text-accent-foreground shrink-0" />
+                  ) : (
+                    <FileText className="h-4 w-4 text-primary shrink-0" />
+                  )}
                   <span className="flex-1 truncate">{f.file_name}</span>
                   <Button
                     variant="ghost"
