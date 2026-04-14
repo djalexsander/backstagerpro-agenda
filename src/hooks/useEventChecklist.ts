@@ -95,6 +95,20 @@ export function useEventChecklist(eventId: string | undefined) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
+  const batchAddItems = async (batchItems: { descricao: string; categoria: string }[]) => {
+    if (!eventId || !empresaId) throw new Error("Missing context");
+    const rows = batchItems.map((item, i) => ({
+      event_id: eventId,
+      empresa_id: empresaId,
+      categoria: item.categoria,
+      descricao: item.descricao,
+      ordem: i,
+    }));
+    const { error } = await supabase.from("event_checklist_items").insert(rows as any);
+    if (error) throw error;
+    queryClient.invalidateQueries({ queryKey });
+  };
+
   const total = items.length;
   const concluidos = items.filter(i => i.concluido).length;
   const progress = total > 0 ? Math.round((concluidos / total) * 100) : 0;
