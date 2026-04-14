@@ -1,127 +1,58 @@
 /**
  * ============================================================================
- * BACKSTAGE PRO — MAPEAMENTO DA ARQUITETURA DE PLANOS (v1.1.2)
+ * BACKSTAGE PRO — ARQUITETURA DE PLANOS (v2.0)
  * ============================================================================
  *
- * Este arquivo é uma documentação técnica viva. NÃO é importado em produção.
- * Serve como referência para a futura migração:
- *   MODELO ATUAL  → plano único por empresa
- *   MODELO FUTURO → plano base + módulos adicionais
+ * Modelo atual: PLANO BASE + MÓDULOS ADICIONAIS
  *
  * ============================================================================
- * 1. TABELAS ENVOLVIDAS
+ * 1. TABELAS
  * ============================================================================
  *
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │ TABELA: planos                                                     │
- * │ Campos-chave: nome, valor, periodicidade (mensal/anual/vitalicio), │
- * │   max_usuarios, max_eventos, storage_limit, trial_days, ativo      │
- * │ Observação: hoje define limites globais do plano inteiro.           │
- * │ FUTURO: esta tabela se torna "plano_base". Limites adicionais      │
- * │   virão de uma tabela "modulos" vinculada via "plano_modulos".     │
- * └─────────────────────────────────────────────────────────────────────┘
- *
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │ TABELA: empresas                                                   │
- * │ Campos de plano: plano (text label), plano_id (FK → planos),       │
- * │   plano_bloqueado, status, status_pagamento, vencimento,           │
- * │   trial_expires_at, precisa_escolher_plano, data_contrato          │
- * │ FUTURO: adicionar campo ou tabela relacional "empresa_modulos"     │
- * │   para módulos contratados por empresa.                            │
- * └─────────────────────────────────────────────────────────────────────┘
- *
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │ TABELA: pagamentos                                                 │
- * │ Campos: empresa_id, plano_id, valor, status, metodo,               │
- * │   comprovante_path, descricao                                      │
- * │ FUTURO: pode receber campo "modulo_id" para pagamentos de módulos. │
- * └─────────────────────────────────────────────────────────────────────┘
- *
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │ TABELA: notificacoes_master                                        │
- * │ Usada para: auto_cadastro, upgrade_plano, comprovante_enviado,     │
- * │   pagamento_pendente, vencimento_proximo, trial_expirando etc.     │
- * │ FUTURO: sem mudança estrutural necessária. Os tipos de notificação │
- * │   já cobrem extensões de módulos.                                  │
- * └─────────────────────────────────────────────────────────────────────┘
+ * planos           — Plano base (nome, valor, periodicidade, limites)
+ * empresas         — Vínculo com plano via plano_id, vencimento, trial
+ * module_catalog   — Catálogo de módulos disponíveis (feature_key, valor, capacidade)
+ * empresa_modules  — Módulos contratados por empresa (status, trial_granted, origem)
+ * module_requests  — Solicitações de módulos pelas empresas
+ * module_payments  — Pagamentos de módulos
+ * pagamentos       — Pagamentos do plano base
  *
  * ============================================================================
- * 2. HOOKS E LÓGICA DE LIMITES
+ * 2. HOOKS
  * ============================================================================
  *
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │ HOOK: usePlanLimits (src/hooks/usePlanLimits.ts)                   │
- * │ Consulta: empresas.plano_id → planos.max_usuarios/max_eventos      │
- * │ Contagem: events (count), empresa_usuarios (count)                 │
- * │ Master admin: bypassa todos os limites                             │
- * │ FUTURO: estender para somar limites de módulos adicionais ao       │
- * │   limite base do plano. Criar interface PlanCapabilities.          │
- * └─────────────────────────────────────────────────────────────────────┘
+ * useCompanyModules    — Módulos da empresa com catálogo enriquecido
+ * useSubscriptionSummary — Resumo consolidado (plano + módulos + valores)
+ * usePlanLimits        — Limites consolidados (base + módulos de capacidade)
  *
  * ============================================================================
- * 3. TRIGGERS SQL DE LIMITES
+ * 3. CONTROLE DE ACESSO
  * ============================================================================
  *
- * • check_event_limit() — valida max_eventos antes de INSERT em events
- * • check_user_limit()  — valida max_usuarios antes de INSERT em empresa_usuarios
- * • Ambos consultam planos.max_X diretamente via empresa.plano_id
- * • FUTURO: alterar para somar limites de módulos ou usar função auxiliar
- *   que consolida plano_base + módulos.
+ * ModuleGate        — Componente de gate por feature_key (hide/lock/custom)
+ * useModuleAccess   — Hook inline para verificação de acesso
+ * MODULE_KEYS       — Constantes centralizadas de feature_key
  *
  * ============================================================================
- * 4. EDGE FUNCTIONS
+ * 4. TRIGGERS SQL
  * ============================================================================
  *
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │ self-register     — cria empresa + usuário admin_empresa            │
- * │                     seta precisa_escolher_plano = true              │
- * │ choose-plan       — ativa trial (7d) ou marca plano pago pendente  │
- * │ check-vencimentos — verifica expiração e cria notificações         │
- * │ FUTURO: choose-plan pode receber array de módulos selecionados.    │
- * └─────────────────────────────────────────────────────────────────────┘
+ * check_event_limit  — Valida max_eventos (base + módulos de capacidade)
+ * check_user_limit   — Valida max_usuarios (base + módulos de capacidade)
+ * deactivate_trial_modules — Desativa módulos trial quando trial expira
  *
  * ============================================================================
- * 5. TELAS DE ASSINATURA / PLANO
+ * 5. FLUXOS
  * ============================================================================
  *
- * • EscolherPlano.tsx   — tela pós-cadastro; lista planos + botão free trial
- * • PagamentoPlano.tsx  — PIX + upload comprovante para plano pago
- * • PlanoAssinatura.tsx — painel interno da empresa (plano atual, pagar, upgrade, histórico)
- * • master/Planos.tsx   — CRUD de planos pelo master admin
- * • FUTURO: EscolherPlano e PlanoAssinatura precisarão mostrar módulos
- *   opcionais abaixo do plano base. master/Planos.tsx ganha aba de módulos.
- *
- * ============================================================================
- * 6. CONTEXTO DE AUTH E BLOQUEIO
- * ============================================================================
- *
- * • AuthContext.tsx      — fetchUserData carrega empresa.plano_bloqueado,
- *                          trial_expires_at, vencimento, status, precisa_escolher_plano
- * • ProtectedRoute.tsx   — redireciona para /escolher-plano se precisa_escolher_plano
- *                          bloqueia rotas se empresaBloqueada (modo leitura)
- * • PlanoBloqueado.tsx   — banner read-only
- * • FUTURO: sem mudança estrutural; bloqueio continua baseado em empresa.
- *
- * ============================================================================
- * 7. PONTOS DE EXTENSÃO PARA MÓDULOS (FUTURA ETAPA)
- * ============================================================================
- *
- * A. Novas tabelas:
- *    - modulos (id, nome, descricao, valor, tipo_limite, limite_valor, ativo)
- *    - plano_modulos (plano_id, modulo_id, incluido) — módulos inclusos no plano base
- *    - empresa_modulos (empresa_id, modulo_id, ativo, vencimento) — módulos contratados
- *
- * B. Alterar triggers check_event_limit e check_user_limit para consultar
- *    função consolidada que soma plano base + módulos.
- *
- * C. Alterar usePlanLimits para incluir dados de empresa_modulos.
- *
- * D. Alterar telas de plano para exibir módulos opcionais.
- *
- * E. Alterar choose-plan para aceitar módulos selecionados.
+ * Empresa solicita módulo → module_requests (pending)
+ * Master aprova → empresa_modules (active) + log
+ * Master rejeita → module_requests (rejected) + log
+ * Pagamento de módulo → module_payments → aprovação → ativação
+ * Ativação manual → empresa_modules com granted_by_admin + origem
+ * Trial → módulos com trial_granted=true → desativados automaticamente
  *
  * ============================================================================
  */
 
-// Exportação vazia para manter o arquivo como módulo TS válido
 export {};
