@@ -390,8 +390,12 @@ export default function PlanoAssinatura() {
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 pt-1">
-            <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
-              <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
+            <Button onClick={handlePagar} disabled={!sub.planoBase || generatingCharge} size="lg">
+              {generatingCharge ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando cobrança...</>
+              ) : (
+                <><QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}</>
+              )}
             </Button>
             <Button variant="outline" onClick={() => setShowUpgrade(true)}>
               <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
