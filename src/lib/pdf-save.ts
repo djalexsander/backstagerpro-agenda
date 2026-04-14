@@ -1,4 +1,8 @@
 import { toast } from "sonner";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Configure pdf.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 /**
  * Sanitize a string for use as a filename:
@@ -104,67 +108,62 @@ export async function smartSavePNG(
   nameOpts: SmartPDFNameOptions | string
 ): Promise<void> {
   try {
-    const pageCount = doc.getNumberOfPages();
-    
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      
-      // Render page to canvas at 2x resolution for quality
-      const scale = 2;
+    // Convert jsPDF doc to ArrayBuffer, then use pdf.js to render each page
+    const pdfArrayBuffer = doc.output("arraybuffer");
+    const pdfDoc = await pdfjsLib.getDocument({ data: pdfArrayBuffer }).promise;
+    const totalPages = pdfDoc.numPages;
+    const scale = 2; // 2x for high quality
+
+    for (let i = 1; i <= totalPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const viewport = page.getViewport({ scale });
+
       const canvas = document.createElement("canvas");
-      canvas.width = Math.round(pageWidth * scale * (96 / 72));
-      canvas.height = Math.round(pageHeight * scale * (96 / 72));
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas context not available");
 
-      // Use jsPDF's built-in canvas output
-      const imgData = doc.output("datauristring", { page: i });
-      
-      await new Promise<void>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve();
-        };
-        img.onerror = reject;
-        img.src = imgData;
-      });
+      // White background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const suffix = pageCount > 1 ? `-pagina-${i}` : "";
-      const baseName = typeof nameOpts === "string" 
-        ? nameOpts.replace(/\.pdf$/i, "") 
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const suffix = totalPages > 1 ? `-pagina-${i}` : "";
+      const baseName = typeof nameOpts === "string"
+        ? nameOpts.replace(/\.pdf$/i, "")
         : buildPDFFileName(nameOpts, "").replace(/\.$/, "");
       const fileName = `${baseName}${suffix}.png`;
 
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          toast.error("Erro ao gerar PNG.");
-          return;
-        }
-        
-        try {
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = fileName;
-          link.style.display = "none";
-          document.body.appendChild(link);
-          link.click();
-          setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }, 250);
-        } catch {
-          toast.error("Erro ao baixar o PNG.");
-        }
-      }, "image/png");
+      await new Promise<void>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            toast.error("Erro ao gerar PNG.");
+            resolve();
+            return;
+          }
+          try {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(() => {
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }, 250);
+          } catch {
+            toast.error("Erro ao baixar o PNG.");
+          }
+          resolve();
+        }, "image/png");
+      });
     }
 
-    toast.success(pageCount > 1 ? `${pageCount} imagens PNG geradas!` : "PNG gerado com sucesso!");
+    toast.success(totalPages > 1 ? `${totalPages} imagens PNG geradas!` : "PNG gerado com sucesso!");
   } catch (err) {
     console.error("PNG export failed:", err);
     toast.error("Erro ao gerar PNG. Tente novamente.");
