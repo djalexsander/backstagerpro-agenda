@@ -17,11 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package,
   Users, Calendar, HardDrive, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
-  ShoppingCart, X,
+  ShoppingCart, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { QRCodeSVG } from "qrcode.react";
-import { generatePixPayload } from "@/lib/pix";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
