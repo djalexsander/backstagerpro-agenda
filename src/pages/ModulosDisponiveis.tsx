@@ -197,24 +197,38 @@ export default function ModulosDisponiveis() {
 
       return batch.id;
     },
-    onSuccess: (id) => {
+    onSuccess: async (id) => {
       queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
       setBatchId(id);
       setShowSummary(false);
+      const savedTotal = totalSelected;
+      setBatchTotalForPix(savedTotal);
       setSelectedIds(new Set());
       setObservacao("");
 
-      // Generate PIX
-      if (pixSettings?.pix_chave && totalSelected > 0) {
-        const payload = generatePixPayload({
-          chave: pixSettings.pix_chave,
-          nomeRecebedor: pixSettings.pix_nome_recebedor || "Backstage Pro",
-          cidade: pixSettings.pix_cidade || "Maringa",
-          valor: totalSelected,
-          descricao: `Modulos - ${empresa?.nome_empresa?.substring(0, 15)}`,
-        });
-        setPixPayload(payload);
-        setShowPix(true);
+      // Generate Asaas charge
+      if (savedTotal > 0) {
+        try {
+          const res = await supabase.functions.invoke("create-asaas-charge", {
+            body: {
+              payment_type: "modules",
+              amount: savedTotal,
+              description: `Módulos adicionais - ${empresa?.nome_empresa || ""}`,
+              related_batch_request_id: id,
+            },
+          });
+          if (res.error) throw new Error(res.error.message);
+          if (res.data?.error) throw new Error(res.data.error);
+
+          setAsaasChargeData({
+            pix_qr_code: res.data.pix_qr_code,
+            pix_copy_paste: res.data.pix_copy_paste,
+            invoice_url: res.data.invoice_url,
+          });
+          setShowPix(true);
+        } catch (err: any) {
+          toast({ title: "Erro ao gerar cobrança", description: err.message, variant: "destructive" });
+        }
       } else {
         toast({ title: "Solicitação enviada!", description: "Aguarde a aprovação do administrador." });
       }
