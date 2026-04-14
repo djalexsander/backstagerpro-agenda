@@ -1072,6 +1072,9 @@ export default function Financeiro() {
                         <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f, { empresaNome, empresaLogoUrl })} title="Exportar PDF">
                           <FileDown className="h-4 w-4" />
                         </Button>
+                        <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f, { empresaNome, empresaLogoUrl }, "png")} title="Exportar PNG">
+                          <ImageIcon className="h-4 w-4" />
+                        </Button>
                         {!empresaReadOnly && (
                           <>
                             <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Editar">
