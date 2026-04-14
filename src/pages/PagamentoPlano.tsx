@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Music, QrCode, Copy, ArrowLeft, Upload, Clock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
+import { generatePixPayload } from "@/lib/pix";
 
 export default function PagamentoPlano() {
   const { planoId } = useParams<{ planoId: string }>();
@@ -18,16 +19,9 @@ export default function PagamentoPlano() {
   const { platformLogoUrl, platformName } = usePlatformBranding();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
-  const [generatingCharge, setGeneratingCharge] = useState(false);
+  const [settingPlan, setSettingPlan] = useState(false);
+  const [planSet, setPlanSet] = useState(false);
   const [comprovanteEnviado, setComprovanteEnviado] = useState(false);
-
-  // Asaas charge data
-  const [asaasData, setAsaasData] = useState<{
-    payment_id: string;
-    pix_qr_code: string | null;
-    pix_copy_paste: string | null;
-    invoice_url: string | null;
-  } | null>(null);
 
   // Fetch plano details
   const { data: plano } = useQuery({
@@ -59,51 +53,61 @@ export default function PagamentoPlano() {
     enabled: !!empresaId,
   });
 
-  // Generate Asaas charge
-  const handleGenerateCharge = async () => {
-    if (!plano || !planoId) return;
-    setGeneratingCharge(true);
+  // Fetch PIX settings from system_settings
+  const { data: pixSettings } = useQuery({
+    queryKey: ["pix-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("system_settings")
+        .select("key, value")
+        .like("key", "pix_%");
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      (data || []).forEach((r: any) => { map[r.key] = r.value || ""; });
+      return map;
+    },
+  });
+
+  // Generate PIX payload
+  const pixPayload = useMemo(() => {
+    if (!pixSettings || !plano) return null;
     try {
-      const res = await supabase.functions.invoke("create-asaas-charge", {
-        body: {
-          payment_type: "base_plan",
-          amount: Number(plano.valor),
-          description: `Plano ${plano.nome} - ${empresa?.nome_empresa || ""}`,
-          related_plano_id: planoId,
-        },
+      return generatePixPayload({
+        chave: pixSettings.pix_chave || "",
+        nomeRecebedor: pixSettings.pix_nome_recebedor || "",
+        cidade: pixSettings.pix_cidade || "",
+        valor: Number(plano.valor),
       });
-      if (res.error) throw new Error(res.error.message);
-      if (res.data?.error) throw new Error(res.data.error);
+    } catch { return null; }
+  }, [pixSettings, plano]);
 
-      setAsaasData({
-        payment_id: res.data.payment_id,
-        pix_qr_code: res.data.pix_qr_code,
-        pix_copy_paste: res.data.pix_copy_paste,
-        invoice_url: res.data.invoice_url,
-      });
-
-      // Also call choose-plan to set the empresa plano
-      const choosePlanRes = await supabase.functions.invoke("choose-plan", {
+  // Set the plan via choose-plan edge function
+  const handleConfirmPlan = async () => {
+    if (!planoId) return;
+    setSettingPlan(true);
+    try {
+      const res = await supabase.functions.invoke("choose-plan", {
         body: { tipo: "paid", plano_id: planoId },
       });
-      if (choosePlanRes.data?.error) throw new Error(choosePlanRes.data.error);
+      if (res.data?.error) throw new Error(res.data.error);
       await refreshProfile();
+      setPlanSet(true);
     } catch (err: any) {
-      toast({ title: "Erro ao gerar cobrança", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao confirmar plano", description: err.message, variant: "destructive" });
     } finally {
-      setGeneratingCharge(false);
+      setSettingPlan(false);
     }
   };
 
   const copyPix = () => {
-    if (asaasData?.pix_copy_paste) {
-      navigator.clipboard.writeText(asaasData.pix_copy_paste);
+    if (pixPayload) {
+      navigator.clipboard.writeText(pixPayload);
       toast({ title: "Código PIX copiado!" });
     }
   };
 
   const handleUploadComprovante = async (file: File) => {
-    if (!empresaId || !planoId || !plano || !asaasData) return;
+    if (!empresaId || !planoId || !plano) return;
 
     setLoading(true);
     try {
@@ -137,12 +141,10 @@ export default function PagamentoPlano() {
         .eq("id", pagamento.id);
 
       // 4. Update empresa status to pagamento_em_analise
-      if (empresaId) {
-        await supabase
-          .from("empresas")
-          .update({ status_pagamento: "pagamento_em_analise" } as any)
-          .eq("id", empresaId);
-      }
+      await supabase
+        .from("empresas")
+        .update({ status_pagamento: "pagamento_em_analise" } as any)
+        .eq("id", empresaId);
 
       // 5. Insert notificação for master
       await supabase.from("notificacoes_master").insert({
@@ -249,31 +251,31 @@ export default function PagamentoPlano() {
           </CardContent>
         </Card>
 
-        {/* Generate Charge or Show PIX */}
-        {!asaasData ? (
+        {/* Step 1: Confirm plan choice */}
+        {!planSet ? (
           <Card className="mb-6">
             <CardContent className="py-8 text-center space-y-4">
               <QrCode className="h-12 w-12 text-muted-foreground mx-auto" />
               <p className="text-muted-foreground">
-                Clique no botão abaixo para gerar sua cobrança PIX via Asaas.
+                Confirme a escolha do plano para visualizar os dados de pagamento PIX.
               </p>
               <Button
                 size="lg"
-                onClick={handleGenerateCharge}
-                disabled={generatingCharge || !plano}
+                onClick={handleConfirmPlan}
+                disabled={settingPlan || !plano}
                 className="w-full"
               >
-                {generatingCharge ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando cobrança...</>
+                {settingPlan ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirmando...</>
                 ) : (
-                  <><QrCode className="h-4 w-4 mr-2" /> Gerar PIX — R$ {Number(plano?.valor || 0).toFixed(2)}</>
+                  <><QrCode className="h-4 w-4 mr-2" /> Confirmar e Ver PIX — R$ {Number(plano?.valor || 0).toFixed(2)}</>
                 )}
               </Button>
             </CardContent>
           </Card>
         ) : (
           <>
-            {/* PIX Payment from Asaas */}
+            {/* PIX Payment — Manual */}
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -282,25 +284,23 @@ export default function PagamentoPlano() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {asaasData.pix_qr_code && (
-                  <div className="flex justify-center">
-                    <div className="bg-white p-4 rounded-lg">
-                      <img
-                        src={`data:image/png;base64,${asaasData.pix_qr_code}`}
-                        alt="QR Code PIX"
-                        className="w-[200px] h-[200px]"
-                      />
-                    </div>
-                  </div>
-                )}
-                {asaasData.pix_copy_paste && (
+                {pixPayload && (
                   <>
+                    <div className="flex justify-center">
+                      <div className="bg-white p-4 rounded-lg">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixPayload)}`}
+                          alt="QR Code PIX"
+                          className="w-[200px] h-[200px]"
+                        />
+                      </div>
+                    </div>
                     <Separator />
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
                       <div className="flex gap-2">
                         <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">
-                          {asaasData.pix_copy_paste}
+                          {pixPayload}
                         </code>
                         <Button variant="outline" size="icon" onClick={copyPix}>
                           <Copy className="h-4 w-4" />
@@ -309,15 +309,13 @@ export default function PagamentoPlano() {
                     </div>
                   </>
                 )}
-                {asaasData.invoice_url && (
-                  <>
-                    <Separator />
-                    <Button variant="outline" className="w-full" asChild>
-                      <a href={asaasData.invoice_url} target="_blank" rel="noopener noreferrer">
-                        Ver fatura completa no Asaas
-                      </a>
-                    </Button>
-                  </>
+                {pixSettings && (
+                  <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
+                    <p className="font-medium text-foreground">Dados do recebedor:</p>
+                    <p><strong>Nome:</strong> {pixSettings.pix_nome_recebedor}</p>
+                    <p><strong>Chave ({pixSettings.pix_tipo_chave}):</strong> {pixSettings.pix_chave}</p>
+                    <p><strong>Banco:</strong> {pixSettings.pix_banco}</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -330,7 +328,7 @@ export default function PagamentoPlano() {
                   Enviar Comprovante
                 </CardTitle>
                 <CardDescription>
-                  Após realizar o pagamento, envie o comprovante para agilizar a ativação
+                  Após realizar o pagamento, envie o comprovante para ativar seu plano
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -354,9 +352,9 @@ export default function PagamentoPlano() {
                 </p>
                 <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground space-y-1">
                   <p className="font-medium text-foreground">ℹ️ Informações importantes:</p>
-                  <p>• O pagamento será confirmado automaticamente via Asaas</p>
-                  <p>• Enviar o comprovante agiliza a aprovação manual</p>
-                  <p>• Você receberá acesso assim que o pagamento for confirmado</p>
+                  <p>• Envie o comprovante de pagamento para agilizar a ativação</p>
+                  <p>• O administrador irá confirmar o pagamento manualmente</p>
+                  <p>• Você receberá acesso assim que o pagamento for aprovado</p>
                 </div>
               </CardContent>
             </Card>
