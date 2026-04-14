@@ -65,10 +65,13 @@ export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boo
     // Capacidades consolidadas
     const capabilities = computeConsolidatedCapabilities(planoBase, activeModules);
 
-    // Valores
+    // Valores — apenas módulos cobráveis entram na mensalidade
     const valorBase = planoBase ? Number(planoBase.valor) : 0;
-    const valorModulos = activeModules.reduce(
-      (sum, m) => sum + Number(m.valor_cobrado || 0),
+    const billableModules = activeModules.filter(
+      (m) => !m.trial_granted && Number(m.valor_cobrado) > 0,
+    );
+    const valorModulos = billableModules.reduce(
+      (sum, m) => sum + Number(m.valor_cobrado),
       0,
     );
 
