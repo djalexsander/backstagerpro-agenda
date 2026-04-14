@@ -182,8 +182,11 @@ export default function PagamentoPlano() {
                 <p><strong>Valor:</strong> R$ {Number(plano?.valor || 0).toFixed(2)}{sufixo}</p>
                 <p><strong>Status:</strong> <span className="text-warning font-medium">Pendente</span></p>
               </div>
-              <Button variant="outline" onClick={() => navigate("/onboarding-modulos", { replace: true })}>
-                Explorar Módulos
+              <Button onClick={() => navigate("/onboarding-modulos", { replace: true })}>
+                Continuar — Escolher Módulos
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/agenda", { replace: true })}>
+                Pular e acessar o sistema
               </Button>
             </CardContent>
           </Card>
