@@ -357,7 +357,7 @@ export default function Financeiro() {
     return financials;
   };
 
-  const handleExport = () => {
+  const handleExport = (exportFmt: "pdf" | "png" = "pdf") => {
     const filtered = getFilteredForExport();
     if (filtered.length === 0) {
       toast({ title: "Nenhum registro encontrado para o período selecionado.", variant: "destructive" });
@@ -370,7 +370,7 @@ export default function Financeiro() {
     } else if (exportMode === "period" && exportStart && exportEnd) {
       title = `${exportStart.split("-").reverse().join("/")} a ${exportEnd.split("-").reverse().join("/")}`;
     }
-    exportFinancialTotalPDF(filtered, title, { empresaNome, empresaLogoUrl });
+    exportFinancialTotalPDF(filtered, title, { empresaNome, empresaLogoUrl }, exportFmt);
     setExportOpen(false);
   };
 
