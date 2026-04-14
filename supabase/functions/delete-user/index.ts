@@ -112,11 +112,13 @@ Deno.serve(async (req) => {
     await adminClient.from("user_roles").delete().eq("user_id", user_id);
     await adminClient.from("profiles").delete().eq("user_id", user_id);
 
-    // Delete from auth
+    // Delete from auth (ignore "User not found" — may already be deleted)
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(
       user_id
     );
-    if (deleteError) throw deleteError;
+    if (deleteError && !deleteError.message?.includes("User not found")) {
+      throw deleteError;
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
