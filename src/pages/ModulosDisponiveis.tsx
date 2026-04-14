@@ -33,8 +33,13 @@ export default function ModulosDisponiveis() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showSummary, setShowSummary] = useState(false);
   const [showPix, setShowPix] = useState(false);
-  const [pixPayload, setPixPayload] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [asaasChargeData, setAsaasChargeData] = useState<{
+    pix_qr_code: string | null;
+    pix_copy_paste: string | null;
+    invoice_url: string | null;
+  } | null>(null);
   const [batchId, setBatchId] = useState<string | null>(null);
 
   // Fetch existing requests, payments, and batch requests
