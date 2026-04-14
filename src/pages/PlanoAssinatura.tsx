@@ -50,11 +50,17 @@ export default function PlanoAssinatura() {
     enabled: !!empresaId,
   });
 
-  // Fetch all active plans
+  // Fetch plans available for new subscriptions (excludes legacy plans)
   const { data: planos } = useQuery({
-    queryKey: ["planos-ativos"],
+    queryKey: ["planos-ativos-upgrade"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("planos").select("*").eq("ativo", true).order("valor", { ascending: true });
+      const { data, error } = await supabase
+        .from("planos")
+        .select("*")
+        .eq("ativo", true)
+        .eq("disponivel_novo_cadastro", true)
+        .gt("valor", 0)
+        .order("valor", { ascending: true });
       if (error) throw error;
       return data;
     },
