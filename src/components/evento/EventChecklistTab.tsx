@@ -24,10 +24,10 @@ interface Props {
 }
 
 export function EventChecklistTab({ eventId }: Props) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, empresaId } = useAuth();
   const { toast } = useToast();
   const {
-    isLoading, addItem, toggleItem, deleteItem,
+    isLoading, addItem, toggleItem, deleteItem, batchAddItems,
     total, concluidos, progress, byCategory, items,
   } = useEventChecklist(eventId);
 
