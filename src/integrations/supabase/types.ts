@@ -644,9 +644,11 @@ export type Database = {
       module_catalog: {
         Row: {
           ativo: boolean
+          badge: string | null
           capacidade_extra_eventos: number
           capacidade_extra_storage: number
           capacidade_extra_usuarios: number
+          categoria: string
           created_at: string
           descricao: string | null
           destaque: boolean
@@ -657,15 +659,18 @@ export type Database = {
           nome: string
           ordem: number
           periodicidade: string
+          texto_venda: string | null
           tipo_modulo: string
           updated_at: string
           valor: number
         }
         Insert: {
           ativo?: boolean
+          badge?: string | null
           capacidade_extra_eventos?: number
           capacidade_extra_storage?: number
           capacidade_extra_usuarios?: number
+          categoria?: string
           created_at?: string
           descricao?: string | null
           destaque?: boolean
@@ -676,15 +681,18 @@ export type Database = {
           nome: string
           ordem?: number
           periodicidade?: string
+          texto_venda?: string | null
           tipo_modulo?: string
           updated_at?: string
           valor?: number
         }
         Update: {
           ativo?: boolean
+          badge?: string | null
           capacidade_extra_eventos?: number
           capacidade_extra_storage?: number
           capacidade_extra_usuarios?: number
+          categoria?: string
           created_at?: string
           descricao?: string | null
           destaque?: boolean
@@ -695,6 +703,7 @@ export type Database = {
           nome?: string
           ordem?: number
           periodicidade?: string
+          texto_venda?: string | null
           tipo_modulo?: string
           updated_at?: string
           valor?: number
