@@ -3,6 +3,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import type { PdfBranding } from "@/lib/pdf-branding";
 import { exportAgendaPDF, exportFinancialTotalPDF, type ExportFormat } from "@/lib/pdf-export";
+import type { SmartPDFNameOptions } from "@/lib/pdf-save";
 
 type EventRow = Tables<"events">;
 type FinancialRow = Tables<"financials"> & {
@@ -114,6 +115,76 @@ export function validateReportFilters(filters: ExportFilters): string | null {
   return null;
 }
 
+// ─── File naming ────────────────────────────────────────────────────────
+
+function slugify(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+interface FileNameContext {
+  reportType: string;           // e.g. "dashboard", "financeiro", "agenda", "checklist"
+  filters: ExportFilters;
+  eventName?: string;
+  eventDate?: string;           // ISO date
+  /** Extra suffix like category or filter label */
+  suffix?: string;
+}
+
+export function buildExportFileName(ctx: FileNameContext): string {
+  const parts: string[] = [];
+
+  // prefix: "relatorio-<type>" or "checklist"
+  if (ctx.reportType === "checklist") {
+    parts.push("checklist");
+  } else {
+    parts.push("relatorio");
+    parts.push(slugify(ctx.reportType));
+  }
+
+  // mode-specific segment
+  if (ctx.filters.mode === "mensal") {
+    const month = pad2((ctx.filters.month ?? 0) + 1);
+    const year = ctx.filters.year ?? new Date().getFullYear();
+    parts.push(`${month}-${year}`);
+  } else if (ctx.filters.mode === "periodo") {
+    if (ctx.filters.startDate && ctx.filters.endDate) {
+      const s = format(ctx.filters.startDate, "yyyy-MM-dd");
+      const e = format(ctx.filters.endDate, "yyyy-MM-dd");
+      parts.push(`periodo-${s}-a-${e}`);
+    } else {
+      parts.push("periodo");
+    }
+  } else if (ctx.filters.mode === "evento") {
+    if (ctx.eventName) parts.push(slugify(ctx.eventName));
+    if (ctx.eventDate) {
+      try {
+        const d = new Date(ctx.eventDate);
+        if (!isNaN(d.getTime())) {
+          parts.push(`${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // optional suffix (e.g. category or filter label for checklist)
+  if (ctx.suffix) parts.push(slugify(ctx.suffix));
+
+  return parts.join("-");
+}
+
+function buildNameOpts(customName: string): SmartPDFNameOptions {
+  return { tipo: "", customName };
+}
+
 function isWithinSelectedRange(date: string | null | undefined, start?: string, end?: string) {
   if (!date) return false;
   if (start && date < start) return false;
@@ -191,7 +262,13 @@ export async function executeReportExport({
         ? `Evento: ${financials[0].events.name}`
         : range.title;
 
-    await exportFinancialTotalPDF(financials, periodTitle, branding, exportFormat);
+    const fileName = buildExportFileName({
+      reportType: "financeiro",
+      filters,
+      eventName: filters.mode === "evento" ? financials[0]?.events?.name ?? undefined : undefined,
+      eventDate: filters.mode === "evento" ? financials[0]?.events?.date ?? undefined : undefined,
+    });
+    await exportFinancialTotalPDF(financials, periodTitle, branding, exportFormat, buildNameOpts(fileName));
     return;
   }
 
@@ -201,5 +278,11 @@ export async function executeReportExport({
     throw new Error("Nenhum evento foi encontrado para os filtros selecionados.");
   }
 
-  await exportAgendaPDF(events, branding, exportFormat);
+  const fileName = buildExportFileName({
+    reportType: reportType === "dashboard" ? "dashboard" : "agenda",
+    filters,
+    eventName: filters.mode === "evento" && events.length > 0 ? events[0].name : undefined,
+    eventDate: filters.mode === "evento" && events.length > 0 ? events[0].date : undefined,
+  });
+  await exportAgendaPDF(events, branding, exportFormat, buildNameOpts(fileName));
 }

@@ -6,6 +6,7 @@ import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
 import type { ExportFormat } from "./pdf-export";
 import type { ChecklistItem } from "@/hooks/useEventChecklist";
 import { CHECKLIST_CATEGORIES } from "@/hooks/useEventChecklist";
+import { buildExportFileName, type ExportFilters } from "@/lib/report-export-service";
 
 interface ChecklistExportOptions {
   items: ChecklistItem[];
@@ -87,7 +88,23 @@ export async function exportChecklistPDF(opts: ChecklistExportOptions) {
     startY = (doc as any).lastAutoTable?.finalY + 6 || startY + 20;
   }
 
-  const nameOpts: SmartPDFNameOptions = { tipo: "checklist", evento: eventName };
+  // Build smart file name
+  const suffixMap: Record<string, string | undefined> = {
+    completo: undefined,
+    pendentes: "pendentes",
+    concluidos: "concluidos",
+    por_categoria: filter?.categoria ?? undefined,
+  };
+  const filterMode = filter?.mode ?? "completo";
+  // Use "evento" mode with a dummy filter for naming purposes
+  const dummyFilters: ExportFilters = { mode: "evento", eventId: "x" };
+  const customName = buildExportFileName({
+    reportType: "checklist",
+    filters: dummyFilters,
+    eventName,
+    suffix: suffixMap[filterMode],
+  });
+  const nameOpts: SmartPDFNameOptions = { tipo: "", customName };
   if (format === "png") {
     await smartSavePNG(doc, nameOpts);
   } else {
