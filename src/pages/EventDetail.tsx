@@ -280,146 +280,31 @@ export default function EventDetail() {
         </div>
       </div>
 
-      {/* Event Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Informações Gerais</CardTitle></CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Local:</span> {event.venue}, {event.city}</div>
-            <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Dias:</span> {(event as any).num_days || 1} dia(s)</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Logística</CardTitle></CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {event.logistics_departure && (
-              <div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Saída:</span> {format(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</div>
-            )}
-            {event.observations && (
-              <div><p className="text-muted-foreground mb-1">Observações:</p><p className="whitespace-pre-wrap">{event.observations}</p></div>
-            )}
-            {/* Material List PDFs */}
-            {(() => {
-              const materialFiles = files.filter((f) => f.file_type === "material_list");
-              if (materialFiles.length === 0 && !event.material_list) return null;
-              return (
-                <div>
-                  <p className="text-muted-foreground mb-2">Lista de Material:</p>
-                  {event.material_list && <p className="whitespace-pre-wrap mb-2">{event.material_list}</p>}
-                  {materialFiles.length > 0 && (
-                    <div className="space-y-2">
-                      {materialFiles.map((f) => (
-                        <div key={f.id} className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="text-sm truncate flex-1">{f.file_name}</span>
-                          <Button variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
-                            <Download className="h-3 w-3 mr-1" /> Baixar
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            {/* Event Rider / Projeto PDFs */}
-            {(() => {
-              const riderFiles = files.filter((f) => f.file_type === "event_rider");
-              if (riderFiles.length === 0) return null;
-              return (
-                <div>
-                  <p className="text-muted-foreground mb-2">Rider / Projeto do Evento:</p>
-                  <div className="space-y-2">
-                    {riderFiles.map((f) => (
-                      <div key={f.id} className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm truncate flex-1">{f.file_name}</span>
-                        <Button variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
-                          <Download className="h-3 w-3 mr-1" /> Baixar
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Equipe Escalada */}
-      {teamMembers.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary" />
-            Equipe Escalada ({teamMembers.length})
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {teamMembers.map((tm: any) => (
-              <Card key={tm.funcionario_id} className="border-border">
-                <CardContent className="p-3 flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{tm.funcionarios?.nome}</p>
-                    {tm.funcionarios?.funcao && (
-                      <p className="text-xs text-muted-foreground truncate">{tm.funcionarios.funcao}</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Event Days Cards */}
-      {hasMultipleDays ? (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Music className="h-5 w-5 text-primary" />
-            Dias do Evento
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {eventDays.map((day) => {
-              const dayFile = files.find((f) => f.event_day_id === day.id && f.file_type !== "material_list");
-              return (
-                <DayCard
-                  key={day.id}
-                  day={day}
-                  dayFile={dayFile}
-                  isAdmin={isAdmin}
-                  onDownload={requestDownload}
-                  onUpload={handleUploadRider}
-                  onRemove={handleRemoveRider}
-                />
-              );
-            })}
-          </div>
-        </div>
+      {/* Tabs for modules */}
+      {(hasChecklist || hasOperacional) ? (
+        <Tabs defaultValue="detalhes">
+          <TabsList>
+            <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
+            {hasOperacional && <TabsTrigger value="operacional"><LayoutDashboard className="h-4 w-4 mr-1" /> Painel Operacional</TabsTrigger>}
+            {hasChecklist && <TabsTrigger value="checklist"><ClipboardList className="h-4 w-4 mr-1" /> Checklist</TabsTrigger>}
+          </TabsList>
+          <TabsContent value="detalhes" className="space-y-6 mt-4">
+            <EventDetailContent event={event} eventDays={eventDays} files={files} teamMembers={teamMembers} isAdmin={isAdmin} requestDownload={requestDownload} handleUploadRider={handleUploadRider} handleRemoveRider={handleRemoveRider} />
+          </TabsContent>
+          {hasOperacional && (
+            <TabsContent value="operacional" className="mt-4">
+              <EventOperationalPanel event={event} eventDays={eventDays} teamMembers={teamMembers} files={files} />
+            </TabsContent>
+          )}
+          {hasChecklist && (
+            <TabsContent value="checklist" className="mt-4">
+              <EventChecklistTab eventId={event.id} />
+            </TabsContent>
+          )}
+        </Tabs>
       ) : (
-        /* Legacy single-day display */
-        <Card>
-          <CardHeader><CardTitle className="text-base">Detalhes do Show</CardTitle></CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2"><Music className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Artista:</span> {event.artist}</div>
-            <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Data:</span> {format(parseISO(event.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</div>
-            {event.show_time && <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Horário:</span> {event.show_time.slice(0, 5)}</div>}
-            {files.length > 0 && (
-              <div className="flex gap-2 pt-2">
-                {files.map((f) => (
-                  <Button key={f.id} variant="outline" size="sm" onClick={() => requestDownload(f.file_path, f.file_name)}>
-                    <Download className="h-4 w-4 mr-1" /> {f.file_name}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <EventDetailContent event={event} eventDays={eventDays} files={files} teamMembers={teamMembers} isAdmin={isAdmin} requestDownload={requestDownload} handleUploadRider={handleUploadRider} handleRemoveRider={handleRemoveRider} />
       )}
-
       {/* Download Confirmation Dialog */}
       <AlertDialog open={!!downloadPending} onOpenChange={(open) => { if (!open) setDownloadPending(null); }}>
         <AlertDialogContent>
