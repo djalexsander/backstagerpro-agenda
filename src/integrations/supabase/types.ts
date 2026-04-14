@@ -99,6 +99,63 @@ export type Database = {
           },
         ]
       }
+      empresa_modules: {
+        Row: {
+          activated_at: string | null
+          created_at: string
+          empresa_id: string
+          expires_at: string | null
+          granted_by_admin: boolean
+          id: string
+          module_id: string
+          origem: string
+          status: string
+          updated_at: string
+          valor_cobrado: number
+        }
+        Insert: {
+          activated_at?: string | null
+          created_at?: string
+          empresa_id: string
+          expires_at?: string | null
+          granted_by_admin?: boolean
+          id?: string
+          module_id: string
+          origem?: string
+          status?: string
+          updated_at?: string
+          valor_cobrado?: number
+        }
+        Update: {
+          activated_at?: string | null
+          created_at?: string
+          empresa_id?: string
+          expires_at?: string | null
+          granted_by_admin?: boolean
+          id?: string
+          module_id?: string
+          origem?: string
+          status?: string
+          updated_at?: string
+          valor_cobrado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_modules_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_modules_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "module_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresa_usuarios: {
         Row: {
           created_at: string
@@ -577,6 +634,180 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "document_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      module_catalog: {
+        Row: {
+          ativo: boolean
+          capacidade_extra_eventos: number
+          capacidade_extra_storage: number
+          capacidade_extra_usuarios: number
+          created_at: string
+          descricao: string | null
+          feature_key: string
+          id: string
+          is_capacity_module: boolean
+          metadata: Json | null
+          nome: string
+          ordem: number
+          periodicidade: string
+          tipo_modulo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          ativo?: boolean
+          capacidade_extra_eventos?: number
+          capacidade_extra_storage?: number
+          capacidade_extra_usuarios?: number
+          created_at?: string
+          descricao?: string | null
+          feature_key: string
+          id?: string
+          is_capacity_module?: boolean
+          metadata?: Json | null
+          nome: string
+          ordem?: number
+          periodicidade?: string
+          tipo_modulo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          ativo?: boolean
+          capacidade_extra_eventos?: number
+          capacidade_extra_storage?: number
+          capacidade_extra_usuarios?: number
+          created_at?: string
+          descricao?: string | null
+          feature_key?: string
+          id?: string
+          is_capacity_module?: boolean
+          metadata?: Json | null
+          nome?: string
+          ordem?: number
+          periodicidade?: string
+          tipo_modulo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      module_payments: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          comprovante_url: string | null
+          created_at: string
+          empresa_id: string
+          id: string
+          module_id: string
+          observacao_admin: string | null
+          paid_at: string | null
+          payment_method: string | null
+          rejected_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          approved_at?: string | null
+          comprovante_url?: string | null
+          created_at?: string
+          empresa_id: string
+          id?: string
+          module_id: string
+          observacao_admin?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          rejected_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          comprovante_url?: string | null
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          module_id?: string
+          observacao_admin?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          rejected_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_payments_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_payments_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "module_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      module_requests: {
+        Row: {
+          approved_at: string | null
+          created_at: string
+          empresa_id: string
+          id: string
+          module_id: string
+          observacao: string | null
+          rejected_at: string | null
+          requested_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          created_at?: string
+          empresa_id: string
+          id?: string
+          module_id: string
+          observacao?: string | null
+          rejected_at?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          module_id?: string
+          observacao?: string | null
+          rejected_at?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_requests_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_requests_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "module_catalog"
             referencedColumns: ["id"]
           },
         ]
