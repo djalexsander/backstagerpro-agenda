@@ -7,6 +7,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { MODULE_KEYS } from "@/constants/module-keys";
 import appVersion from "../../package.json";
 
 const APP_VERSION = appVersion.version;
@@ -16,6 +18,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { isMasterAdmin, isAdminEmpresa, profile, signOut, empresaLogoUrl, empresaNome, empresaReadOnly } = useAuth();
   const { platformLogoUrl, platformName } = usePlatformBranding();
+  const { hasModule } = useCompanyModules();
 
   // For company users, show empresa logo/name; for master, show platform branding
   const displayLogoUrl = isMasterAdmin ? platformLogoUrl : (empresaLogoUrl || platformLogoUrl);
@@ -23,30 +26,33 @@ export function AppSidebar() {
 
   const isUsuario = !isMasterAdmin && !isAdminEmpresa;
 
+  // Items that require specific modules (only shown when module is active or user is master)
+  const moduleGatedItems = isMasterAdmin ? [
+    { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+    { title: "Usuários", url: "/usuarios", icon: Users },
+    { title: "Documentos", url: "/documentos", icon: FileText },
+    { title: "Funcionários", url: "/funcionarios", icon: HardHat },
+    { title: "Backups", url: "/backups", icon: Database },
+  ] : [
+    ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
+    ...(hasModule(MODULE_KEYS.EXTRA_USUARIOS) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
+    ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
+    ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
+    ...(hasModule(MODULE_KEYS.EXPORTACOES_ESPECIAIS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
+  ];
+
+  // Base items always visible (Dashboard, Agenda, Plano, Módulos)
   const companyItems = isUsuario
     ? [
         { title: "Agenda", url: "/agenda", icon: Calendar },
         ...(empresaReadOnly ? [{ title: "Plano / Assinatura", url: "/plano", icon: CreditCard }] : []),
       ]
-    : empresaReadOnly
-    ? [
-        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-        { title: "Agenda", url: "/agenda", icon: Calendar },
-        { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-        { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
-        { title: "Documentos", url: "/documentos", icon: FileText },
-        { title: "Funcionários", url: "/funcionarios", icon: HardHat },
-      ]
     : [
         { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { title: "Agenda", url: "/agenda", icon: Calendar },
-        { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-        { title: "Usuários", url: "/usuarios", icon: Users },
+        ...moduleGatedItems,
         { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
-        { title: "Documentos", url: "/documentos", icon: FileText },
-        { title: "Funcionários", url: "/funcionarios", icon: HardHat },
-        { title: "Módulos", url: "/modulos", icon: Package },
-        { title: "Backups", url: "/backups", icon: Database },
+        ...(!isUsuario ? [{ title: "Módulos", url: "/modulos", icon: Package }] : []),
       ];
 
   const masterItems = [

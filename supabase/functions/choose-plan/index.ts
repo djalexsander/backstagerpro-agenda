@@ -81,8 +81,14 @@ Deno.serve(async (req) => {
           status_pagamento: "pendente",
           plano: plano?.nome || null,
           plano_id: plano_id,
+          trial_expires_at: null,
         })
         .eq("id", profile.empresa_id);
+
+      // Deactivate any trial modules when subscribing to a paid plan
+      await supabaseAdmin.rpc("deactivate_trial_modules", {
+        _empresa_id: profile.empresa_id,
+      });
 
       // Notify master
       const { data: empresa } = await supabaseAdmin
