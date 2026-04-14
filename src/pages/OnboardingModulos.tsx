@@ -145,7 +145,7 @@ export default function OnboardingModulos() {
           : "Você pode contratar módulos a qualquer momento.",
       });
 
-      navigate("/agenda", { replace: true });
+      navigate("/onboarding-resumo", { replace: true });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
