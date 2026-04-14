@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,12 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Package, Zap, HardDrive } from "lucide-react";
+import {
+  Plus, Pencil, Trash2, Package, Zap, HardDrive, Star, ArrowUp, ArrowDown,
+  Eye, EyeOff, Sparkles, TrendingUp, Layers,
+} from "lucide-react";
 
 interface ModuleCatalog {
   id: string;
@@ -30,6 +34,7 @@ interface ModuleCatalog {
   capacidade_extra_usuarios: number;
   capacidade_extra_eventos: number;
   capacidade_extra_storage: number;
+  destaque: boolean;
 }
 
 const EMPTY_FORM = {
@@ -45,6 +50,7 @@ const EMPTY_FORM = {
   capacidade_extra_usuarios: "0",
   capacidade_extra_eventos: "0",
   capacidade_extra_storage: "0",
+  destaque: false,
 };
 
 const PERIODICIDADE_LABELS: Record<string, string> = {
@@ -60,7 +66,7 @@ export default function Modulos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<ModuleCatalog | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "featured">("all");
   const [form, setForm] = useState(EMPTY_FORM);
 
   const { data: modulos = [] } = useQuery({
@@ -75,9 +81,20 @@ export default function Modulos() {
     },
   });
 
+  // KPI stats
+  const stats = useMemo(() => {
+    const total = modulos.length;
+    const ativos = modulos.filter((m) => m.ativo).length;
+    const destaques = modulos.filter((m) => m.destaque).length;
+    const funcionalidade = modulos.filter((m) => !m.is_capacity_module && m.ativo).length;
+    const capacidade = modulos.filter((m) => m.is_capacity_module && m.ativo).length;
+    return { total, ativos, destaques, funcionalidade, capacidade };
+  }, [modulos]);
+
   const filtered = modulos.filter((m) => {
     if (statusFilter === "active") return m.ativo;
     if (statusFilter === "inactive") return !m.ativo;
+    if (statusFilter === "featured") return m.destaque;
     return true;
   });
 
@@ -100,6 +117,7 @@ export default function Modulos() {
         capacidade_extra_usuarios: form.is_capacity_module ? parseInt(form.capacidade_extra_usuarios) || 0 : 0,
         capacidade_extra_eventos: form.is_capacity_module ? parseInt(form.capacidade_extra_eventos) || 0 : 0,
         capacidade_extra_storage: form.is_capacity_module ? parseInt(form.capacidade_extra_storage) || 0 : 0,
+        destaque: form.destaque,
       };
 
       if (editItem) {
@@ -132,9 +150,49 @@ export default function Modulos() {
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
 
+  // Quick toggle ativo
+  const toggleAtivo = useMutation({
+    mutationFn: async ({ id, ativo }: { id: string; ativo: boolean }) => {
+      const { error } = await supabase.from("module_catalog").update({ ativo } as any).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["master-modulos"] }),
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  // Quick toggle destaque
+  const toggleDestaque = useMutation({
+    mutationFn: async ({ id, destaque }: { id: string; destaque: boolean }) => {
+      const { error } = await supabase.from("module_catalog").update({ destaque } as any).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["master-modulos"] }),
+    onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+  });
+
+  // Quick reorder
+  const reorder = useMutation({
+    mutationFn: async ({ id, direction }: { id: string; direction: "up" | "down" }) => {
+      const idx = modulos.findIndex((m) => m.id === id);
+      if (idx < 0) return;
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= modulos.length) return;
+
+      const current = modulos[idx];
+      const swap = modulos[swapIdx];
+
+      await Promise.all([
+        supabase.from("module_catalog").update({ ordem: swap.ordem } as any).eq("id", current.id),
+        supabase.from("module_catalog").update({ ordem: current.ordem } as any).eq("id", swap.id),
+      ]);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["master-modulos"] }),
+  });
+
   const openAdd = () => {
     setEditItem(null);
-    setForm(EMPTY_FORM);
+    const nextOrder = modulos.length > 0 ? Math.max(...modulos.map((m) => m.ordem)) + 1 : 0;
+    setForm({ ...EMPTY_FORM, ordem: String(nextOrder) });
     setDialogOpen(true);
   };
 
@@ -153,6 +211,7 @@ export default function Modulos() {
       capacidade_extra_usuarios: String(m.capacidade_extra_usuarios),
       capacidade_extra_eventos: String(m.capacidade_extra_eventos),
       capacidade_extra_storage: String(m.capacidade_extra_storage),
+      destaque: m.destaque,
     });
     setDialogOpen(true);
   };
@@ -161,49 +220,111 @@ export default function Modulos() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Catálogo de Módulos</h1>
-        <Button size="sm" onClick={openAdd}>
+        <div className="flex items-center gap-3">
+          <Package className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Catálogo de Módulos</h1>
+        </div>
+        <Button onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" /> Novo Módulo
         </Button>
       </div>
 
-      {/* Filtros */}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: "Total", value: stats.total, icon: Layers, color: "text-foreground" },
+          { label: "Ativos", value: stats.ativos, icon: Eye, color: "text-green-600" },
+          { label: "Destaques", value: stats.destaques, icon: Star, color: "text-amber-500" },
+          { label: "Funcionalidade", value: stats.funcionalidade, icon: Zap, color: "text-blue-500" },
+          { label: "Capacidade", value: stats.capacidade, icon: HardDrive, color: "text-purple-500" },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <Card key={label}>
+            <CardContent className="flex items-center gap-3 p-4">
+              <Icon className={`h-5 w-5 ${color} shrink-0`} />
+              <div>
+                <p className="text-2xl font-bold">{value}</p>
+                <p className="text-xs text-muted-foreground">{label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
       <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
         <TabsList>
           <TabsTrigger value="all">Todos ({modulos.length})</TabsTrigger>
-          <TabsTrigger value="active">Ativos ({modulos.filter((m) => m.ativo).length})</TabsTrigger>
-          <TabsTrigger value="inactive">Inativos ({modulos.filter((m) => !m.ativo).length})</TabsTrigger>
+          <TabsTrigger value="active">Ativos ({stats.ativos})</TabsTrigger>
+          <TabsTrigger value="inactive">Inativos ({modulos.length - stats.ativos})</TabsTrigger>
+          <TabsTrigger value="featured">
+            <Star className="h-3.5 w-3.5 mr-1" /> Destaques ({stats.destaques})
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* Tabela */}
+      {/* Table */}
       <div className="rounded-lg border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">#</TableHead>
-              <TableHead>Nome</TableHead>
+              <TableHead className="w-20">Ordem</TableHead>
+              <TableHead>Módulo</TableHead>
               <TableHead>Feature Key</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Capacidade</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="text-center">Destaque</TableHead>
+              <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                   Nenhum módulo encontrado.
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="text-muted-foreground text-xs">{m.ordem}</TableCell>
-                  <TableCell className="font-medium">{m.nome}</TableCell>
+              filtered.map((m, idx) => (
+                <TableRow key={m.id} className={m.destaque ? "bg-amber-500/5" : ""}>
+                  {/* Ordem with arrows */}
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground w-6 text-center">{m.ordem}</span>
+                      <div className="flex flex-col">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          disabled={reorder.isPending}
+                          onClick={() => reorder.mutate({ id: m.id, direction: "up" })}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          disabled={reorder.isPending}
+                          onClick={() => reorder.mutate({ id: m.id, direction: "down" })}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </TableCell>
+                  {/* Nome + desc */}
+                  <TableCell>
+                    <div>
+                      <span className="font-medium">{m.nome}</span>
+                      {m.descricao && (
+                        <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{m.descricao}</p>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{m.feature_key}</code>
                   </TableCell>
@@ -216,14 +337,12 @@ export default function Modulos() {
                       )}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-semibold">
-                    {formatCurrency(m.valor)}
+                  <TableCell>
+                    <span className="font-semibold">{formatCurrency(m.valor)}</span>
                     <span className="text-xs text-muted-foreground font-normal">
                       {m.periodicidade === "vitalicio" || m.periodicidade === "unico"
                         ? ""
-                        : m.periodicidade === "anual"
-                        ? "/ano"
-                        : "/mês"}
+                        : m.periodicidade === "anual" ? "/ano" : "/mês"}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -231,7 +350,7 @@ export default function Modulos() {
                       <div className="text-xs space-y-0.5">
                         {m.capacidade_extra_usuarios > 0 && <p>+{m.capacidade_extra_usuarios} usuários</p>}
                         {m.capacidade_extra_eventos > 0 && <p>+{m.capacidade_extra_eventos} eventos</p>}
-                        {m.capacidade_extra_storage > 0 && <p>+{m.capacidade_extra_storage}GB storage</p>}
+                        {m.capacidade_extra_storage > 0 && <p>+{m.capacidade_extra_storage}GB</p>}
                         {m.capacidade_extra_usuarios === 0 && m.capacidade_extra_eventos === 0 && m.capacidade_extra_storage === 0 && (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -240,18 +359,42 @@ export default function Modulos() {
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Badge className={m.ativo ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"}>
-                      {m.ativo ? "Ativo" : "Inativo"}
-                    </Badge>
+                  {/* Destaque toggle */}
+                  <TableCell className="text-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => toggleDestaque.mutate({ id: m.id, destaque: !m.destaque })}
+                    >
+                      <Star className={`h-4 w-4 ${m.destaque ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+                    </Button>
                   </TableCell>
+                  {/* Ativo toggle */}
+                  <TableCell className="text-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => toggleAtivo.mutate({ id: m.id, ativo: !m.ativo })}
+                    >
+                      {m.ativo ? (
+                        <Eye className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </TableCell>
+                  {/* Actions */}
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(m.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(m.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -309,7 +452,7 @@ export default function Modulos() {
                 maxLength={50}
                 disabled={!!editItem}
               />
-              <p className="text-xs text-muted-foreground">Identificador único do módulo (não pode ser alterado depois de criado)</p>
+              <p className="text-xs text-muted-foreground">Identificador único (não pode ser alterado depois de criado)</p>
             </div>
 
             {/* Tipo e Periodicidade */}
@@ -353,25 +496,42 @@ export default function Modulos() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Ordem</Label>
+                <Label>Ordem de exibição</Label>
                 <Input
                   type="number"
                   min="0"
                   value={form.ordem}
                   onChange={(e) => setForm((p) => ({ ...p, ordem: e.target.value }))}
                 />
+                <p className="text-xs text-muted-foreground">Menor = aparece primeiro</p>
               </div>
             </div>
 
             {/* Descrição */}
             <div className="space-y-1.5">
-              <Label>Descrição</Label>
+              <Label>Descrição comercial</Label>
               <Textarea
                 value={form.descricao}
                 onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))}
-                rows={2}
-                placeholder="Descrição do módulo para exibição"
+                rows={3}
+                placeholder="Descrição que será exibida ao cliente na contratação..."
                 maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground">{form.descricao.length}/500 caracteres</p>
+            </div>
+
+            {/* Destaque */}
+            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-500/5 p-3">
+              <div className="flex items-center gap-2">
+                <Star className={`h-4 w-4 ${form.destaque ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+                <div>
+                  <p className="text-sm font-medium">Módulo em destaque</p>
+                  <p className="text-xs text-muted-foreground">Recomendado / estratégico comercialmente</p>
+                </div>
+              </div>
+              <Switch
+                checked={form.destaque}
+                onCheckedChange={(v) => setForm((p) => ({ ...p, destaque: v }))}
               />
             </div>
 
