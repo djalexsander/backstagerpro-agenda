@@ -200,6 +200,9 @@ export default function PlanoAssinatura() {
         invoice_url: res.data.invoice_url,
       });
       setShowPix(true);
+      // Refresh pending payments list so banner appears
+      queryClient.invalidateQueries({ queryKey: ["asaas-pending-payments"] });
+      toast.success("Cobrança gerada! Aguardando pagamento.");
     } catch (err: any) {
       toast.error(`Erro ao gerar cobrança: ${err.message}`);
     } finally {
