@@ -274,15 +274,41 @@ export default function PlanoAssinatura() {
         </CardContent>
       </Card>
 
-      {/* ─── ACTION BUTTONS ─── */}
-      <div className="flex flex-wrap gap-3">
-        <Button onClick={handlePagar} disabled={!sub.planoBase}>
-          <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade
-        </Button>
-        <Button variant="outline" onClick={() => setShowUpgrade(true)}>
-          <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
-        </Button>
-      </div>
+      {/* ─── RESUMO DA MENSALIDADE + AÇÃO ─── */}
+      <Card className="border-primary/30 bg-primary/[0.03] shadow-sm">
+        <CardContent className="pt-5 pb-5 space-y-4">
+          {/* Breakdown */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Plano Base ({sub.planoBase?.nome || "—"})</span>
+              <span className="font-medium">R$ {sub.valorBase.toFixed(2)}</span>
+            </div>
+            {sub.valorModulos > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Módulos Ativos ({activeModules.filter(m => !m.trial_granted && Number(m.valor_cobrado) > 0).length})
+                </span>
+                <span className="font-medium">R$ {sub.valorModulos.toFixed(2)}</span>
+              </div>
+            )}
+            <Separator />
+            <div className="flex justify-between items-baseline">
+              <span className="font-semibold text-base">Total Mensal</span>
+              <span className="font-bold text-xl text-primary">R$ {sub.valorTotal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-3 pt-1">
+            <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
+              <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
+            </Button>
+            <Button variant="outline" onClick={() => setShowUpgrade(true)}>
+              <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ─── MÓDULOS ATIVOS ─── */}
       <div className="space-y-4">
@@ -373,44 +399,56 @@ export default function PlanoAssinatura() {
         </div>
       )}
 
-      {/* ─── RESUMO FINANCEIRO ─── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-primary" /> Resumo Financeiro
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Plano Base ({sub.planoBase?.nome || "—"})</span>
-              <span>R$ {sub.valorBase.toFixed(2)}</span>
+      {/* ─── DETALHAMENTO FINANCEIRO ─── */}
+      {activeModules.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-primary" /> Detalhamento da Cobrança
+            </CardTitle>
+            <CardDescription>Veja quais itens compõem sua mensalidade</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm font-medium">
+                <span>Plano Base — {sub.planoBase?.nome || "—"}</span>
+                <span>R$ {sub.valorBase.toFixed(2)}</span>
+              </div>
+              <Separator className="my-1" />
+              {activeModules.map((mod) => {
+                const isBillable = !mod.trial_granted && Number(mod.valor_cobrado) > 0;
+                return (
+                  <div key={mod.id} className="flex justify-between text-sm">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      {isBillable ? (
+                        <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                      ) : (
+                        <Gift className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      )}
+                      {mod.catalog?.nome || "Módulo"}
+                      {mod.trial_granted && <Badge variant="secondary" className="text-[10px] px-1 py-0">Trial</Badge>}
+                      {!mod.trial_granted && Number(mod.valor_cobrado) === 0 && mod.granted_by_admin && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0">Cortesia</Badge>
+                      )}
+                    </span>
+                    <span className={!isBillable ? "text-muted-foreground line-through" : ""}>
+                      R$ {Number(mod.valor_cobrado).toFixed(2)}
+                    </span>
+                  </div>
+                );
+              })}
+              <Separator className="my-1" />
+              <div className="flex justify-between font-semibold text-base pt-1">
+                <span>Total Mensal</span>
+                <span className="text-primary">R$ {sub.valorTotal.toFixed(2)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                Apenas módulos com <CheckCircle className="h-3 w-3 inline text-green-500" /> entram na cobrança mensal.
+              </p>
             </div>
-            {activeModules.map((mod) => {
-              const isBillable = !mod.trial_granted && Number(mod.valor_cobrado) > 0;
-              return (
-                <div key={mod.id} className="flex justify-between text-sm">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    {mod.catalog?.nome || "Módulo"}
-                    {mod.trial_granted && <Badge variant="secondary" className="text-[10px] px-1 py-0">Trial</Badge>}
-                    {!mod.trial_granted && Number(mod.valor_cobrado) === 0 && mod.granted_by_admin && (
-                      <Badge variant="outline" className="text-[10px] px-1 py-0">Cortesia</Badge>
-                    )}
-                  </span>
-                  <span className={!isBillable ? "text-muted-foreground line-through" : ""}>
-                    R$ {Number(mod.valor_cobrado).toFixed(2)}
-                  </span>
-                </div>
-              );
-            })}
-            <Separator />
-            <div className="flex justify-between font-semibold text-base">
-              <span>Total Mensal</span>
-              <span>R$ {sub.valorTotal.toFixed(2)}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── HISTÓRICO ─── */}
       <div className="space-y-4">
