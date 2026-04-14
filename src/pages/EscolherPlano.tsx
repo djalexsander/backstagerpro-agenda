@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Music, Calendar, Users, HardDrive, Gift, CreditCard, CheckCircle } from "lucide-react";
+import { Music, Calendar, Users, HardDrive, Gift, CreditCard, CheckCircle, Sparkles, Shield, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
@@ -40,7 +40,7 @@ export default function EscolherPlano() {
 
       await refreshProfile();
       toast({ title: "Teste grátis ativado!", description: "Você tem 7 dias para experimentar o sistema." });
-      navigate("/agenda", { replace: true });
+      navigate("/modulos", { replace: true });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
