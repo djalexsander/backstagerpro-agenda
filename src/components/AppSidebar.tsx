@@ -38,7 +38,7 @@ export function AppSidebar() {
     ...(hasModule(MODULE_KEYS.EQUIPE_PERMISSOES) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
     ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
     ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
-    ...(hasModule(MODULE_KEYS.EXPORTACOES_ESPECIAIS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
+    ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
   ];
 
   // Base items always visible (Dashboard, Agenda, Plano, Módulos)
