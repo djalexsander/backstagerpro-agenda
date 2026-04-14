@@ -161,3 +161,50 @@ export function getPeriodicidadeLabel(periodicidade: string): string {
   };
   return labels[periodicidade] || "Mensal";
 }
+
+// ---------------------------------------------------------------------------
+// Função consolidada para o novo modelo (plano base + módulos do banco)
+// ---------------------------------------------------------------------------
+
+import type { Tables } from "@/integrations/supabase/types";
+import type { EnrichedEmpresaModule, PlanCapabilities as NewPlanCapabilities } from "@/types/subscription";
+
+/**
+ * Calcula capacidades consolidadas usando dados reais do banco:
+ * plano base (tabela planos) + módulos ativos (empresa_modules + module_catalog).
+ *
+ * Compatível com o modelo atual (sem módulos retorna apenas limites do plano).
+ */
+export function computeConsolidatedCapabilities(
+  planoBase: Tables<"planos"> | null,
+  activeModules: EnrichedEmpresaModule[] = [],
+): NewPlanCapabilities {
+  let maxUsuarios: number | null = planoBase?.max_usuarios ?? null;
+  let maxEventos: number | null = planoBase?.max_eventos ?? null;
+  let storageLimitGb: number | null = planoBase?.storage_limit ?? null;
+  const activeFeatures: string[] = [];
+
+  for (const em of activeModules) {
+    const cat = em.catalog;
+    if (!cat) continue;
+
+    if (cat.is_capacity_module) {
+      if (cat.capacidade_extra_usuarios > 0) {
+        maxUsuarios = (maxUsuarios ?? 0) + cat.capacidade_extra_usuarios;
+      }
+      if (cat.capacidade_extra_eventos > 0) {
+        maxEventos = (maxEventos ?? 0) + cat.capacidade_extra_eventos;
+      }
+      if (cat.capacidade_extra_storage > 0) {
+        storageLimitGb = (storageLimitGb ?? 0) + Number(cat.capacidade_extra_storage);
+      }
+    }
+
+    // Sempre registra a feature_key como ativa
+    if (cat.feature_key) {
+      activeFeatures.push(cat.feature_key);
+    }
+  }
+
+  return { maxUsuarios, maxEventos, storageLimitGb, activeFeatures };
+}
