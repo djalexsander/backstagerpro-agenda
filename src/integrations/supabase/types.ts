@@ -649,6 +649,7 @@ export type Database = {
           capacidade_extra_usuarios: number
           created_at: string
           descricao: string | null
+          destaque: boolean
           feature_key: string
           id: string
           is_capacity_module: boolean
@@ -667,6 +668,7 @@ export type Database = {
           capacidade_extra_usuarios?: number
           created_at?: string
           descricao?: string | null
+          destaque?: boolean
           feature_key: string
           id?: string
           is_capacity_module?: boolean
@@ -685,6 +687,7 @@ export type Database = {
           capacidade_extra_usuarios?: number
           created_at?: string
           descricao?: string | null
+          destaque?: boolean
           feature_key?: string
           id?: string
           is_capacity_module?: boolean
