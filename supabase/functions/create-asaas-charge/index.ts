@@ -93,12 +93,19 @@ Deno.serve(async (req) => {
     const pixKeysData = await pixKeysRes.json();
     console.log("PIX keys check:", JSON.stringify(pixKeysData));
 
-    // Also check account info
-    const myAccountRes = await fetch(`${ASAAS_API_URL}/myAccount`, {
+    // Also check account commercial info and PIX receiving status
+    const myAccountRes = await fetch(`${ASAAS_API_URL}/myAccount/commercialInfo`, {
       headers: { "access_token": ASAAS_API_KEY },
     });
     const myAccountData = await myAccountRes.json();
-    console.log("Account info:", JSON.stringify({ walletId: myAccountData.walletId, name: myAccountData.name, email: myAccountData.email, commercialInfoExpiration: myAccountData.commercialInfoExpiration }));
+    console.log("Commercial info:", JSON.stringify(myAccountData));
+
+    // Check account status
+    const statusRes = await fetch(`${ASAAS_API_URL}/myAccount/status`, {
+      headers: { "access_token": ASAAS_API_KEY },
+    });
+    const statusData = await statusRes.json();
+    console.log("Account status:", JSON.stringify(statusData));
 
     // 3. Create PIX charge
     const dueDate = due_date || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
