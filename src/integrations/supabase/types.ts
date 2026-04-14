@@ -14,6 +14,94 @@ export type Database = {
   }
   public: {
     Tables: {
+      asaas_payments: {
+        Row: {
+          amount: number
+          asaas_customer_id: string | null
+          asaas_payment_id: string | null
+          created_at: string
+          due_date: string | null
+          empresa_id: string
+          id: string
+          invoice_url: string | null
+          metadata: Json | null
+          payment_confirmed_at: string | null
+          payment_method: string | null
+          payment_type: string
+          pix_copy_paste: string | null
+          pix_qr_code: string | null
+          related_batch_request_id: string | null
+          related_plano_id: string | null
+          source_app: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          asaas_customer_id?: string | null
+          asaas_payment_id?: string | null
+          created_at?: string
+          due_date?: string | null
+          empresa_id: string
+          id?: string
+          invoice_url?: string | null
+          metadata?: Json | null
+          payment_confirmed_at?: string | null
+          payment_method?: string | null
+          payment_type: string
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
+          related_batch_request_id?: string | null
+          related_plano_id?: string | null
+          source_app?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          asaas_customer_id?: string | null
+          asaas_payment_id?: string | null
+          created_at?: string
+          due_date?: string | null
+          empresa_id?: string
+          id?: string
+          invoice_url?: string | null
+          metadata?: Json | null
+          payment_confirmed_at?: string | null
+          payment_method?: string | null
+          payment_type?: string
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
+          related_batch_request_id?: string | null
+          related_plano_id?: string | null
+          source_app?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asaas_payments_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asaas_payments_related_batch_request_id_fkey"
+            columns: ["related_batch_request_id"]
+            isOneToOne: false
+            referencedRelation: "module_batch_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asaas_payments_related_plano_id_fkey"
+            columns: ["related_plano_id"]
+            isOneToOne: false
+            referencedRelation: "planos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       backups: {
         Row: {
           created_at: string
