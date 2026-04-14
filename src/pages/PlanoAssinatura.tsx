@@ -386,12 +386,23 @@ export default function PlanoAssinatura() {
               <span className="text-muted-foreground">Plano Base ({sub.planoBase?.nome || "—"})</span>
               <span>R$ {sub.valorBase.toFixed(2)}</span>
             </div>
-            {activeModules.map((mod) => (
-              <div key={mod.id} className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{mod.catalog?.nome || "Módulo"}</span>
-                <span>R$ {Number(mod.valor_cobrado).toFixed(2)}</span>
-              </div>
-            ))}
+            {activeModules.map((mod) => {
+              const isBillable = !mod.trial_granted && Number(mod.valor_cobrado) > 0;
+              return (
+                <div key={mod.id} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    {mod.catalog?.nome || "Módulo"}
+                    {mod.trial_granted && <Badge variant="secondary" className="text-[10px] px-1 py-0">Trial</Badge>}
+                    {!mod.trial_granted && Number(mod.valor_cobrado) === 0 && mod.granted_by_admin && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0">Cortesia</Badge>
+                    )}
+                  </span>
+                  <span className={!isBillable ? "text-muted-foreground line-through" : ""}>
+                    R$ {Number(mod.valor_cobrado).toFixed(2)}
+                  </span>
+                </div>
+              );
+            })}
             <Separator />
             <div className="flex justify-between font-semibold text-base">
               <span>Total Mensal</span>
