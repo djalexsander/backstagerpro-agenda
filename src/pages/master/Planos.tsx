@@ -25,13 +25,14 @@ interface Plano {
   trial_days: number;
   ativo: boolean;
   periodicidade: string;
+  disponivel_novo_cadastro: boolean;
 }
 
 type PlanoTipo = "trial" | "base" | "legado";
 
 function classificarPlano(p: Plano): PlanoTipo {
-  if (p.valor === 0 || p.trial_days > 0 && p.valor === 0) return "trial";
-  if (!p.ativo) return "legado";
+  if (p.valor === 0 || (p.trial_days > 0 && p.valor === 0)) return "trial";
+  if (!p.ativo || !p.disponivel_novo_cadastro) return "legado";
   return "base";
 }
 
