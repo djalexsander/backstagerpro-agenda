@@ -17,11 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package,
   Users, Calendar, HardDrive, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
-  ShoppingCart, X,
+  ShoppingCart, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { QRCodeSVG } from "qrcode.react";
-import { generatePixPayload } from "@/lib/pix";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
@@ -36,11 +34,25 @@ export default function PlanoAssinatura() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
   const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
   const [showBatchSummary, setShowBatchSummary] = useState(false);
   const [batchObservacao, setBatchObservacao] = useState("");
+  const [generatingCharge, setGeneratingCharge] = useState(false);
+
+  // Asaas charge data (for both plan payment and module batch)
+  const [asaasData, setAsaasData] = useState<{
+    pix_qr_code: string | null;
+    pix_copy_paste: string | null;
+    invoice_url: string | null;
+  } | null>(null);
+  const [asaasModuleData, setAsaasModuleData] = useState<{
+    pix_qr_code: string | null;
+    pix_copy_paste: string | null;
+    invoice_url: string | null;
+  } | null>(null);
+  const [generatingModuleCharge, setGeneratingModuleCharge] = useState(false);
+  const [showModulePix, setShowModulePix] = useState(false);
 
   // Fetch empresa
   const { data: empresa } = useQuery({
@@ -69,17 +81,7 @@ export default function PlanoAssinatura() {
     },
   });
 
-  // Fetch PIX settings
-  const { data: pixSettings } = useQuery({
-    queryKey: ["pix-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("system_settings").select("key, value").in("key", ["pix_chave", "pix_nome_recebedor", "pix_cidade", "pix_banco"]);
-      if (error) throw error;
-      const map: Record<string, string | null> = {};
-      data.forEach((r: any) => { map[r.key] = r.value; });
-      return map;
-    },
-  });
+  // (PIX settings no longer needed — Asaas handles PIX generation)
 
   // Fetch payment history
   const { data: pagamentos } = useQuery({
@@ -152,74 +154,47 @@ export default function PlanoAssinatura() {
     onError: () => toast.error("Erro ao solicitar upgrade."),
   });
 
-  // Register payment — valor consolidado (plano base + módulos cobráveis)
-  const paymentMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("pagamentos").insert({
-        empresa_id: empresaId!,
-        plano_id: empresa?.plano_id,
-        valor: sub.valorTotal,
-        status: "pendente",
-        metodo: "pix",
-        descricao: `Assinatura Backstage Pro - ${empresa?.nome_empresa}`,
+
+  const handlePagar = async () => {
+    if (!sub.planoBase || !empresa) { toast.error("Nenhum plano associado."); return; }
+    setGeneratingCharge(true);
+    try {
+      const res = await supabase.functions.invoke("create-asaas-charge", {
+        body: {
+          payment_type: "base_plan",
+          amount: sub.valorTotal,
+          description: `Mensalidade ${sub.planoBase.nome} - ${empresa.nome_empresa}`,
+          related_plano_id: empresa.plano_id,
+        },
       });
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pagamentos"] }),
-  });
-
-  // Batch module request mutation
-  const batchModuleMutation = useMutation({
-    mutationFn: async () => {
-      if (!empresaId || selectedModuleIds.size === 0) throw new Error("Selecione ao menos um módulo");
-      const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
-      const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
-
-      const { data: batch, error: batchError } = await supabase
-        .from("module_batch_requests")
-        .insert({ empresa_id: empresaId, valor_total: total, observacao: batchObservacao || null })
-        .select("id")
-        .single();
-      if (batchError) throw batchError;
-
-      const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
-      const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
-      if (itemsError) throw itemsError;
-
-      const moduleNames = selectedMods.map(m => m.nome).join(", ");
-      await supabase.from("notificacoes_master").insert({
-        empresa_id: empresaId,
-        tipo: "solicitacao_modulos_lote",
-        mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
-        dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
+      if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
+      setAsaasData({
+        pix_qr_code: res.data.pix_qr_code,
+        pix_copy_paste: res.data.pix_copy_paste,
+        invoice_url: res.data.invoice_url,
       });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
-      toast.success("Solicitação de módulos enviada! Aguarde aprovação.");
-      setSelectedModuleIds(new Set());
-      setBatchObservacao("");
-      setShowBatchSummary(false);
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const handlePagar = () => {
-    if (!pixSettings?.pix_chave) { toast.error("Chave PIX não configurada."); return; }
-    if (!sub.planoBase) { toast.error("Nenhum plano associado."); return; }
-    const payload = generatePixPayload({
-      chave: pixSettings.pix_chave,
-      nomeRecebedor: pixSettings.pix_nome_recebedor || "Backstage Pro",
-      cidade: pixSettings.pix_cidade || "Maringa",
-      valor: sub.valorTotal,
-      descricao: `Assinatura - ${empresa?.nome_empresa?.substring(0, 15)}`,
-    });
-    setPixPayload(payload);
-    setShowPix(true);
-    paymentMutation.mutate();
+      setShowPix(true);
+    } catch (err: any) {
+      toast.error(`Erro ao gerar cobrança: ${err.message}`);
+    } finally {
+      setGeneratingCharge(false);
+    }
   };
 
-  const copyPix = () => { navigator.clipboard.writeText(pixPayload); toast.success("Código PIX copiado!"); };
+  const copyPix = () => {
+    if (asaasData?.pix_copy_paste) {
+      navigator.clipboard.writeText(asaasData.pix_copy_paste);
+      toast.success("Código PIX copiado!");
+    }
+  };
+
+  const copyModulePix = () => {
+    if (asaasModuleData?.pix_copy_paste) {
+      navigator.clipboard.writeText(asaasModuleData.pix_copy_paste);
+      toast.success("Código PIX copiado!");
+    }
+  };
 
   const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
 
@@ -354,8 +329,12 @@ export default function PlanoAssinatura() {
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 pt-1">
-            <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
-              <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
+            <Button onClick={handlePagar} disabled={!sub.planoBase || generatingCharge} size="lg">
+              {generatingCharge ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando cobrança...</>
+              ) : (
+                <><QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}</>
+              )}
             </Button>
             <Button variant="outline" onClick={() => setShowUpgrade(true)}>
               <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
@@ -658,21 +637,41 @@ export default function PlanoAssinatura() {
         </Tabs>
       </div>
 
-      {/* ─── PIX DIALOG ─── */}
+      {/* ─── PIX DIALOG (Asaas) ─── */}
       <Dialog open={showPix} onOpenChange={setShowPix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> Pagamento via PIX</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
-            <div className="bg-white p-4 rounded-lg"><QRCodeSVG value={pixPayload} size={220} /></div>
-            <Separator />
-            <div className="w-full space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
-              <div className="flex gap-2">
-                <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{pixPayload}</code>
-                <Button variant="outline" size="icon" onClick={copyPix}><Copy className="h-4 w-4" /></Button>
+            {asaasData?.pix_qr_code && (
+              <div className="bg-white p-4 rounded-lg">
+                <img src={`data:image/png;base64,${asaasData.pix_qr_code}`} alt="QR Code PIX" className="w-[220px] h-[220px]" />
               </div>
+            )}
+            {asaasData?.pix_copy_paste && (
+              <>
+                <Separator />
+                <div className="w-full space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{asaasData.pix_copy_paste}</code>
+                    <Button variant="outline" size="icon" onClick={copyPix}><Copy className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {asaasData?.invoice_url && (
+              <>
+                <Separator />
+                <Button variant="outline" className="w-full" asChild>
+                  <a href={asaasData.invoice_url} target="_blank" rel="noopener noreferrer">Ver fatura completa</a>
+                </Button>
+              </>
+            )}
+            <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1 w-full">
+              <p>• O pagamento será confirmado automaticamente</p>
+              <p>• Após confirmação, seu acesso será liberado</p>
             </div>
           </div>
         </DialogContent>
@@ -758,7 +757,8 @@ export default function PlanoAssinatura() {
               </div>
             </div>
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
-              <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• Será gerada uma cobrança PIX via Asaas</p>
+              <p>• Após o pagamento confirmado, os módulos serão ativados automaticamente</p>
               <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
             </div>
             <div className="space-y-2">
@@ -768,10 +768,109 @@ export default function PlanoAssinatura() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBatchSummary(false)}>Cancelar</Button>
-            <Button onClick={() => batchModuleMutation.mutate()} disabled={batchModuleMutation.isPending}>
-              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação — R$ {totalSelectedValue.toFixed(2)}
+            <Button onClick={async () => {
+              setGeneratingModuleCharge(true);
+              try {
+                // 1. Create batch request
+                const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
+                const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
+
+                const { data: batch, error: batchError } = await supabase
+                  .from("module_batch_requests")
+                  .insert({ empresa_id: empresaId!, valor_total: total, observacao: batchObservacao || null })
+                  .select("id")
+                  .single();
+                if (batchError) throw batchError;
+
+                const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
+                const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
+                if (itemsError) throw itemsError;
+
+                // 2. Generate Asaas charge
+                const moduleNames = selectedMods.map(m => m.nome).join(", ");
+                const res = await supabase.functions.invoke("create-asaas-charge", {
+                  body: {
+                    payment_type: "modules",
+                    amount: total,
+                    description: `Módulos: ${moduleNames} - ${empresa?.nome_empresa || ""}`,
+                    related_batch_request_id: batch.id,
+                  },
+                });
+                if (res.error) throw new Error(res.error.message);
+                if (res.data?.error) throw new Error(res.data.error);
+
+                // 3. Notify master
+                await supabase.from("notificacoes_master").insert({
+                  empresa_id: empresaId!,
+                  tipo: "solicitacao_modulos_lote",
+                  mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
+                  dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
+                });
+
+                setAsaasModuleData({
+                  pix_qr_code: res.data.pix_qr_code,
+                  pix_copy_paste: res.data.pix_copy_paste,
+                  invoice_url: res.data.invoice_url,
+                });
+                setShowBatchSummary(false);
+                setShowModulePix(true);
+
+                queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+                setSelectedModuleIds(new Set());
+                setBatchObservacao("");
+              } catch (err: any) {
+                toast.error(err.message);
+              } finally {
+                setGeneratingModuleCharge(false);
+              }
+            }} disabled={generatingModuleCharge}>
+              {generatingModuleCharge ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando cobrança...</>
+              ) : (
+                <><QrCode className="h-4 w-4 mr-1" /> Gerar PIX — R$ {totalSelectedValue.toFixed(2)}</>
+              )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MODULE PIX DIALOG (Asaas) ─── */}
+      <Dialog open={showModulePix} onOpenChange={setShowModulePix}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> PIX — Módulos Adicionais</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            {asaasModuleData?.pix_qr_code && (
+              <div className="bg-white p-4 rounded-lg">
+                <img src={`data:image/png;base64,${asaasModuleData.pix_qr_code}`} alt="QR Code PIX" className="w-[220px] h-[220px]" />
+              </div>
+            )}
+            {asaasModuleData?.pix_copy_paste && (
+              <>
+                <Separator />
+                <div className="w-full space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{asaasModuleData.pix_copy_paste}</code>
+                    <Button variant="outline" size="icon" onClick={copyModulePix}><Copy className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {asaasModuleData?.invoice_url && (
+              <>
+                <Separator />
+                <Button variant="outline" className="w-full" asChild>
+                  <a href={asaasModuleData.invoice_url} target="_blank" rel="noopener noreferrer">Ver fatura completa</a>
+                </Button>
+              </>
+            )}
+            <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1 w-full">
+              <p>• Os módulos serão ativados automaticamente após confirmação do pagamento</p>
+              <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
