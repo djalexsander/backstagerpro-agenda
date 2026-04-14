@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, CheckCircle2, Circle, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ChecklistPdfImport } from "./ChecklistPdfImport";
 import {
   Accordion,
   AccordionContent,
@@ -23,10 +24,10 @@ interface Props {
 }
 
 export function EventChecklistTab({ eventId }: Props) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, empresaId } = useAuth();
   const { toast } = useToast();
   const {
-    isLoading, addItem, toggleItem, deleteItem,
+    isLoading, addItem, toggleItem, deleteItem, batchAddItems,
     total, concluidos, progress, byCategory, items,
   } = useEventChecklist(eventId);
 
@@ -134,6 +135,15 @@ export function EventChecklistTab({ eventId }: Props) {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* PDF Import */}
+      {isAdmin && empresaId && (
+        <ChecklistPdfImport
+          eventId={eventId}
+          empresaId={empresaId}
+          onImportItems={batchAddItems}
+        />
       )}
 
       {/* Checklist by Category */}
