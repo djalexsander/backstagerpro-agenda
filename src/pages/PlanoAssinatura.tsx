@@ -154,57 +154,6 @@ export default function PlanoAssinatura() {
     onError: () => toast.error("Erro ao solicitar upgrade."),
   });
 
-  // Register payment — valor consolidado (plano base + módulos cobráveis)
-  const paymentMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("pagamentos").insert({
-        empresa_id: empresaId!,
-        plano_id: empresa?.plano_id,
-        valor: sub.valorTotal,
-        status: "pendente",
-        metodo: "pix",
-        descricao: `Assinatura Backstage Pro - ${empresa?.nome_empresa}`,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pagamentos"] }),
-  });
-
-  // Batch module request mutation
-  const batchModuleMutation = useMutation({
-    mutationFn: async () => {
-      if (!empresaId || selectedModuleIds.size === 0) throw new Error("Selecione ao menos um módulo");
-      const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
-      const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
-
-      const { data: batch, error: batchError } = await supabase
-        .from("module_batch_requests")
-        .insert({ empresa_id: empresaId, valor_total: total, observacao: batchObservacao || null })
-        .select("id")
-        .single();
-      if (batchError) throw batchError;
-
-      const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
-      const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
-      if (itemsError) throw itemsError;
-
-      const moduleNames = selectedMods.map(m => m.nome).join(", ");
-      await supabase.from("notificacoes_master").insert({
-        empresa_id: empresaId,
-        tipo: "solicitacao_modulos_lote",
-        mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
-        dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
-      toast.success("Solicitação de módulos enviada! Aguarde aprovação.");
-      setSelectedModuleIds(new Set());
-      setBatchObservacao("");
-      setShowBatchSummary(false);
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
 
   const handlePagar = async () => {
     if (!sub.planoBase || !empresa) { toast.error("Nenhum plano associado."); return; }
