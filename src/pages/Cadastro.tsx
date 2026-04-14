@@ -11,6 +11,7 @@ import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
 export default function Cadastro() {
   const [nomeEmpresa, setNomeEmpresa] = useState("");
+  const [nomeResponsavel, setNomeResponsavel] = useState("");
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
   const [password, setPassword] = useState("");
