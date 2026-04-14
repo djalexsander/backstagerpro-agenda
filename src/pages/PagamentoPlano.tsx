@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Music, QrCode, Copy, ArrowLeft, Upload, Clock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
-import { gerarPayloadPix } from "@/lib/pix";
+import { generatePixPayload } from "@/lib/pix";
 
 export default function PagamentoPlano() {
   const { planoId } = useParams<{ planoId: string }>();
@@ -72,9 +72,9 @@ export default function PagamentoPlano() {
   const pixPayload = useMemo(() => {
     if (!pixSettings || !plano) return null;
     try {
-      return gerarPayloadPix({
+      return generatePixPayload({
         chave: pixSettings.pix_chave || "",
-        nome: pixSettings.pix_nome_recebedor || "",
+        nomeRecebedor: pixSettings.pix_nome_recebedor || "",
         cidade: pixSettings.pix_cidade || "",
         valor: Number(plano.valor),
       });

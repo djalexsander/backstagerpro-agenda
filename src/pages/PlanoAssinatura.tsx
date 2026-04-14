@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
-import { gerarPayloadPix } from "@/lib/pix";
+import { generatePixPayload } from "@/lib/pix";
 
 export default function PlanoAssinatura() {
   const { empresaId } = useAuth();
@@ -138,9 +138,9 @@ export default function PlanoAssinatura() {
   const planPixPayload = useMemo(() => {
     if (!pixSettings || !sub.planoBase) return null;
     try {
-      return gerarPayloadPix({
+      return generatePixPayload({
         chave: pixSettings.pix_chave || "",
-        nome: pixSettings.pix_nome_recebedor || "",
+        nomeRecebedor: pixSettings.pix_nome_recebedor || "",
         cidade: pixSettings.pix_cidade || "",
         valor: sub.valorTotal,
       });
@@ -155,9 +155,9 @@ export default function PlanoAssinatura() {
   const modulePixPayload = useMemo(() => {
     if (!pixSettings || totalSelectedValue <= 0) return null;
     try {
-      return gerarPayloadPix({
+      return generatePixPayload({
         chave: pixSettings.pix_chave || "",
-        nome: pixSettings.pix_nome_recebedor || "",
+        nomeRecebedor: pixSettings.pix_nome_recebedor || "",
         cidade: pixSettings.pix_cidade || "",
         valor: totalSelectedValue,
       });
