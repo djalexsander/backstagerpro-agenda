@@ -3,7 +3,7 @@ import autoTable from "jspdf-autotable";
 import { format, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
-import { smartSavePDF } from "./pdf-save";
+import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
 
 type Event = Tables<"events">;
 
@@ -74,7 +74,9 @@ function getCachePendente(f: any): number {
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
-export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
+export type ExportFormat = "pdf" | "png";
+
+export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, format: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -82,13 +84,13 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
   doc.setFontSize(14);
   doc.text("Agenda", 14, headerY);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
+  doc.text(`Gerado em ${formatDate(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
 
   autoTable(doc, {
     startY: headerY + 14,
     head: [["Data", "Status", "Evento", "Artista", "Cidade", "Local"]],
     body: events.map((e) => [
-      e.date ? format(parseISO(e.date), "dd/MM/yyyy") : "—",
+      e.date ? formatDate(parseISO(e.date), "dd/MM/yyyy") : "—",
       e.status.charAt(0).toUpperCase() + e.status.slice(1),
       e.name,
       e.artist,
@@ -99,7 +101,12 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  await smartSavePDF(doc, { tipo: "agenda" });
+  const nameOpts: SmartPDFNameOptions = { tipo: "agenda" };
+  if (format === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }
 
 export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[]) {
