@@ -216,22 +216,46 @@ export default function PlanoAssinatura() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const handlePagar = () => {
-    if (!pixSettings?.pix_chave) { toast.error("Chave PIX não configurada."); return; }
-    if (!sub.planoBase) { toast.error("Nenhum plano associado."); return; }
-    const payload = generatePixPayload({
-      chave: pixSettings.pix_chave,
-      nomeRecebedor: pixSettings.pix_nome_recebedor || "Backstage Pro",
-      cidade: pixSettings.pix_cidade || "Maringa",
-      valor: sub.valorTotal,
-      descricao: `Assinatura - ${empresa?.nome_empresa?.substring(0, 15)}`,
-    });
-    setPixPayload(payload);
-    setShowPix(true);
-    paymentMutation.mutate();
+  const handlePagar = async () => {
+    if (!sub.planoBase || !empresa) { toast.error("Nenhum plano associado."); return; }
+    setGeneratingCharge(true);
+    try {
+      const res = await supabase.functions.invoke("create-asaas-charge", {
+        body: {
+          payment_type: "base_plan",
+          amount: sub.valorTotal,
+          description: `Mensalidade ${sub.planoBase.nome} - ${empresa.nome_empresa}`,
+          related_plano_id: empresa.plano_id,
+        },
+      });
+      if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
+      setAsaasData({
+        pix_qr_code: res.data.pix_qr_code,
+        pix_copy_paste: res.data.pix_copy_paste,
+        invoice_url: res.data.invoice_url,
+      });
+      setShowPix(true);
+    } catch (err: any) {
+      toast.error(`Erro ao gerar cobrança: ${err.message}`);
+    } finally {
+      setGeneratingCharge(false);
+    }
   };
 
-  const copyPix = () => { navigator.clipboard.writeText(pixPayload); toast.success("Código PIX copiado!"); };
+  const copyPix = () => {
+    if (asaasData?.pix_copy_paste) {
+      navigator.clipboard.writeText(asaasData.pix_copy_paste);
+      toast.success("Código PIX copiado!");
+    }
+  };
+
+  const copyModulePix = () => {
+    if (asaasModuleData?.pix_copy_paste) {
+      navigator.clipboard.writeText(asaasModuleData.pix_copy_paste);
+      toast.success("Código PIX copiado!");
+    }
+  };
 
   const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
 
