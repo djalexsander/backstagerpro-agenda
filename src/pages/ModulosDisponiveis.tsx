@@ -556,7 +556,7 @@ export default function ModulosDisponiveis() {
         </DialogContent>
       </Dialog>
 
-      {/* PIX Dialog */}
+      {/* PIX Dialog (Asaas) */}
       <Dialog open={showPix} onOpenChange={setShowPix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -566,30 +566,50 @@ export default function ModulosDisponiveis() {
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
             <p className="text-sm text-muted-foreground text-center">
-              Valor total: <strong className="text-foreground">R$ {totalSelected.toFixed(2)}</strong>
+              Valor total: <strong className="text-foreground">R$ {batchTotalForPix.toFixed(2)}</strong>
             </p>
-            <div className="bg-white p-4 rounded-lg">
-              <QRCodeSVG value={pixPayload} size={200} />
-            </div>
-            <Separator />
-            <div className="w-full space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
-              <div className="flex gap-2">
-                <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{pixPayload}</code>
-                <Button variant="outline" size="icon" onClick={() => {
-                  navigator.clipboard.writeText(pixPayload);
-                  sonnerToast.success("Código PIX copiado!");
-                }}>
-                  <Copy className="h-4 w-4" />
-                </Button>
+            {asaasChargeData?.pix_qr_code && (
+              <div className="bg-white p-4 rounded-lg">
+                <img
+                  src={`data:image/png;base64,${asaasChargeData.pix_qr_code}`}
+                  alt="QR Code PIX"
+                  className="w-[200px] h-[200px]"
+                />
               </div>
-            </div>
+            )}
+            {asaasChargeData?.pix_copy_paste && (
+              <>
+                <Separator />
+                <div className="w-full space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{asaasChargeData.pix_copy_paste}</code>
+                    <Button variant="outline" size="icon" onClick={() => {
+                      navigator.clipboard.writeText(asaasChargeData.pix_copy_paste!);
+                      sonnerToast.success("Código PIX copiado!");
+                    }}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {asaasChargeData?.invoice_url && (
+              <>
+                <Separator />
+                <Button variant="outline" className="w-full" asChild>
+                  <a href={asaasChargeData.invoice_url} target="_blank" rel="noopener noreferrer">
+                    Ver fatura completa
+                  </a>
+                </Button>
+              </>
+            )}
             <Separator />
             <Button className="w-full" onClick={handleUploadComprovante}>
               <Upload className="h-4 w-4 mr-2" /> Enviar Comprovante
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Após o pagamento, envie o comprovante para agilizar a aprovação.
+              O pagamento será confirmado automaticamente via Asaas. O comprovante agiliza a aprovação manual.
             </p>
           </div>
         </DialogContent>
