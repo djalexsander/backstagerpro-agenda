@@ -22,8 +22,6 @@ import {
 } from "lucide-react";
 import type { ModuleCatalogRow } from "@/types/subscription";
 import { MODULE_CATEGORIES, getCategoryLabel, getBadgeInfo } from "@/constants/module-categories";
-import { generatePixPayload } from "@/lib/pix";
-import { QRCodeSVG } from "qrcode.react";
 import { toast as sonnerToast } from "sonner";
 
 export default function ModulosDisponiveis() {
@@ -35,9 +33,14 @@ export default function ModulosDisponiveis() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showSummary, setShowSummary] = useState(false);
   const [showPix, setShowPix] = useState(false);
-  const [pixPayload, setPixPayload] = useState("");
   const [observacao, setObservacao] = useState("");
   const [batchId, setBatchId] = useState<string | null>(null);
+  const [asaasChargeData, setAsaasChargeData] = useState<{
+    pix_qr_code: string | null;
+    pix_copy_paste: string | null;
+    invoice_url: string | null;
+  } | null>(null);
+  const [batchTotalForPix, setBatchTotalForPix] = useState(0);
 
   // Fetch existing requests, payments, and batch requests
   const { data: requests = [] } = useQuery({
@@ -85,7 +88,7 @@ export default function ModulosDisponiveis() {
     enabled: !!empresaId,
   });
 
-  // Fetch empresa data for PIX
+  // Fetch empresa data
   const { data: empresa } = useQuery({
     queryKey: ["empresa-plano", empresaId],
     queryFn: async () => {
@@ -94,17 +97,6 @@ export default function ModulosDisponiveis() {
       return data;
     },
     enabled: !!empresaId,
-  });
-
-  const { data: pixSettings } = useQuery({
-    queryKey: ["pix-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("system_settings").select("key, value").in("key", ["pix_chave", "pix_nome_recebedor", "pix_cidade", "pix_banco"]);
-      if (error) throw error;
-      const map: Record<string, string | null> = {};
-      data.forEach((r: any) => { map[r.key] = r.value; });
-      return map;
-    },
   });
 
   // Build sets for status checks
@@ -205,24 +197,38 @@ export default function ModulosDisponiveis() {
 
       return batch.id;
     },
-    onSuccess: (id) => {
+    onSuccess: async (id) => {
       queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
       setBatchId(id);
       setShowSummary(false);
+      const savedTotal = totalSelected;
+      setBatchTotalForPix(savedTotal);
       setSelectedIds(new Set());
       setObservacao("");
 
-      // Generate PIX
-      if (pixSettings?.pix_chave && totalSelected > 0) {
-        const payload = generatePixPayload({
-          chave: pixSettings.pix_chave,
-          nomeRecebedor: pixSettings.pix_nome_recebedor || "Backstage Pro",
-          cidade: pixSettings.pix_cidade || "Maringa",
-          valor: totalSelected,
-          descricao: `Modulos - ${empresa?.nome_empresa?.substring(0, 15)}`,
-        });
-        setPixPayload(payload);
-        setShowPix(true);
+      // Generate Asaas charge
+      if (savedTotal > 0) {
+        try {
+          const res = await supabase.functions.invoke("create-asaas-charge", {
+            body: {
+              payment_type: "modules",
+              amount: savedTotal,
+              description: `Módulos adicionais - ${empresa?.nome_empresa || ""}`,
+              related_batch_request_id: id,
+            },
+          });
+          if (res.error) throw new Error(res.error.message);
+          if (res.data?.error) throw new Error(res.data.error);
+
+          setAsaasChargeData({
+            pix_qr_code: res.data.pix_qr_code,
+            pix_copy_paste: res.data.pix_copy_paste,
+            invoice_url: res.data.invoice_url,
+          });
+          setShowPix(true);
+        } catch (err: any) {
+          toast({ title: "Erro ao gerar cobrança", description: err.message, variant: "destructive" });
+        }
       } else {
         toast({ title: "Solicitação enviada!", description: "Aguarde a aprovação do administrador." });
       }
@@ -550,7 +556,7 @@ export default function ModulosDisponiveis() {
         </DialogContent>
       </Dialog>
 
-      {/* PIX Dialog */}
+      {/* PIX Dialog (Asaas) */}
       <Dialog open={showPix} onOpenChange={setShowPix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -560,30 +566,50 @@ export default function ModulosDisponiveis() {
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
             <p className="text-sm text-muted-foreground text-center">
-              Valor total: <strong className="text-foreground">R$ {totalSelected.toFixed(2)}</strong>
+              Valor total: <strong className="text-foreground">R$ {batchTotalForPix.toFixed(2)}</strong>
             </p>
-            <div className="bg-white p-4 rounded-lg">
-              <QRCodeSVG value={pixPayload} size={200} />
-            </div>
-            <Separator />
-            <div className="w-full space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
-              <div className="flex gap-2">
-                <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{pixPayload}</code>
-                <Button variant="outline" size="icon" onClick={() => {
-                  navigator.clipboard.writeText(pixPayload);
-                  sonnerToast.success("Código PIX copiado!");
-                }}>
-                  <Copy className="h-4 w-4" />
-                </Button>
+            {asaasChargeData?.pix_qr_code && (
+              <div className="bg-white p-4 rounded-lg">
+                <img
+                  src={`data:image/png;base64,${asaasChargeData.pix_qr_code}`}
+                  alt="QR Code PIX"
+                  className="w-[200px] h-[200px]"
+                />
               </div>
-            </div>
+            )}
+            {asaasChargeData?.pix_copy_paste && (
+              <>
+                <Separator />
+                <div className="w-full space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{asaasChargeData.pix_copy_paste}</code>
+                    <Button variant="outline" size="icon" onClick={() => {
+                      navigator.clipboard.writeText(asaasChargeData.pix_copy_paste!);
+                      sonnerToast.success("Código PIX copiado!");
+                    }}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {asaasChargeData?.invoice_url && (
+              <>
+                <Separator />
+                <Button variant="outline" className="w-full" asChild>
+                  <a href={asaasChargeData.invoice_url} target="_blank" rel="noopener noreferrer">
+                    Ver fatura completa
+                  </a>
+                </Button>
+              </>
+            )}
             <Separator />
             <Button className="w-full" onClick={handleUploadComprovante}>
               <Upload className="h-4 w-4 mr-2" /> Enviar Comprovante
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Após o pagamento, envie o comprovante para agilizar a aprovação.
+              O pagamento será confirmado automaticamente via Asaas. O comprovante agiliza a aprovação manual.
             </p>
           </div>
         </DialogContent>
