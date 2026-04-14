@@ -58,93 +58,133 @@ export default function EscolherPlano() {
     return "/mês";
   };
 
+  const isBestValue = (plano: any) => {
+    const sorted = [...planos].sort((a, b) => Number(b.valor) - Number(a.valor));
+    return sorted.length > 1 && sorted[0]?.id === plano.id;
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 border border-border flex items-center justify-center overflow-hidden">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 border border-border flex items-center justify-center overflow-hidden">
             {platformLogoUrl ? (
               <img src={platformLogoUrl} alt={`Logo ${platformName}`} className="h-full w-full object-contain p-1" />
             ) : (
-              <Music className="h-6 w-6 text-primary" />
+              <Music className="h-7 w-7 text-primary" />
             )}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>
             {platformName}
           </h1>
         </div>
 
-        <div className="text-center mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Escolha seu plano</h2>
-          <p className="text-muted-foreground">Selecione o plano ideal para sua empresa</p>
+        <div className="text-center mb-10">
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">Escolha seu plano base</h2>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Comece com o plano ideal para sua empresa. Depois você poderá adicionar módulos extras conforme sua necessidade.
+          </p>
         </div>
 
         {/* Free Trial Card */}
-        <Card className="mb-6 border-primary/30 bg-primary/5">
-          <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6">
+        <Card className="mb-8 border-primary/40 bg-gradient-to-r from-primary/5 to-primary/10 shadow-sm">
+          <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 md:p-8">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Gift className="h-6 w-6 text-primary" />
+              <div className="h-14 w-14 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                <Gift className="h-7 w-7 text-primary" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold">Teste Gratuito de 7 Dias</h3>
-                <p className="text-sm text-muted-foreground">
-                  Experimente todas as funcionalidades sem compromisso
+                <h3 className="text-xl font-bold">Teste Gratuito de 7 Dias</h3>
+                <p className="text-muted-foreground mt-1">
+                  Experimente todas as funcionalidades sem compromisso. Sem cartão de crédito.
                 </p>
+                <div className="flex flex-wrap gap-3 mt-2">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <CheckCircle className="h-3.5 w-3.5 text-primary" /> Acesso completo
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <CheckCircle className="h-3.5 w-3.5 text-primary" /> Sem compromisso
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <CheckCircle className="h-3.5 w-3.5 text-primary" /> Cancele quando quiser
+                  </span>
+                </div>
               </div>
             </div>
             <Button
               size="lg"
               onClick={handleFreeTrial}
               disabled={loading === "free"}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto text-base px-8"
             >
+              <Zap className="h-5 w-5 mr-2" />
               {loading === "free" ? "Ativando..." : "Começar Grátis"}
             </Button>
           </CardContent>
         </Card>
 
+        {/* Divider */}
+        <div className="flex items-center gap-4 mb-8">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-sm text-muted-foreground font-medium">ou escolha um plano pago</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
         {/* Paid Plans */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {planos.map((plano) => {
             const periodicidade = (plano as any).periodicidade || "mensal";
             const sufixo = getSuffix(periodicidade);
+            const bestValue = isBestValue(plano);
             return (
               <Card
                 key={plano.id}
-                className="relative cursor-pointer transition-all hover:shadow-md hover:border-primary/50"
+                className={`relative cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 ${bestValue ? "border-primary shadow-md ring-1 ring-primary/20" : ""}`}
                 onClick={() => handlePaidPlan(plano.id)}
               >
-                {periodicidade === "vitalicio" && (
-                  <Badge className="absolute -top-2 right-4 bg-primary">Vitalício</Badge>
+                {bestValue && (
+                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary px-3 py-1">
+                    <Sparkles className="h-3 w-3 mr-1" /> Mais Completo
+                  </Badge>
                 )}
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">{plano.nome}</CardTitle>
-                  <CardDescription className="text-xl font-bold text-foreground">
-                    R$ {Number(plano.valor).toFixed(2)}
-                    <span className="text-sm font-normal text-muted-foreground">{sufixo}</span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {plano.descricao && (
-                    <p className="text-muted-foreground mb-3">{plano.descricao}</p>
-                  )}
-                  <div className="space-y-1.5">
-                    <p className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      {plano.max_eventos ?? "∞"} eventos
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      {plano.max_usuarios ?? "∞"} usuários
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <HardDrive className="h-4 w-4 text-muted-foreground" />
-                      {(plano as any).storage_limit ?? 5}GB armazenamento
-                    </p>
+                {periodicidade === "vitalicio" && !bestValue && (
+                  <Badge className="absolute -top-3 right-4 bg-accent text-accent-foreground">Vitalício</Badge>
+                )}
+                <CardHeader className="pb-2 pt-6">
+                  <CardTitle className="text-xl">{plano.nome}</CardTitle>
+                  <div className="mt-2">
+                    <span className="text-3xl font-bold text-foreground">
+                      R$ {Number(plano.valor).toFixed(2)}
+                    </span>
+                    {sufixo && (
+                      <span className="text-base font-normal text-muted-foreground">{sufixo}</span>
+                    )}
                   </div>
-                  <Button variant="outline" className="w-full mt-4">
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {plano.descricao && (
+                    <p className="text-sm text-muted-foreground">{plano.descricao}</p>
+                  )}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Calendar className="h-4 w-4 text-primary shrink-0" />
+                      <span><strong>{plano.max_eventos ?? "∞"}</strong> eventos</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Users className="h-4 w-4 text-primary shrink-0" />
+                      <span><strong>{plano.max_usuarios ?? "∞"}</strong> usuários</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <HardDrive className="h-4 w-4 text-primary shrink-0" />
+                      <span><strong>{(plano as any).storage_limit ?? 5}GB</strong> armazenamento</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm">
+                      <Shield className="h-4 w-4 text-primary shrink-0" />
+                      <span>Suporte incluso</span>
+                    </div>
+                  </div>
+                  <Button variant={bestValue ? "default" : "outline"} className="w-full mt-2" size="lg">
                     <CreditCard className="h-4 w-4 mr-2" />
                     Selecionar Plano
                   </Button>
@@ -155,13 +195,17 @@ export default function EscolherPlano() {
         </div>
 
         {planos.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <p>Nenhum plano disponível no momento.</p>
-            <Button variant="link" onClick={handleFreeTrial} className="mt-2">
+          <div className="text-center py-16 text-muted-foreground">
+            <p className="text-lg">Nenhum plano disponível no momento.</p>
+            <Button variant="link" onClick={handleFreeTrial} className="mt-2 text-base">
               Iniciar teste grátis de 7 dias
             </Button>
           </div>
         )}
+
+        <p className="text-center text-xs text-muted-foreground mt-8">
+          Você poderá adicionar módulos extras após a ativação do plano base.
+        </p>
       </div>
     </div>
   );
