@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         customer: asaasCustomerId,
-        billingType: "PIX",
+        billingType: "UNDEFINED",
         value: Number(amount),
         dueDate,
         description: description || `Backstage Pro - ${payment_type === "base_plan" ? "Plano Base" : "Módulos Adicionais"}`,
