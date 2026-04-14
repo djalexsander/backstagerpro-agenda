@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,6 +7,7 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package,
   Users, Calendar, HardDrive, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
+  ShoppingCart, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -36,8 +38,9 @@ export default function PlanoAssinatura() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
-  const [requestModule, setRequestModule] = useState<ModuleCatalogRow | null>(null);
-  const [observacao, setObservacao] = useState("");
+  const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
+  const [showBatchSummary, setShowBatchSummary] = useState(false);
+  const [batchObservacao, setBatchObservacao] = useState("");
 
   // Fetch empresa
   const { data: empresa } = useQuery({
@@ -89,12 +92,27 @@ export default function PlanoAssinatura() {
     enabled: !!empresaId,
   });
 
-  // Fetch module requests
+  // Fetch module requests (individual + batch)
   const { data: moduleRequests = [] } = useQuery({
     queryKey: ["module-requests", empresaId],
     queryFn: async () => {
       if (!empresaId) return [];
       const { data, error } = await supabase.from("module_requests").select("*, module_catalog(*)").eq("empresa_id", empresaId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: batchRequests = [] } = useQuery({
+    queryKey: ["module-batch-requests", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("module_batch_requests")
+        .select("*, module_batch_request_items(*, module_catalog(*))")
+        .eq("empresa_id", empresaId)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -150,22 +168,38 @@ export default function PlanoAssinatura() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pagamentos"] }),
   });
 
-  // Module request mutation
-  const sendModuleRequest = useMutation({
+  // Batch module request mutation
+  const batchModuleMutation = useMutation({
     mutationFn: async () => {
-      if (!empresaId || !requestModule) throw new Error("Dados insuficientes");
-      const { error } = await supabase.from("module_requests").insert({
+      if (!empresaId || selectedModuleIds.size === 0) throw new Error("Selecione ao menos um módulo");
+      const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
+      const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
+
+      const { data: batch, error: batchError } = await supabase
+        .from("module_batch_requests")
+        .insert({ empresa_id: empresaId, valor_total: total, observacao: batchObservacao || null })
+        .select("id")
+        .single();
+      if (batchError) throw batchError;
+
+      const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
+      const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
+      if (itemsError) throw itemsError;
+
+      const moduleNames = selectedMods.map(m => m.nome).join(", ");
+      await supabase.from("notificacoes_master").insert({
         empresa_id: empresaId,
-        module_id: requestModule.id,
-        observacao: observacao || null,
+        tipo: "solicitacao_modulos_lote",
+        mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
+        dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["module-requests"] });
-      toast.success("Solicitação de módulo enviada!");
-      setRequestModule(null);
-      setObservacao("");
+      queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+      toast.success("Solicitação de módulos enviada! Aguarde aprovação.");
+      setSelectedModuleIds(new Set());
+      setBatchObservacao("");
+      setShowBatchSummary(false);
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -189,10 +223,30 @@ export default function PlanoAssinatura() {
 
   const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
 
-  // Available modules (not already active or pending request)
+  // Available modules (not already active, pending request, or in pending batch)
   const pendingRequestIds = new Set(moduleRequests.filter((r: any) => r.status === "pending").map((r: any) => r.module_id));
+  const pendingBatchModuleIds = useMemo(() => {
+    const ids = new Set<string>();
+    batchRequests
+      .filter((b: any) => b.status === "pending" || b.status === "paid")
+      .forEach((b: any) => {
+        (b.module_batch_request_items || []).forEach((item: any) => ids.add(item.module_id));
+      });
+    return ids;
+  }, [batchRequests]);
   const activeModuleIds = new Set(allModules.filter(m => m.status !== "cancelled" && m.status !== "rejected").map(m => m.module_id));
-  const availableModules = catalog.filter(c => !activeModuleIds.has(c.id) && !pendingRequestIds.has(c.id));
+  const availableModules = catalog.filter(c => !activeModuleIds.has(c.id) && !pendingRequestIds.has(c.id) && !pendingBatchModuleIds.has(c.id));
+
+  const selectedModules = catalog.filter(c => selectedModuleIds.has(c.id));
+  const totalSelectedValue = selectedModules.reduce((sum, m) => sum + Number(m.valor), 0);
+
+  const toggleModuleSelect = (id: string) => {
+    setSelectedModuleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   if (sub.isLoading) return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
 
@@ -363,39 +417,79 @@ export default function PlanoAssinatura() {
         )}
       </div>
 
-      {/* ─── MÓDULOS DISPONÍVEIS ─── */}
+      {/* ─── MÓDULOS DISPONÍVEIS (multi-select) ─── */}
       {availableModules.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" /> Módulos Disponíveis
           </h2>
+          <p className="text-sm text-muted-foreground">Selecione os módulos desejados e solicite todos de uma vez.</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {availableModules.map((mod) => (
-              <Card key={mod.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="pt-4 pb-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{mod.nome}</p>
-                    <Badge variant="outline" className="text-xs">{mod.is_capacity_module ? "Capacidade" : "Funcionalidade"}</Badge>
-                  </div>
-                  {mod.descricao && <p className="text-sm text-muted-foreground">{mod.descricao}</p>}
-                  <p className="text-lg font-semibold">
-                    R$ {Number(mod.valor).toFixed(2)}
-                    <span className="text-xs text-muted-foreground font-normal">/{mod.periodicidade}</span>
-                  </p>
-                  {mod.is_capacity_module && (
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
-                      {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
-                      {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB</p>}
+            {availableModules.map((mod) => {
+              const isSelected = selectedModuleIds.has(mod.id);
+              return (
+                <Card
+                  key={mod.id}
+                  className={`cursor-pointer transition-all ${isSelected ? "ring-2 ring-primary border-primary/50 shadow-md" : "hover:shadow-md"}`}
+                  onClick={() => toggleModuleSelect(mod.id)}
+                >
+                  <CardContent className="pt-4 pb-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleModuleSelect(mod.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <p className="font-medium">{mod.nome}</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs">{mod.is_capacity_module ? "Capacidade" : "Funcionalidade"}</Badge>
                     </div>
-                  )}
-                  <Button size="sm" className="w-full" onClick={() => { setRequestModule(mod); setObservacao(""); }}>
-                    <Send className="h-4 w-4 mr-1" /> Solicitar
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    {mod.descricao && <p className="text-sm text-muted-foreground">{mod.descricao}</p>}
+                    <p className="text-lg font-semibold">
+                      R$ {Number(mod.valor).toFixed(2)}
+                      <span className="text-xs text-muted-foreground font-normal">/{mod.periodicidade}</span>
+                    </p>
+                    {mod.is_capacity_module && (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
+                        {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
+                        {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB</p>}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
+
+          {/* Summary bar when modules are selected */}
+          {selectedModuleIds.size > 0 && (
+            <Card className="border-primary/30 bg-primary/[0.03]">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <ShoppingCart className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="font-semibold text-sm">
+                        {selectedModuleIds.size} módulo{selectedModuleIds.size > 1 ? "s" : ""} selecionado{selectedModuleIds.size > 1 ? "s" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{selectedModules.map(m => m.nome).join(", ")}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-lg text-primary">R$ {totalSelectedValue.toFixed(2)}</p>
+                    <Button onClick={() => { setBatchObservacao(""); setShowBatchSummary(true); }}>
+                      <Send className="h-4 w-4 mr-1" /> Solicitar módulos
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setSelectedModuleIds(new Set())}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -640,22 +734,42 @@ export default function PlanoAssinatura() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ─── MODULE REQUEST DIALOG ─── */}
-      <Dialog open={!!requestModule} onOpenChange={(o) => !o && setRequestModule(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Solicitar: {requestModule?.nome}</DialogTitle></DialogHeader>
+      {/* ─── BATCH MODULE REQUEST DIALOG ─── */}
+      <Dialog open={showBatchSummary} onOpenChange={setShowBatchSummary}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" /> Resumo da Solicitação
+            </DialogTitle>
+            <DialogDescription>Revise os módulos selecionados antes de enviar</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4 py-2">
-            {requestModule?.descricao && <p className="text-sm text-muted-foreground">{requestModule.descricao}</p>}
-            <p className="font-semibold">Valor: R$ {Number(requestModule?.valor || 0).toFixed(2)}/{requestModule?.periodicidade}</p>
+            <div className="space-y-2">
+              {selectedModules.map(mod => (
+                <div key={mod.id} className="flex justify-between items-center text-sm">
+                  <span className="font-medium">{mod.nome}</span>
+                  <span>R$ {Number(mod.valor).toFixed(2)}/{mod.periodicidade}</span>
+                </div>
+              ))}
+              <Separator />
+              <div className="flex justify-between items-baseline font-bold">
+                <span>Total</span>
+                <span className="text-lg text-primary">R$ {totalSelectedValue.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
+              <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Observação (opcional)</label>
-              <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Algo para o administrador..." />
+              <Textarea value={batchObservacao} onChange={(e) => setBatchObservacao(e.target.value)} placeholder="Algo para o administrador..." />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestModule(null)}>Cancelar</Button>
-            <Button onClick={() => sendModuleRequest.mutate()} disabled={sendModuleRequest.isPending}>
-              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação
+            <Button variant="outline" onClick={() => setShowBatchSummary(false)}>Cancelar</Button>
+            <Button onClick={() => batchModuleMutation.mutate()} disabled={batchModuleMutation.isPending}>
+              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação — R$ {totalSelectedValue.toFixed(2)}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -40,6 +40,7 @@ import FinanceiroMaster from "@/pages/master/FinanceiroMaster";
 import Modulos from "@/pages/master/Modulos";
 import SolicitacoesModulos from "@/pages/master/SolicitacoesModulos";
 import PagamentosModulos from "@/pages/master/PagamentosModulos";
+import SolicitacoesLoteModulos from "@/pages/master/SolicitacoesLoteModulos";
 
 import OnboardingModulos from "@/pages/OnboardingModulos";
 import OnboardingResumo from "@/pages/OnboardingResumo";
@@ -97,6 +98,7 @@ const App = () => (
                   <Route path="/master/modulos" element={<ProtectedRoute masterOnly><Modulos /></ProtectedRoute>} />
                   <Route path="/master/solicitacoes-modulos" element={<ProtectedRoute masterOnly><SolicitacoesModulos /></ProtectedRoute>} />
                   <Route path="/master/pagamentos-modulos" element={<ProtectedRoute masterOnly><PagamentosModulos /></ProtectedRoute>} />
+                  <Route path="/master/solicitacoes-lote" element={<ProtectedRoute masterOnly><SolicitacoesLoteModulos /></ProtectedRoute>} />
                   <Route path="/master/logs" element={<ProtectedRoute masterOnly><LogsSistema /></ProtectedRoute>} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
