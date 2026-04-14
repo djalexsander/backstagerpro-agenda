@@ -11,6 +11,7 @@ import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
 export default function Cadastro() {
   const [nomeEmpresa, setNomeEmpresa] = useState("");
+  const [nomeResponsavel, setNomeResponsavel] = useState("");
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
   const [password, setPassword] = useState("");
@@ -52,7 +53,7 @@ export default function Cadastro() {
     try {
       // 1. Create empresa + user via edge function
       const res = await supabase.functions.invoke("self-register", {
-        body: { nome_empresa: nomeEmpresa, email, telefone, password },
+        body: { nome_empresa: nomeEmpresa, nome_responsavel: nomeResponsavel, email, telefone, password },
       });
 
       if (res.error) throw new Error(res.error.message || "Erro ao criar conta");
@@ -154,6 +155,16 @@ export default function Cadastro() {
                   value={nomeEmpresa}
                   onChange={(e) => setNomeEmpresa(e.target.value)}
                   placeholder="Ex: Minha Produtora"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nomeResponsavel">Nome do Responsável *</Label>
+                <Input
+                  id="nomeResponsavel"
+                  value={nomeResponsavel}
+                  onChange={(e) => setNomeResponsavel(e.target.value)}
+                  placeholder="Seu nome completo"
                   required
                 />
               </div>

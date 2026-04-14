@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { nome_empresa, email, telefone, password } = await req.json();
+    const { nome_empresa, nome_responsavel, email, telefone, password } = await req.json();
 
     if (!nome_empresa?.trim()) throw new Error("Nome da empresa é obrigatório");
     if (!email?.trim()) throw new Error("Email é obrigatório");
@@ -59,12 +59,13 @@ Deno.serve(async (req) => {
     if (empresaErr) throw empresaErr;
 
     // Create auth user (auto-confirmed)
+    const displayName = nome_responsavel?.trim() || nome_empresa.trim();
     const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email: normalizedEmail,
       password,
       email_confirm: true,
       user_metadata: {
-        full_name: nome_empresa.trim(),
+        full_name: displayName,
         empresa_id: empresa.id,
         role: "admin_empresa",
       },
@@ -78,7 +79,7 @@ Deno.serve(async (req) => {
     // Mark profile as activated
     await supabaseAdmin
       .from("profiles")
-      .update({ ativado: true, email: normalizedEmail })
+      .update({ ativado: true, email: normalizedEmail, full_name: displayName })
       .eq("user_id", authData.user.id);
 
     // Create empresa_usuarios entry
@@ -93,16 +94,16 @@ Deno.serve(async (req) => {
       empresa_id: empresa.id,
       tipo: "auto_cadastro",
       mensagem: `Nova empresa auto-cadastrada: ${nome_empresa.trim()} (${normalizedEmail})`,
-      dados: { nome_empresa: nome_empresa.trim(), email: normalizedEmail, telefone: telefone?.trim() || null },
+      dados: { nome_empresa: nome_empresa.trim(), nome_responsavel: displayName, email: normalizedEmail, telefone: telefone?.trim() || null },
     });
 
     // Log
     await supabaseAdmin.from("system_logs").insert({
       tipo: "auth",
       acao: "auto_cadastro",
-      descricao: `Auto cadastro: ${nome_empresa.trim()} (${normalizedEmail})`,
+      descricao: `Auto cadastro: ${nome_empresa.trim()} - ${displayName} (${normalizedEmail})`,
       user_id: authData.user.id,
-      user_name: nome_empresa.trim(),
+      user_name: displayName,
       empresa_id: empresa.id,
       empresa_nome: nome_empresa.trim(),
     });
