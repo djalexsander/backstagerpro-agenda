@@ -40,7 +40,7 @@ export default function ModulosDisponiveis() {
     pix_copy_paste: string | null;
     invoice_url: string | null;
   } | null>(null);
-  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchTotalForPix, setBatchTotalForPix] = useState(0);
 
   // Fetch existing requests, payments, and batch requests
   const { data: requests = [] } = useQuery({
