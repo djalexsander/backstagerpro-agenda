@@ -24,6 +24,8 @@ export default function EscolherPlano() {
         .from("planos")
         .select("*")
         .eq("ativo", true)
+        .eq("disponivel_novo_cadastro" as any, true)
+        .gt("valor", 0)
         .order("valor", { ascending: true });
       if (error) throw error;
       return data;
