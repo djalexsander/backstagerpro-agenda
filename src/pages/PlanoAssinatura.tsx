@@ -134,13 +134,13 @@ export default function PlanoAssinatura() {
     onError: () => toast.error("Erro ao solicitar upgrade."),
   });
 
-  // Register payment
+  // Register payment — valor consolidado (plano base + módulos cobráveis)
   const paymentMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("pagamentos").insert({
         empresa_id: empresaId!,
         plano_id: empresa?.plano_id,
-        valor: sub.planoBase?.valor || 0,
+        valor: sub.valorTotal,
         status: "pendente",
         metodo: "pix",
         descricao: `Assinatura Backstage Pro - ${empresa?.nome_empresa}`,
@@ -177,7 +177,7 @@ export default function PlanoAssinatura() {
       chave: pixSettings.pix_chave,
       nomeRecebedor: pixSettings.pix_nome_recebedor || "Backstage Pro",
       cidade: pixSettings.pix_cidade || "Maringa",
-      valor: Number(sub.planoBase.valor),
+      valor: sub.valorTotal,
       descricao: `Assinatura - ${empresa?.nome_empresa?.substring(0, 15)}`,
     });
     setPixPayload(payload);
