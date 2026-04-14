@@ -101,13 +101,7 @@ Deno.serve(async (req) => {
         value: Number(amount),
         dueDate,
         description: description || `Backstage Pro - ${payment_type === "base_plan" ? "Plano Base" : "Módulos Adicionais"}`,
-        externalReference: JSON.stringify({
-          source_app: "backstage_pro",
-          empresa_id: profile.empresa_id,
-          payment_type,
-          related_batch_request_id: related_batch_request_id || null,
-          related_plano_id: related_plano_id || null,
-        }),
+        externalReference: `bsp:${profile.empresa_id.substring(0, 36)}:${payment_type}`,
       }),
     });
     const chargeData = await chargeRes.json();
