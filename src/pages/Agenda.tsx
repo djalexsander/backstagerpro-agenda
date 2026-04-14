@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText, ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
@@ -258,8 +258,23 @@ export default function Agenda() {
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
               <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
+              <Button variant="outline" onClick={() => {
+                let toExport = filtered;
+                if (exportMode === "month") {
+                  const ms = startOfMonth(new Date(parseInt(exportYearVal), parseInt(exportMonthVal) - 1));
+                  const me = endOfMonth(ms);
+                  toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: ms, end: me }));
+                } else if (exportMode === "period" && exportStart && exportEnd) {
+                  toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: parseISO(exportStart), end: parseISO(exportEnd) }));
+                }
+                if (toExport.length === 0) return;
+                exportAgendaPDF(toExport, { empresaNome, empresaLogoUrl } as PdfBranding, "png");
+                setExportOpen(false);
+              }}>
+                <ImageIcon className="h-4 w-4 mr-1" /> Exportar PNG
+              </Button>
               <Button onClick={() => {
                 let toExport = filtered;
                 if (exportMode === "month") {
@@ -270,7 +285,7 @@ export default function Agenda() {
                   toExport = filtered.filter((e) => e.date && isWithinInterval(parseISO(e.date), { start: parseISO(exportStart), end: parseISO(exportEnd) }));
                 }
                 if (toExport.length === 0) return;
-                exportAgendaPDF(toExport, { empresaNome: empresaNome, empresaLogoUrl: empresaLogoUrl } as PdfBranding);
+                exportAgendaPDF(toExport, { empresaNome, empresaLogoUrl } as PdfBranding);
                 setExportOpen(false);
               }}>
                 <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
