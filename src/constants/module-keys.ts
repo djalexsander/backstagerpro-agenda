@@ -19,12 +19,18 @@ export const MODULE_KEYS = {
   RELATORIOS: "relatorios",
   /** Agenda compartilhada entre empresas */
   AGENDA_COMPARTILHADA: "agenda_compartilhada",
+  /** Equipe e permissões */
+  EQUIPE_PERMISSOES: "equipe_permissoes",
   /** Checklist técnico para eventos */
   CHECKLIST_TECNICO: "checklist_tecnico",
   /** Documentos e contratos avançados */
   DOCUMENTOS_AVANCADOS: "documentos_avancados",
+  /** Painel operacional */
+  PAINEL_OPERACIONAL: "painel_operacional",
   /** Exportações especiais (DOCX, Excel, relatórios PDF customizados) */
   EXPORTACOES_ESPECIAIS: "exportacoes_especiais",
+  /** Notificações premium */
+  NOTIFICACOES_PREMIUM: "notificacoes_premium",
   /** Pacote extra de usuários */
   EXTRA_USUARIOS: "extra_usuarios",
   /** Pacote extra de eventos */
