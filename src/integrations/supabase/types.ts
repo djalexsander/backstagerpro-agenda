@@ -695,6 +695,98 @@ export type Database = {
           },
         ]
       }
+      module_batch_request_items: {
+        Row: {
+          batch_request_id: string
+          created_at: string
+          id: string
+          module_id: string
+          valor: number
+        }
+        Insert: {
+          batch_request_id: string
+          created_at?: string
+          id?: string
+          module_id: string
+          valor?: number
+        }
+        Update: {
+          batch_request_id?: string
+          created_at?: string
+          id?: string
+          module_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_batch_request_items_batch_request_id_fkey"
+            columns: ["batch_request_id"]
+            isOneToOne: false
+            referencedRelation: "module_batch_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_batch_request_items_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "module_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      module_batch_requests: {
+        Row: {
+          approved_at: string | null
+          comprovante_url: string | null
+          created_at: string
+          empresa_id: string
+          id: string
+          observacao: string | null
+          observacao_admin: string | null
+          payment_method: string | null
+          rejected_at: string | null
+          status: string
+          updated_at: string
+          valor_total: number
+        }
+        Insert: {
+          approved_at?: string | null
+          comprovante_url?: string | null
+          created_at?: string
+          empresa_id: string
+          id?: string
+          observacao?: string | null
+          observacao_admin?: string | null
+          payment_method?: string | null
+          rejected_at?: string | null
+          status?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Update: {
+          approved_at?: string | null
+          comprovante_url?: string | null
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          observacao?: string | null
+          observacao_admin?: string | null
+          payment_method?: string | null
+          rejected_at?: string | null
+          status?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_batch_requests_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       module_catalog: {
         Row: {
           ativo: boolean
