@@ -283,7 +283,7 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
           {/* Attached files */}
           {attachedFiles.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">PDFs anexados:</p>
+              <p className="text-xs font-medium text-muted-foreground">Arquivos anexados:</p>
               {attachedFiles.map((f) => (
                 <div
                   key={f.id}
@@ -291,6 +291,8 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
                 >
                   {f.file_name?.endsWith(".xlsx") || f.file_name?.endsWith(".xls") ? (
                     <FileSpreadsheet className="h-4 w-4 text-accent-foreground shrink-0" />
+                  ) : f.file_name?.endsWith(".docx") || f.file_name?.endsWith(".doc") ? (
+                    <FileText className="h-4 w-4 text-accent-foreground shrink-0" />
                   ) : (
                     <FileText className="h-4 w-4 text-primary shrink-0" />
                   )}
