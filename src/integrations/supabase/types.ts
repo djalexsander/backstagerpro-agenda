@@ -253,6 +253,60 @@ export type Database = {
           },
         ]
       }
+      event_checklist_items: {
+        Row: {
+          categoria: string
+          concluido: boolean
+          created_at: string
+          descricao: string
+          empresa_id: string
+          event_id: string
+          id: string
+          observacao: string | null
+          ordem: number
+          updated_at: string
+        }
+        Insert: {
+          categoria?: string
+          concluido?: boolean
+          created_at?: string
+          descricao: string
+          empresa_id: string
+          event_id: string
+          id?: string
+          observacao?: string | null
+          ordem?: number
+          updated_at?: string
+        }
+        Update: {
+          categoria?: string
+          concluido?: boolean
+          created_at?: string
+          descricao?: string
+          empresa_id?: string
+          event_id?: string
+          id?: string
+          observacao?: string | null
+          ordem?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_checklist_items_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_checklist_items_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_days: {
         Row: {
           artist: string | null
