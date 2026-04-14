@@ -88,7 +88,7 @@ export default function ModulosDisponiveis() {
     enabled: !!empresaId,
   });
 
-  // Fetch empresa data for PIX
+  // Fetch empresa data
   const { data: empresa } = useQuery({
     queryKey: ["empresa-plano", empresaId],
     queryFn: async () => {
@@ -98,8 +98,6 @@ export default function ModulosDisponiveis() {
     },
     enabled: !!empresaId,
   });
-
-  const { data: pixSettings } = useQuery({
     queryKey: ["pix-settings"],
     queryFn: async () => {
       const { data, error } = await supabase.from("system_settings").select("key, value").in("key", ["pix_chave", "pix_nome_recebedor", "pix_cidade", "pix_banco"]);
