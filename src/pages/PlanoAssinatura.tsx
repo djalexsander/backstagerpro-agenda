@@ -418,6 +418,39 @@ export default function PlanoAssinatura() {
         </CardContent>
       </Card>
 
+      {/* ─── PENDING MODULE PAYMENT BANNER ─── */}
+      {pendingModulePayment && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <div className="flex items-center gap-2 text-warning">
+              <Clock className="h-5 w-5 animate-pulse" />
+              <span className="font-semibold">Pagamento de módulos pendente</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Cobrança de <strong>R$ {Number(pendingModulePayment.amount).toFixed(2)}</strong> aguardando confirmação.
+              Os módulos serão ativados automaticamente após o pagamento.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {pendingModulePayment.pix_copy_paste && (
+                <Button variant="outline" size="sm" onClick={() => {
+                  navigator.clipboard.writeText(pendingModulePayment.pix_copy_paste!);
+                  toast.success("Código PIX copiado!");
+                }}>
+                  <Copy className="h-4 w-4 mr-1" /> Copiar PIX
+                </Button>
+              )}
+              {pendingModulePayment.invoice_url && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={pendingModulePayment.invoice_url} target="_blank" rel="noopener noreferrer">
+                    <CreditCard className="h-4 w-4 mr-1" /> Abrir link de pagamento
+                  </a>
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ─── MÓDULOS ATIVOS ─── */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
