@@ -77,7 +77,17 @@ export default function PlanoAssinatura() {
   const pendingModulePayment = pendingAsaasPayments.find(p => p.payment_type === "modules");
 
   // When a pending payment disappears (confirmed via webhook), refresh everything
-  const prevPendingCount = useMemo(() => pendingAsaasPayments.length, [pendingAsaasPayments]);
+  const prevPendingRef = useRef(pendingAsaasPayments.length);
+  useEffect(() => {
+    if (prevPendingRef.current > 0 && pendingAsaasPayments.length < prevPendingRef.current) {
+      queryClient.invalidateQueries({ queryKey: ["empresa-plano"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-empresa"] });
+      queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["company-modules"] });
+      toast.success("Pagamento confirmado! Acesso liberado.");
+    }
+    prevPendingRef.current = pendingAsaasPayments.length;
+  }, [pendingAsaasPayments.length, queryClient]);
 
   // Fetch empresa
   const { data: empresa } = useQuery({
