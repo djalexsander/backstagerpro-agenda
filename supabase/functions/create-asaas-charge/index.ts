@@ -21,14 +21,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Validate auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Não autorizado");
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
     if (userErr || !user) throw new Error("Não autorizado");
 
-    // Get user's empresa
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("empresa_id")
@@ -84,16 +82,12 @@ Deno.serve(async (req) => {
       asaasCustomerId = createData.id;
     }
 
-    // 2. Create charge - try PIX first, fallback to UNDEFINED
+    // 2. Create charge — ALWAYS PIX for Backstage Pro
     const dueDate = due_date || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     const chargeDescription = description || `Backstage Pro - ${payment_type === "base_plan" ? "Plano Base" : "Módulos Adicionais"}`;
     const externalRef = `bsp:${profile.empresa_id.substring(0, 36)}:${payment_type}`;
 
-    let chargeData: any = null;
-    let usedBillingType = "PIX";
-
-    // Try PIX first
-    const pixChargeRes = await fetch(`${ASAAS_API_URL}/payments`, {
+    const chargeRes = await fetch(`${ASAAS_API_URL}/payments`, {
       method: "POST",
       headers: {
         "access_token": ASAAS_API_KEY,
@@ -109,52 +103,29 @@ Deno.serve(async (req) => {
       }),
     });
 
-    if (pixChargeRes.ok) {
-      chargeData = await pixChargeRes.json();
-    } else {
-      const pixErr = await pixChargeRes.json();
-      console.log("PIX charge failed, falling back to UNDEFINED:", JSON.stringify(pixErr));
-
-      // Fallback to UNDEFINED (customer chooses payment method via link)
-      usedBillingType = "UNDEFINED";
-      const undefinedRes = await fetch(`${ASAAS_API_URL}/payments`, {
-        method: "POST",
-        headers: {
-          "access_token": ASAAS_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customer: asaasCustomerId,
-          billingType: "UNDEFINED",
-          value: Number(amount),
-          dueDate,
-          description: chargeDescription,
-          externalReference: externalRef,
-        }),
-      });
-      const undefinedData = await undefinedRes.json();
-      if (!undefinedRes.ok) {
-        throw new Error(`Erro ao criar cobrança Asaas: ${JSON.stringify(undefinedData)}`);
-      }
-      chargeData = undefinedData;
+    const chargeData = await chargeRes.json();
+    if (!chargeRes.ok) {
+      console.error("Asaas PIX charge error:", JSON.stringify(chargeData));
+      throw new Error(`Erro ao criar cobrança PIX no Asaas: ${JSON.stringify(chargeData)}`);
     }
 
-    // 3. Try to get PIX QR Code (works if PIX is available)
+    // 3. Get PIX QR Code
     let pixQrCode = null;
     let pixCopyPaste = null;
-    if (chargeData.id && usedBillingType === "PIX") {
-      const pixRes = await fetch(`${ASAAS_API_URL}/payments/${chargeData.id}/pixQrCode`, {
-        headers: { "access_token": ASAAS_API_KEY },
-      });
-      if (pixRes.ok) {
-        const pixData = await pixRes.json();
-        pixQrCode = pixData.encodedImage;
-        pixCopyPaste = pixData.payload;
-      }
+
+    const pixRes = await fetch(`${ASAAS_API_URL}/payments/${chargeData.id}/pixQrCode`, {
+      headers: { "access_token": ASAAS_API_KEY },
+    });
+    if (pixRes.ok) {
+      const pixData = await pixRes.json();
+      pixQrCode = pixData.encodedImage;
+      pixCopyPaste = pixData.payload;
+    } else {
+      const pixErr = await pixRes.text();
+      console.error("Erro ao obter QR Code PIX:", pixErr);
     }
 
     // 4. Save to asaas_payments table
-    const paymentMethod = usedBillingType === "PIX" ? "pix" : "link_pagamento";
     const { data: payment, error: insertErr } = await supabaseAdmin
       .from("asaas_payments")
       .insert({
@@ -165,7 +136,7 @@ Deno.serve(async (req) => {
         empresa_id: profile.empresa_id,
         amount: Number(amount),
         status: "pending",
-        payment_method: paymentMethod,
+        payment_method: "pix",
         pix_qr_code: pixQrCode,
         pix_copy_paste: pixCopyPaste,
         invoice_url: chargeData.invoiceUrl || null,
@@ -181,8 +152,8 @@ Deno.serve(async (req) => {
     // 5. Log
     await supabaseAdmin.from("system_logs").insert({
       tipo: "pagamento",
-      acao: "asaas_cobranca_criada",
-      descricao: `Cobrança Asaas criada: R$ ${Number(amount).toFixed(2)} (${payment_type}) via ${paymentMethod} para ${empresa?.nome_empresa}`,
+      acao: "asaas_cobranca_pix_criada",
+      descricao: `Cobrança PIX Asaas criada: R$ ${Number(amount).toFixed(2)} (${payment_type}) para ${empresa?.nome_empresa}`,
       empresa_id: profile.empresa_id,
       empresa_nome: empresa?.nome_empresa,
       user_id: user.id,
@@ -195,7 +166,7 @@ Deno.serve(async (req) => {
       pix_qr_code: pixQrCode,
       pix_copy_paste: pixCopyPaste,
       invoice_url: chargeData.invoiceUrl,
-      billing_type: usedBillingType,
+      billing_type: "PIX",
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
