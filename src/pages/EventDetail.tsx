@@ -5,8 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft, Users, ImageIcon } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft, Users, ImageIcon, ClipboardList, LayoutDashboard } from "lucide-react";
 import { useRef, useCallback, useState } from "react";
+import { useModuleAccess } from "@/components/ModuleGate";
+import { MODULE_KEYS } from "@/constants/module-keys";
+import { EventChecklistTab } from "@/components/evento/EventChecklistTab";
+import { EventOperationalPanel } from "@/components/evento/EventOperationalPanel";
 import {
   AlertDialog,
   AlertDialogAction,
