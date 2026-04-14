@@ -15,6 +15,7 @@ interface AuthContextType {
   empresaBloqueada: boolean;
   empresaReadOnly: boolean;
   precisaEscolherPlano: boolean;
+  statusPagamento: string | null;
   isMasterAdmin: boolean;
   isAdminEmpresa: boolean;
   isUsuario: boolean;
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [precisaEscolherPlano, setPrecisaEscolherPlano] = useState(false);
   const [empresaLogoUrl, setEmpresaLogoUrl] = useState<string | null>(null);
   const [empresaNome, setEmpresaNome] = useState<string | null>(null);
+  const [statusPagamento, setStatusPagamento] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
@@ -64,16 +66,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setPrecisaEscolherPlano(!!(empresa as any).precisa_escolher_plano);
           setEmpresaLogoUrl((empresa as any).logo_url || null);
           setEmpresaNome((empresa as any).nome_empresa || null);
+          setStatusPagamento((empresa as any).status_pagamento || null);
         } else {
           setEmpresaBloqueada(false);
           setPrecisaEscolherPlano(false);
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
+          setStatusPagamento(null);
         }
       } else {
         setEmpresaBloqueada(false);
         setEmpresaLogoUrl(null);
         setEmpresaNome(null);
+        setStatusPagamento(null);
       }
     }
     if (roleRes.data) setRole(roleRes.data.role as AppRole);
@@ -93,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setPrecisaEscolherPlano(false);
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
+          setStatusPagamento(null);
         }
         setLoading(false);
       }
@@ -159,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       empresaBloqueada: empresaReadOnlyValue,
       empresaReadOnly: empresaReadOnlyValue,
       precisaEscolherPlano: isMasterAdmin ? false : precisaEscolherPlano,
+      statusPagamento: isMasterAdmin ? null : statusPagamento,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
       loading, signIn, signOut, refreshProfile,
