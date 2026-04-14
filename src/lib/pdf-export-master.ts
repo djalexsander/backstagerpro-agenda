@@ -2,7 +2,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
-import { smartSavePDF } from "./pdf-save";
+import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
+import type { ExportFormat } from "./pdf-export";
 
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
@@ -11,7 +12,8 @@ export async function exportMasterFinanceiroPDF(
   pagamentos: any[],
   empresas: any[],
   periodTitle: string,
-  branding?: PdfBranding
+  branding?: PdfBranding,
+  fmt: ExportFormat = "pdf"
 ) {
   const doc = new jsPDF("landscape");
   const b = branding || {};
@@ -90,5 +92,10 @@ export async function exportMasterFinanceiroPDF(
     });
   }
 
-  await smartSavePDF(doc, { tipo: "financeiro-master", evento: periodTitle });
+  const nameOpts: SmartPDFNameOptions = { tipo: "financeiro-master", evento: periodTitle };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }

@@ -359,5 +359,10 @@ export async function exportFinancialTotalPDF(financials: any[], periodTitle?: s
     },
   });
 
-  await smartSavePDF(doc, { tipo: "financeiro-consolidado" });
+  const nameOpts2: SmartPDFNameOptions = { tipo: "financeiro-consolidado" };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts2);
+  } else {
+    await smartSavePDF(doc, nameOpts2);
+  }
 }
