@@ -891,6 +891,8 @@ export default function PlanoAssinatura() {
                 setShowModulePix(true);
 
                 queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+                queryClient.invalidateQueries({ queryKey: ["asaas-pending-payments"] });
+                toast.success("Cobrança gerada! Aguardando pagamento dos módulos.");
                 setSelectedModuleIds(new Set());
                 setBatchObservacao("");
               } catch (err: any) {
