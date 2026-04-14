@@ -78,6 +78,7 @@ export default function Financeiro() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { empresaId, empresaNome, empresaLogoUrl, empresaReadOnly } = useAuth();
+  const { canAccess: canExport } = useModuleAccess(MODULE_KEYS.RELATORIOS);
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedEvent, setSelectedEvent] = useState("");
