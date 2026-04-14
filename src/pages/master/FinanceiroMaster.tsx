@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3, FileDown, FilterX, Trash2 } from "lucide-react";
+import { Building2, DollarSign, TrendingUp, Clock, CheckCircle2, BarChart3, FileDown, FilterX, Trash2, ImageIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, subMonths, startOfMonth } from "date-fns";
@@ -142,10 +142,10 @@ export default function FinanceiroMaster() {
     }
   };
 
-  const handleExportPDF = (type: "filtered" | "all") => {
+  const handleExportPDF = (type: "filtered" | "all", fmt: "pdf" | "png" = "pdf") => {
     const data = type === "all" ? pagamentos : filteredPagamentos;
     const title = type === "all" ? "Geral" : filterLabel;
-    exportMasterFinanceiroPDF(data, empresas, title);
+    exportMasterFinanceiroPDF(data, empresas, title, undefined, fmt);
   };
 
   return (
@@ -183,6 +183,10 @@ export default function FinanceiroMaster() {
           <Button variant="outline" size="sm" onClick={() => handleExportPDF("filtered")}>
             <FileDown className="h-4 w-4 mr-1" />
             PDF {filterLabel}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExportPDF("filtered", "png")}>
+            <ImageIcon className="h-4 w-4 mr-1" />
+            PNG {filterLabel}
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleExportPDF("all")}>
             <FileDown className="h-4 w-4 mr-1" />

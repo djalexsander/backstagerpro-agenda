@@ -1,9 +1,9 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { format, parseISO } from "date-fns";
+import { format as formatDate, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
-import { smartSavePDF } from "./pdf-save";
+import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
 
 type Event = Tables<"events">;
 
@@ -74,7 +74,9 @@ function getCachePendente(f: any): number {
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
-export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
+export type ExportFormat = "pdf" | "png";
+
+export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, format: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -82,13 +84,13 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
   doc.setFontSize(14);
   doc.text("Agenda", 14, headerY);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
+  doc.text(`Gerado em ${formatDate(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
 
   autoTable(doc, {
     startY: headerY + 14,
     head: [["Data", "Status", "Evento", "Artista", "Cidade", "Local"]],
     body: events.map((e) => [
-      e.date ? format(parseISO(e.date), "dd/MM/yyyy") : "—",
+      e.date ? formatDate(parseISO(e.date), "dd/MM/yyyy") : "—",
       e.status.charAt(0).toUpperCase() + e.status.slice(1),
       e.name,
       e.artist,
@@ -99,10 +101,15 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding) {
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  await smartSavePDF(doc, { tipo: "agenda" });
+  const nameOpts: SmartPDFNameOptions = { tipo: "agenda" };
+  if (format === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }
 
-export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[]) {
+export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[], fmt: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -117,7 +124,7 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     ["Cidade", event.city],
     ["Local", event.venue],
     ["Dias", String(event.num_days || 1)],
-    ["Saída Logística", event.logistics_departure ? format(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy HH:mm") : "—"],
+    ["Saída Logística", event.logistics_departure ? formatDate(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy HH:mm") : "—"],
     ["Observações", event.observations || "—"],
     ["Material", event.material_list || "—"],
   ];
@@ -159,7 +166,7 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
       head: [["Dia", "Data", "Artista", "Horário", "Obs. Técnicas"]],
       body: eventDays.map((day) => [
         `Dia ${day.day_number}`,
-        day.date ? format(parseISO(day.date), "dd/MM/yyyy") : "—",
+        day.date ? formatDate(parseISO(day.date), "dd/MM/yyyy") : "—",
         day.artist || "—",
         day.show_time ? (day.show_time as string).slice(0, 5) : "—",
         day.observations || "—",
@@ -169,10 +176,15 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     });
   }
 
-  await smartSavePDF(doc, { tipo: "evento", evento: event.name, cidade: event.city, data: event.date });
+  const nameOpts: SmartPDFNameOptions = { tipo: "evento", evento: event.name, cidade: event.city, data: event.date };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }
 
-export async function exportFinancialPDF(financial: any, branding?: PdfBranding) {
+export async function exportFinancialPDF(financial: any, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const eventName = financial.events?.name || "Evento";
@@ -183,7 +195,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding)
   doc.setFontSize(12);
   doc.text(eventName, 14, headerY + 8);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 16);
+  doc.text(`Gerado em ${formatDate(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 16);
 
   const extras = parseExtraCosts(financial.extra_costs);
   const extrasTotal = sumExtraCosts(extras);
@@ -205,13 +217,13 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding)
     }
     if (detail.parcelado && detail.parcelas?.length > 0) {
       detail.parcelas.forEach((p) => {
-        const venc = p.vencimento ? format(new Date(p.vencimento), "dd/MM/yyyy") : "—";
+        const venc = p.vencimento ? formatDate(new Date(p.vencimento), "dd/MM/yyyy") : "—";
         rows.push([`  Parcela ${p.numero}`, `${fmtBRL(p.valor)} — Venc: ${venc} — ${p.pago ? "Pago" : "Pendente"}`]);
       });
     } else {
       const restante = detail.valorTotal - (detail.entrada || 0);
       if (restante > 0) {
-        const tipo = detail.recebimentoEvento ? "No evento" : (detail.dataRecebimento ? format(new Date(detail.dataRecebimento), "dd/MM/yyyy") : "—");
+        const tipo = detail.recebimentoEvento ? "No evento" : (detail.dataRecebimento ? formatDate(new Date(detail.dataRecebimento), "dd/MM/yyyy") : "—");
         rows.push(["  Restante", `${fmtBRL(restante)} — ${tipo} — ${detail.recebimentoPago ? "Pago" : "Pendente"}`]);
       }
     }
@@ -266,10 +278,15 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding)
     },
   });
 
-  await smartSavePDF(doc, { tipo: "financeiro", evento: eventName });
+  const nameOpts: SmartPDFNameOptions = { tipo: "financeiro", evento: eventName };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }
 
-export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding) {
+export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
   const doc = new jsPDF("landscape");
   const b = branding || {};
   const subtitle = periodTitle ? `Período: ${periodTitle}` : "Consolidado";
@@ -278,7 +295,7 @@ export async function exportFinancialTotalPDF(financials: any[], periodTitle?: s
   doc.setFontSize(14);
   doc.text(`Relatório Financeiro — ${subtitle}`, 14, headerY);
   doc.setFontSize(10);
-  doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
+  doc.text(`Gerado em ${formatDate(new Date(), "dd/MM/yyyy HH:mm")}`, 14, headerY + 8);
 
   const body = financials.map((f) => {
     const extras = parseExtraCosts(f.extra_costs);
@@ -342,5 +359,10 @@ export async function exportFinancialTotalPDF(financials: any[], periodTitle?: s
     },
   });
 
-  await smartSavePDF(doc, { tipo: "financeiro-consolidado" });
+  const nameOpts2: SmartPDFNameOptions = { tipo: "financeiro-consolidado" };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts2);
+  } else {
+    await smartSavePDF(doc, nameOpts2);
+  }
 }

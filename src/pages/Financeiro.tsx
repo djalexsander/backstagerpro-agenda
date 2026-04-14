@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X, Users, CheckCircle2, Clock } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, FileDown, X, Users, CheckCircle2, Clock, ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -357,7 +357,7 @@ export default function Financeiro() {
     return financials;
   };
 
-  const handleExport = () => {
+  const handleExport = (exportFmt: "pdf" | "png" = "pdf") => {
     const filtered = getFilteredForExport();
     if (filtered.length === 0) {
       toast({ title: "Nenhum registro encontrado para o período selecionado.", variant: "destructive" });
@@ -370,7 +370,7 @@ export default function Financeiro() {
     } else if (exportMode === "period" && exportStart && exportEnd) {
       title = `${exportStart.split("-").reverse().join("/")} a ${exportEnd.split("-").reverse().join("/")}`;
     }
-    exportFinancialTotalPDF(filtered, title, { empresaNome, empresaLogoUrl });
+    exportFinancialTotalPDF(filtered, title, { empresaNome, empresaLogoUrl }, exportFmt);
     setExportOpen(false);
   };
 
@@ -452,9 +452,12 @@ export default function Financeiro() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={handleExport}>
+            <Button variant="outline" onClick={() => handleExport("png")}>
+              <ImageIcon className="h-4 w-4 mr-1" /> Exportar PNG
+            </Button>
+            <Button onClick={() => handleExport("pdf")}>
               <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
             </Button>
           </DialogFooter>
@@ -1068,6 +1071,9 @@ export default function Financeiro() {
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f, { empresaNome, empresaLogoUrl })} title="Exportar PDF">
                           <FileDown className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => exportFinancialPDF(f, { empresaNome, empresaLogoUrl }, "png")} title="Exportar PNG">
+                          <ImageIcon className="h-4 w-4" />
                         </Button>
                         {!empresaReadOnly && (
                           <>
