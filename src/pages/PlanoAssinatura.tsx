@@ -198,7 +198,7 @@ export default function PlanoAssinatura() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Plano & Assinatura</h1>
+      <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Assinatura e Módulos</h1>
 
       {/* ─── PLANO BASE ─── */}
       <Card className="border-primary/20 shadow-sm">

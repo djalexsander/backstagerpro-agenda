@@ -45,14 +45,13 @@ export function AppSidebar() {
   const companyItems = isUsuario
     ? [
         { title: "Agenda", url: "/agenda", icon: Calendar },
-        ...(empresaReadOnly ? [{ title: "Plano / Assinatura", url: "/plano", icon: CreditCard }] : []),
+        ...(empresaReadOnly ? [{ title: "Assinatura e Módulos", url: "/plano", icon: CreditCard }] : []),
       ]
     : [
         { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { title: "Agenda", url: "/agenda", icon: Calendar },
         ...moduleGatedItems,
-        { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
-        ...(!isUsuario ? [{ title: "Módulos", url: "/modulos", icon: Package }] : []),
+        { title: "Assinatura e Módulos", url: "/plano", icon: CreditCard },
       ];
 
   const masterItems = [

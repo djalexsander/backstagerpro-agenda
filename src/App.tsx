@@ -37,7 +37,7 @@ import FinanceiroMaster from "@/pages/master/FinanceiroMaster";
 import Modulos from "@/pages/master/Modulos";
 import SolicitacoesModulos from "@/pages/master/SolicitacoesModulos";
 import PagamentosModulos from "@/pages/master/PagamentosModulos";
-import ModulosDisponiveis from "@/pages/ModulosDisponiveis";
+
 import OnboardingModulos from "@/pages/OnboardingModulos";
 import OnboardingResumo from "@/pages/OnboardingResumo";
 import NotFound from "@/pages/NotFound";
@@ -79,7 +79,7 @@ const App = () => (
                   <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
                   <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
                   <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
-                  <Route path="/modulos" element={<ProtectedRoute adminOnly><ModulosDisponiveis /></ProtectedRoute>} />
+                  <Route path="/modulos" element={<Navigate to="/plano" replace />} />
                   
                   {/* Master Admin Routes */}
                   <Route path="/master" element={<ProtectedRoute masterOnly><PainelMaster /></ProtectedRoute>} />
