@@ -734,22 +734,42 @@ export default function PlanoAssinatura() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ─── MODULE REQUEST DIALOG ─── */}
-      <Dialog open={!!requestModule} onOpenChange={(o) => !o && setRequestModule(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Solicitar: {requestModule?.nome}</DialogTitle></DialogHeader>
+      {/* ─── BATCH MODULE REQUEST DIALOG ─── */}
+      <Dialog open={showBatchSummary} onOpenChange={setShowBatchSummary}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" /> Resumo da Solicitação
+            </DialogTitle>
+            <DialogDescription>Revise os módulos selecionados antes de enviar</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4 py-2">
-            {requestModule?.descricao && <p className="text-sm text-muted-foreground">{requestModule.descricao}</p>}
-            <p className="font-semibold">Valor: R$ {Number(requestModule?.valor || 0).toFixed(2)}/{requestModule?.periodicidade}</p>
+            <div className="space-y-2">
+              {selectedModules.map(mod => (
+                <div key={mod.id} className="flex justify-between items-center text-sm">
+                  <span className="font-medium">{mod.nome}</span>
+                  <span>R$ {Number(mod.valor).toFixed(2)}/{mod.periodicidade}</span>
+                </div>
+              ))}
+              <Separator />
+              <div className="flex justify-between items-baseline font-bold">
+                <span>Total</span>
+                <span className="text-lg text-primary">R$ {totalSelectedValue.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
+              <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Observação (opcional)</label>
-              <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Algo para o administrador..." />
+              <Textarea value={batchObservacao} onChange={(e) => setBatchObservacao(e.target.value)} placeholder="Algo para o administrador..." />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestModule(null)}>Cancelar</Button>
-            <Button onClick={() => sendModuleRequest.mutate()} disabled={sendModuleRequest.isPending}>
-              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação
+            <Button variant="outline" onClick={() => setShowBatchSummary(false)}>Cancelar</Button>
+            <Button onClick={() => batchModuleMutation.mutate()} disabled={batchModuleMutation.isPending}>
+              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação — R$ {totalSelectedValue.toFixed(2)}
             </Button>
           </DialogFooter>
         </DialogContent>
