@@ -225,7 +225,7 @@ export default function EventDetail() {
           )}
           {hasChecklist && (
             <TabsContent value="checklist" className="mt-4">
-              <EventChecklistTab eventId={event.id} />
+              <EventChecklistTab eventId={event.id} eventName={event.name} />
             </TabsContent>
           )}
         </Tabs>
