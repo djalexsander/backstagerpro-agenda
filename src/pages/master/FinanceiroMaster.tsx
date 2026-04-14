@@ -164,10 +164,40 @@ export default function FinanceiroMaster() {
     exportMasterFinanceiroPDF(data, empresas, title, undefined, fmt);
   };
 
+  const asaasStatusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    pending: { label: "Pendente", variant: "secondary" },
+    confirmed: { label: "Confirmado", variant: "default" },
+    received: { label: "Recebido", variant: "default" },
+    overdue: { label: "Vencido", variant: "destructive" },
+    refunded: { label: "Estornado", variant: "outline" },
+    cancelled: { label: "Cancelado", variant: "destructive" },
+  };
+
+  const paymentTypeLabel = (t: string) => t === "base_plan" ? "Plano Base" : t === "modules" ? "Módulos" : t;
+
+  const asaasTotalConfirmed = asaasPayments
+    .filter((p: any) => p.status === "confirmed" || p.status === "received")
+    .reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+  const asaasTotalPending = asaasPayments
+    .filter((p: any) => p.status === "pending")
+    .reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Financeiro Master</h1>
+      <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Financeiro Master</h1>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="manual">Pagamentos Manuais</TabsTrigger>
+          <TabsTrigger value="asaas" className="gap-1.5">
+            <CreditCard className="h-3.5 w-3.5" /> Cobranças Asaas
+            {asaasPayments.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{asaasPayments.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="manual" className="space-y-6 mt-4">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={filterMonth} onValueChange={setFilterMonth}>
             <SelectTrigger className="w-[140px]">
