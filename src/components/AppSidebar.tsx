@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -32,12 +32,14 @@ export function AppSidebar() {
     { title: "Usuários", url: "/usuarios", icon: Users },
     { title: "Documentos", url: "/documentos", icon: FileText },
     { title: "Funcionários", url: "/funcionarios", icon: HardHat },
+    { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
     { title: "Backups", url: "/backups", icon: Database },
   ] : [
     ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
     ...(hasModule(MODULE_KEYS.EQUIPE_PERMISSOES) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
     ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
     ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
+    ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Relatórios", url: "/relatorios", icon: BarChart3 }] : []),
     ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
   ];
 

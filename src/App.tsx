@@ -23,6 +23,7 @@ import PlanoAssinatura from "@/pages/PlanoAssinatura";
 import Backups from "@/pages/Backups";
 import Documentos from "@/pages/Documentos";
 import Funcionarios from "@/pages/Funcionarios";
+import Relatorios from "@/pages/Relatorios";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -79,6 +80,7 @@ const App = () => (
                   <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
                   <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
                   <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
+                  <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />
                   <Route path="/modulos" element={<Navigate to="/plano" replace />} />
                   
                   {/* Master Admin Routes */}
