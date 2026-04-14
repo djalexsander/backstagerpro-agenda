@@ -86,7 +86,21 @@ Deno.serve(async (req) => {
       asaasCustomerId = createData.id;
     }
 
-    // 2. Create PIX charge
+    // 2. Check PIX keys availability
+    const pixKeysRes = await fetch(`${ASAAS_API_URL}/pix/addressKeys`, {
+      headers: { "access_token": ASAAS_API_KEY },
+    });
+    const pixKeysData = await pixKeysRes.json();
+    console.log("PIX keys check:", JSON.stringify(pixKeysData));
+
+    // Also check account info
+    const myAccountRes = await fetch(`${ASAAS_API_URL}/myAccount`, {
+      headers: { "access_token": ASAAS_API_KEY },
+    });
+    const myAccountData = await myAccountRes.json();
+    console.log("Account info:", JSON.stringify({ walletId: myAccountData.walletId, name: myAccountData.name, email: myAccountData.email, commercialInfoExpiration: myAccountData.commercialInfoExpiration }));
+
+    // 3. Create PIX charge
     const dueDate = due_date || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const chargeRes = await fetch(`${ASAAS_API_URL}/payments`, {
@@ -106,6 +120,7 @@ Deno.serve(async (req) => {
     });
     const chargeData = await chargeRes.json();
     if (!chargeRes.ok) {
+      console.error("Charge creation failed. PIX keys:", JSON.stringify(pixKeysData));
       throw new Error(`Erro ao criar cobrança Asaas: ${JSON.stringify(chargeData)}`);
     }
 
