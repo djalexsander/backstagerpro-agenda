@@ -92,12 +92,13 @@ Deno.serve(async (req) => {
         .update({
           precisa_escolher_plano: false,
           plano_bloqueado: true,
-          status_pagamento: "pendente",
+          status_pagamento: "aguardando_pagamento",
           plano: plano?.nome || null,
           plano_id: plano_id,
           trial_expires_at: null,
           data_contrato: now.toISOString(),
           vencimento: vencimento,
+          status: "ativo",
         })
         .eq("id", profile.empresa_id);
 

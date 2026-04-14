@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
             plano_id: planoId,
             vencimento,
             data_contrato: nowDate.toISOString(),
+            precisa_escolher_plano: false,
           })
           .eq("id", internalPayment.empresa_id);
 
