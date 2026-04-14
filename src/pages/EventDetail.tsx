@@ -122,6 +122,8 @@ export default function EventDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [downloadPending, setDownloadPending] = useState<{ path: string; name: string } | null>(null);
+  const { canAccess: hasChecklist } = useModuleAccess(MODULE_KEYS.CHECKLIST_TECNICO);
+  const { canAccess: hasOperacional } = useModuleAccess(MODULE_KEYS.PAINEL_OPERACIONAL);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
