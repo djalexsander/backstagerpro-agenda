@@ -8,7 +8,7 @@ import {
 import { useModuleAccess } from "@/components/ModuleGate";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { exportAgendaPDF } from "@/lib/pdf-export";
-import { exportFinanceiroPDF } from "@/lib/pdf-export-master";
+
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ReportCard {
