@@ -64,6 +64,7 @@ const App = () => (
                 <Route path="/escolher-plano" element={<ProtectedRoute skipPlanCheck><EscolherPlano /></ProtectedRoute>} />
                 <Route path="/pagamento-plano/:planoId" element={<ProtectedRoute skipPlanCheck><PagamentoPlano /></ProtectedRoute>} />
                 <Route path="/onboarding-modulos" element={<ProtectedRoute skipPlanCheck><OnboardingModulos /></ProtectedRoute>} />
+                <Route path="/onboarding-resumo" element={<ProtectedRoute skipPlanCheck><OnboardingResumo /></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/agenda" replace />} />
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
