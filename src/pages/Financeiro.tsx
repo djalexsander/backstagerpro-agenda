@@ -452,9 +452,12 @@ export default function Financeiro() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={handleExport}>
+            <Button variant="outline" onClick={() => handleExport("png")}>
+              <ImageIcon className="h-4 w-4 mr-1" /> Exportar PNG
+            </Button>
+            <Button onClick={() => handleExport("pdf")}>
               <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
             </Button>
           </DialogFooter>
