@@ -76,7 +76,7 @@ const fmtBRL = (n: number | null) =>
 
 export type ExportFormat = "pdf" | "png";
 
-export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, format: ExportFormat = "pdf") {
+export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, format: ExportFormat = "pdf", nameOverride?: SmartPDFNameOptions) {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -101,7 +101,7 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, f
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  const nameOpts: SmartPDFNameOptions = { tipo: "agenda" };
+  const nameOpts: SmartPDFNameOptions = nameOverride ?? { tipo: "agenda" };
   if (format === "png") {
     await smartSavePNG(doc, nameOpts);
   } else {
@@ -286,7 +286,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding,
   }
 }
 
-export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
+export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding, fmt: ExportFormat = "pdf", nameOverride?: SmartPDFNameOptions) {
   const doc = new jsPDF("landscape");
   const b = branding || {};
   const subtitle = periodTitle ? `Período: ${periodTitle}` : "Consolidado";
@@ -359,7 +359,7 @@ export async function exportFinancialTotalPDF(financials: any[], periodTitle?: s
     },
   });
 
-  const nameOpts2: SmartPDFNameOptions = { tipo: "financeiro-consolidado" };
+  const nameOpts2: SmartPDFNameOptions = nameOverride ?? { tipo: "financeiro-consolidado" };
   if (fmt === "png") {
     await smartSavePNG(doc, nameOpts2);
   } else {

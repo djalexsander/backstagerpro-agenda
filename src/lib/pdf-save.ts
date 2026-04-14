@@ -22,12 +22,17 @@ export interface SmartPDFNameOptions {
   evento?: string;
   cidade?: string;
   data?: string; // ISO or dd/MM/yyyy
+  /** When set, overrides the entire generated name (without extension). */
+  customName?: string;
 }
 
 /**
  * Build a professional filename from event metadata.
  */
 export function buildPDFFileName(opts: SmartPDFNameOptions, extension: string = ".pdf"): string {
+  if (opts.customName) {
+    return sanitize(opts.customName) + extension;
+  }
   const parts = [sanitize(opts.tipo)];
   if (opts.evento) parts.push(sanitize(opts.evento));
   if (opts.cidade) parts.push(sanitize(opts.cidade));
