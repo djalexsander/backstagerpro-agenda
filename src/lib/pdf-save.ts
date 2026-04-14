@@ -22,11 +22,8 @@ export interface SmartPDFNameOptions {
 
 /**
  * Build a professional filename from event metadata.
- * Examples:
- *   agenda-maringa-festival-20-03-2026.pdf
- *   financeiro-evento-cianorte.pdf
  */
-export function buildPDFFileName(opts: SmartPDFNameOptions): string {
+export function buildPDFFileName(opts: SmartPDFNameOptions, extension: string = ".pdf"): string {
   const parts = [sanitize(opts.tipo)];
   if (opts.evento) parts.push(sanitize(opts.evento));
   if (opts.cidade) parts.push(sanitize(opts.cidade));
@@ -43,13 +40,11 @@ export function buildPDFFileName(opts: SmartPDFNameOptions): string {
       // ignore invalid dates
     }
   }
-  return parts.join("-") + ".pdf";
+  return parts.join("-") + extension;
 }
 
 /**
  * Save a jsPDF document with maximum cross-browser compatibility.
- * - Windows 11 / modern browsers: opens native "Save As" dialog via File System Access API
- * - Windows 10 / older browsers: automatic download via <a> tag fallback
  */
 export async function smartSavePDF(
   doc: { output: (type: string) => ArrayBuffer | Blob },
@@ -60,7 +55,6 @@ export async function smartSavePDF(
   const blob = new Blob([arrayBuffer], { type: "application/pdf" });
 
   try {
-    // Modern File System Access API (Chrome 86+, Edge 86+)
     if ("showSaveFilePicker" in window) {
       const handle = await (window as any).showSaveFilePicker({
         suggestedName: fileName,
@@ -78,15 +72,10 @@ export async function smartSavePDF(
       return;
     }
   } catch (err: any) {
-    // User cancelled the save dialog — not an error
-    if (err?.name === "AbortError") {
-      return;
-    }
-    // Any other error → fall through to legacy method
+    if (err?.name === "AbortError") return;
     console.warn("showSaveFilePicker failed, using fallback:", err);
   }
 
-  // Fallback: create temporary <a> link and trigger download
   try {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -95,16 +84,89 @@ export async function smartSavePDF(
     link.style.display = "none";
     document.body.appendChild(link);
     link.click();
-
-    // Cleanup after a short delay
     setTimeout(() => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     }, 250);
-
     toast.success("PDF gerado com sucesso!");
   } catch (fallbackErr) {
     console.error("PDF download failed:", fallbackErr);
     toast.error("Erro ao baixar o PDF. Tente novamente.");
+  }
+}
+
+/**
+ * Save a jsPDF document as PNG image(s).
+ * Multi-page documents generate one PNG per page.
+ */
+export async function smartSavePNG(
+  doc: any,
+  nameOpts: SmartPDFNameOptions | string
+): Promise<void> {
+  try {
+    const pageCount = doc.getNumberOfPages();
+    
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      // Render page to canvas at 2x resolution for quality
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(pageWidth * scale * (96 / 72));
+      canvas.height = Math.round(pageHeight * scale * (96 / 72));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas context not available");
+
+      // Use jsPDF's built-in canvas output
+      const imgData = doc.output("datauristring", { page: i });
+      
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve();
+        };
+        img.onerror = reject;
+        img.src = imgData;
+      });
+
+      const suffix = pageCount > 1 ? `-pagina-${i}` : "";
+      const baseName = typeof nameOpts === "string" 
+        ? nameOpts.replace(/\.pdf$/i, "") 
+        : buildPDFFileName(nameOpts, "").replace(/\.$/, "");
+      const fileName = `${baseName}${suffix}.png`;
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          toast.error("Erro ao gerar PNG.");
+          return;
+        }
+        
+        try {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }, 250);
+        } catch {
+          toast.error("Erro ao baixar o PNG.");
+        }
+      }, "image/png");
+    }
+
+    toast.success(pageCount > 1 ? `${pageCount} imagens PNG geradas!` : "PNG gerado com sucesso!");
+  } catch (err) {
+    console.error("PNG export failed:", err);
+    toast.error("Erro ao gerar PNG. Tente novamente.");
   }
 }
