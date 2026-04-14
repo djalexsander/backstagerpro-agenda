@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function ProtectedRoute({ children, adminOnly = false, masterOnly = false, skipPlanCheck = false }: Props) {
-  const { user, loading, isAdmin, isMasterAdmin, empresaBloqueada, precisaEscolherPlano } = useAuth();
+  const { user, loading, isAdmin, isMasterAdmin, empresaBloqueada, precisaEscolherPlano, statusPagamento } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -25,6 +25,11 @@ export function ProtectedRoute({ children, adminOnly = false, masterOnly = false
   // Redirect to plan selection if needed (skip for plan-related routes)
   if (!skipPlanCheck && precisaEscolherPlano && !isMasterAdmin) {
     return <Navigate to="/escolher-plano" replace />;
+  }
+
+  // Block access when payment is pending/in review — redirect to waiting page
+  if (!skipPlanCheck && !isMasterAdmin && statusPagamento && ["pendente", "aguardando_pagamento", "pagamento_em_analise"].includes(statusPagamento)) {
+    return <Navigate to="/aguardando-pagamento" replace />;
   }
 
   // When empresa is blocked/inactive, allow only view access + /plano full access
