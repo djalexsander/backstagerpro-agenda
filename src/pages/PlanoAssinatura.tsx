@@ -223,10 +223,30 @@ export default function PlanoAssinatura() {
 
   const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
 
-  // Available modules (not already active or pending request)
+  // Available modules (not already active, pending request, or in pending batch)
   const pendingRequestIds = new Set(moduleRequests.filter((r: any) => r.status === "pending").map((r: any) => r.module_id));
+  const pendingBatchModuleIds = useMemo(() => {
+    const ids = new Set<string>();
+    batchRequests
+      .filter((b: any) => b.status === "pending" || b.status === "paid")
+      .forEach((b: any) => {
+        (b.module_batch_request_items || []).forEach((item: any) => ids.add(item.module_id));
+      });
+    return ids;
+  }, [batchRequests]);
   const activeModuleIds = new Set(allModules.filter(m => m.status !== "cancelled" && m.status !== "rejected").map(m => m.module_id));
-  const availableModules = catalog.filter(c => !activeModuleIds.has(c.id) && !pendingRequestIds.has(c.id));
+  const availableModules = catalog.filter(c => !activeModuleIds.has(c.id) && !pendingRequestIds.has(c.id) && !pendingBatchModuleIds.has(c.id));
+
+  const selectedModules = catalog.filter(c => selectedModuleIds.has(c.id));
+  const totalSelectedValue = selectedModules.reduce((sum, m) => sum + Number(m.valor), 0);
+
+  const toggleModuleSelect = (id: string) => {
+    setSelectedModuleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   if (sub.isLoading) return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
 
