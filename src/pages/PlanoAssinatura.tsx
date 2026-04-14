@@ -818,7 +818,8 @@ export default function PlanoAssinatura() {
               </div>
             </div>
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
-              <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• Será gerada uma cobrança PIX via Asaas</p>
+              <p>• Após o pagamento confirmado, os módulos serão ativados automaticamente</p>
               <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
             </div>
             <div className="space-y-2">
@@ -828,10 +829,109 @@ export default function PlanoAssinatura() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBatchSummary(false)}>Cancelar</Button>
-            <Button onClick={() => batchModuleMutation.mutate()} disabled={batchModuleMutation.isPending}>
-              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação — R$ {totalSelectedValue.toFixed(2)}
+            <Button onClick={async () => {
+              setGeneratingModuleCharge(true);
+              try {
+                // 1. Create batch request
+                const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
+                const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
+
+                const { data: batch, error: batchError } = await supabase
+                  .from("module_batch_requests")
+                  .insert({ empresa_id: empresaId!, valor_total: total, observacao: batchObservacao || null })
+                  .select("id")
+                  .single();
+                if (batchError) throw batchError;
+
+                const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
+                const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
+                if (itemsError) throw itemsError;
+
+                // 2. Generate Asaas charge
+                const moduleNames = selectedMods.map(m => m.nome).join(", ");
+                const res = await supabase.functions.invoke("create-asaas-charge", {
+                  body: {
+                    payment_type: "modules",
+                    amount: total,
+                    description: `Módulos: ${moduleNames} - ${empresa?.nome_empresa || ""}`,
+                    related_batch_request_id: batch.id,
+                  },
+                });
+                if (res.error) throw new Error(res.error.message);
+                if (res.data?.error) throw new Error(res.data.error);
+
+                // 3. Notify master
+                await supabase.from("notificacoes_master").insert({
+                  empresa_id: empresaId!,
+                  tipo: "solicitacao_modulos_lote",
+                  mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
+                  dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
+                });
+
+                setAsaasModuleData({
+                  pix_qr_code: res.data.pix_qr_code,
+                  pix_copy_paste: res.data.pix_copy_paste,
+                  invoice_url: res.data.invoice_url,
+                });
+                setShowBatchSummary(false);
+                setShowModulePix(true);
+
+                queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+                setSelectedModuleIds(new Set());
+                setBatchObservacao("");
+              } catch (err: any) {
+                toast.error(err.message);
+              } finally {
+                setGeneratingModuleCharge(false);
+              }
+            }} disabled={generatingModuleCharge}>
+              {generatingModuleCharge ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando cobrança...</>
+              ) : (
+                <><QrCode className="h-4 w-4 mr-1" /> Gerar PIX — R$ {totalSelectedValue.toFixed(2)}</>
+              )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MODULE PIX DIALOG (Asaas) ─── */}
+      <Dialog open={showModulePix} onOpenChange={setShowModulePix}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> PIX — Módulos Adicionais</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            {asaasModuleData?.pix_qr_code && (
+              <div className="bg-white p-4 rounded-lg">
+                <img src={`data:image/png;base64,${asaasModuleData.pix_qr_code}`} alt="QR Code PIX" className="w-[220px] h-[220px]" />
+              </div>
+            )}
+            {asaasModuleData?.pix_copy_paste && (
+              <>
+                <Separator />
+                <div className="w-full space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{asaasModuleData.pix_copy_paste}</code>
+                    <Button variant="outline" size="icon" onClick={copyModulePix}><Copy className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {asaasModuleData?.invoice_url && (
+              <>
+                <Separator />
+                <Button variant="outline" className="w-full" asChild>
+                  <a href={asaasModuleData.invoice_url} target="_blank" rel="noopener noreferrer">Ver fatura completa</a>
+                </Button>
+              </>
+            )}
+            <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1 w-full">
+              <p>• Os módulos serão ativados automaticamente após confirmação do pagamento</p>
+              <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
