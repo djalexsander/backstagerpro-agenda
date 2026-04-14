@@ -1,0 +1,1 @@
+ALTER TABLE public.module_catalog ADD COLUMN IF NOT EXISTS destaque boolean NOT NULL DEFAULT false;
