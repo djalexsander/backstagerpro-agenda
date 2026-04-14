@@ -46,6 +46,7 @@ export default function EventDetail() {
   const [downloadPending, setDownloadPending] = useState<{ path: string; name: string } | null>(null);
   const { canAccess: hasChecklist } = useModuleAccess(MODULE_KEYS.CHECKLIST_TECNICO);
   const { canAccess: hasOperacional } = useModuleAccess(MODULE_KEYS.PAINEL_OPERACIONAL);
+  const { canAccess: canExport } = useModuleAccess(MODULE_KEYS.RELATORIOS);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
@@ -183,12 +184,16 @@ export default function EventDetail() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })))}>
-            <FileText className="h-4 w-4 mr-1" /> PDF
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })), "png")}>
-            <ImageIcon className="h-4 w-4 mr-1" /> PNG
-          </Button>
+          {canExport && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })))}>
+                <FileText className="h-4 w-4 mr-1" /> PDF
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })), "png")}>
+                <ImageIcon className="h-4 w-4 mr-1" /> PNG
+              </Button>
+            </>
+          )}
           {isAdmin && (
             <>
               <Button variant="outline" size="sm" onClick={() => navigate(`/evento/${id}/editar`)}>

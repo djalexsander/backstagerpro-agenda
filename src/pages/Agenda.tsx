@@ -17,6 +17,8 @@ import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportAgendaPDF } from "@/lib/pdf-export";
+import { useModuleAccess } from "@/components/ModuleGate";
+import { MODULE_KEYS } from "@/constants/module-keys";
 import type { PdfBranding } from "@/lib/pdf-branding";
 import { useToast } from "@/hooks/use-toast";
 import { AgendaStats } from "@/components/agenda/AgendaStats";
@@ -39,6 +41,7 @@ export default function Agenda() {
   const { isAdmin, isUsuario, empresaId, empresaNome, empresaLogoUrl, empresaReadOnly } = useAuth();
   const { canCreateEvent, maxEventos, currentEventos } = usePlanLimits();
   const { toast } = useToast();
+  const { canAccess: canExport } = useModuleAccess(MODULE_KEYS.RELATORIOS);
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -173,9 +176,11 @@ export default function Agenda() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Agenda</h1>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
-              <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
-            </Button>
+            {canExport && (
+              <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
+                <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
+              </Button>
+            )}
             {isAdmin && !empresaReadOnly && (
               canCreateEvent ? (
                 <Button size="sm" onClick={() => navigate("/evento/novo")}>
