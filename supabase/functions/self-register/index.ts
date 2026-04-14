@@ -23,8 +23,9 @@ Deno.serve(async (req) => {
     if (!password || password.length < 6) throw new Error("A senha deve ter pelo menos 6 caracteres");
 
     const normalizedEmail = email.trim().toLowerCase();
+    const displayName = nome_responsavel?.trim() || nome_empresa.trim();
 
-    // Check if email already exists
+    // Check if email already exists in auth
     let existingUser = null;
     let page = 1;
     const perPage = 500;
@@ -36,8 +37,51 @@ Deno.serve(async (req) => {
       page++;
     }
 
+    let userId: string;
+
     if (existingUser) {
-      throw new Error("Este email já está cadastrado no sistema. Faça login ou use 'Primeiro acesso'.");
+      // Check if user is linked to any active empresa
+      const { data: activeLinks } = await supabaseAdmin
+        .from("empresa_usuarios")
+        .select("empresa_id")
+        .eq("user_id", existingUser.id);
+
+      if (activeLinks && activeLinks.length > 0) {
+        // Check if any of those empresas still exist
+        const empresaIds = activeLinks.map((l: any) => l.empresa_id);
+        const { data: existingEmpresas } = await supabaseAdmin
+          .from("empresas")
+          .select("id")
+          .in("id", empresaIds);
+
+        if (existingEmpresas && existingEmpresas.length > 0) {
+          throw new Error("Este email já está cadastrado no sistema. Faça login ou use 'Primeiro acesso'.");
+        }
+
+        // Clean up orphaned empresa_usuarios links
+        await supabaseAdmin
+          .from("empresa_usuarios")
+          .delete()
+          .eq("user_id", existingUser.id);
+      }
+
+      // Orphaned user — update password and metadata, reuse account
+      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: displayName,
+          role: "admin_empresa",
+        },
+      });
+
+      userId = existingUser.id;
+
+      // Clean up orphaned roles and profile
+      await supabaseAdmin.from("user_roles").delete().eq("user_id", userId);
+      await supabaseAdmin.from("profiles").delete().eq("user_id", userId);
+    } else {
+      userId = ""; // will be set after creation
     }
 
     // Create empresa
@@ -58,34 +102,60 @@ Deno.serve(async (req) => {
       .single();
     if (empresaErr) throw empresaErr;
 
-    // Create auth user (auto-confirmed)
-    const displayName = nome_responsavel?.trim() || nome_empresa.trim();
-    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-      email: normalizedEmail,
-      password,
-      email_confirm: true,
-      user_metadata: {
+    if (!existingUser) {
+      // Create new auth user
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: normalizedEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: displayName,
+          empresa_id: empresa.id,
+          role: "admin_empresa",
+        },
+      });
+      if (authErr) {
+        await supabaseAdmin.from("empresas").delete().eq("id", empresa.id);
+        throw authErr;
+      }
+      userId = authData.user.id;
+    } else {
+      // Update metadata with new empresa_id
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          full_name: displayName,
+          empresa_id: empresa.id,
+          role: "admin_empresa",
+        },
+      });
+
+      // Recreate profile and role for reused user
+      await supabaseAdmin.from("profiles").insert({
+        user_id: userId,
         full_name: displayName,
+        email: normalizedEmail,
         empresa_id: empresa.id,
+        ativado: true,
+      });
+
+      await supabaseAdmin.from("user_roles").insert({
+        user_id: userId,
         role: "admin_empresa",
-      },
-    });
-    if (authErr) {
-      // Cleanup empresa if user creation fails
-      await supabaseAdmin.from("empresas").delete().eq("id", empresa.id);
-      throw authErr;
+      });
     }
 
-    // Mark profile as activated
-    await supabaseAdmin
-      .from("profiles")
-      .update({ ativado: true, email: normalizedEmail, full_name: displayName })
-      .eq("user_id", authData.user.id);
+    // Mark profile as activated (for new users created by trigger)
+    if (!existingUser) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ ativado: true, email: normalizedEmail, full_name: displayName })
+        .eq("user_id", userId);
+    }
 
     // Create empresa_usuarios entry
     await supabaseAdmin.from("empresa_usuarios").insert({
       empresa_id: empresa.id,
-      user_id: authData.user.id,
+      user_id: userId,
       perfil: "admin",
     });
 
@@ -102,7 +172,7 @@ Deno.serve(async (req) => {
       tipo: "auth",
       acao: "auto_cadastro",
       descricao: `Auto cadastro: ${nome_empresa.trim()} - ${displayName} (${normalizedEmail})`,
-      user_id: authData.user.id,
+      user_id: userId,
       user_name: displayName,
       empresa_id: empresa.id,
       empresa_nome: nome_empresa.trim(),
