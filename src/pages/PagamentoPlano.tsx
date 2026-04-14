@@ -136,13 +136,24 @@ export default function PagamentoPlano() {
         .update({ comprovante_path: path } as any)
         .eq("id", pagamento.id);
 
-      // 4. Insert notificação for master
+      // 4. Update empresa status to pagamento_em_analise
+      if (empresaId) {
+        await supabase
+          .from("empresas")
+          .update({ status_pagamento: "pagamento_em_analise" } as any)
+          .eq("id", empresaId);
+      }
+
+      // 5. Insert notificação for master
       await supabase.from("notificacoes_master").insert({
         empresa_id: empresaId,
         tipo: "comprovante_enviado",
         mensagem: `${empresa?.nome_empresa} enviou comprovante para o plano ${plano.nome}`,
         dados: { plano_id: planoId, plano_nome: plano.nome, pagamento_id: pagamento.id },
       });
+
+      // 6. Refresh profile to pick up new status
+      await refreshProfile();
 
       setComprovanteEnviado(true);
       toast({ title: "Comprovante enviado!", description: "Aguarde a aprovação do administrador." });
@@ -175,20 +186,17 @@ export default function PagamentoPlano() {
               <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
                 <Clock className="h-8 w-8 text-primary" />
               </div>
-              <h2 className="text-xl font-bold">Aguardando Aprovação</h2>
+              <h2 className="text-xl font-bold">Comprovante Enviado!</h2>
               <p className="text-muted-foreground">
-                Seu comprovante foi enviado com sucesso. O acesso será liberado após a confirmação do pagamento pelo administrador.
+                Seu comprovante foi recebido e está em análise. O acesso será liberado automaticamente após a confirmação do pagamento.
               </p>
               <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-1">
                 <p><strong>Plano:</strong> {plano?.nome}</p>
                 <p><strong>Valor:</strong> R$ {Number(plano?.valor || 0).toFixed(2)}{sufixo}</p>
-                <p><strong>Status:</strong> <span className="text-warning font-medium">Pendente</span></p>
+                <p><strong>Status:</strong> <span className="text-warning font-medium">Em Análise</span></p>
               </div>
-              <Button onClick={() => navigate("/onboarding-modulos", { replace: true })}>
-                Continuar — Escolher Módulos
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/agenda", { replace: true })}>
-                Pular e acessar o sistema
+              <Button onClick={() => navigate("/aguardando-pagamento", { replace: true })} className="w-full">
+                Acompanhar Status do Pagamento
               </Button>
             </CardContent>
           </Card>

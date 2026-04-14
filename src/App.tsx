@@ -29,6 +29,7 @@ import ChecklistCentral from "@/pages/ChecklistCentral";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
+import AguardandoPagamento from "@/pages/AguardandoPagamento";
 
 import PainelMaster from "@/pages/master/PainelMaster";
 import Empresas from "@/pages/master/Empresas";
@@ -67,6 +68,7 @@ const App = () => (
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/escolher-plano" element={<ProtectedRoute skipPlanCheck><EscolherPlano /></ProtectedRoute>} />
                 <Route path="/pagamento-plano/:planoId" element={<ProtectedRoute skipPlanCheck><PagamentoPlano /></ProtectedRoute>} />
+                <Route path="/aguardando-pagamento" element={<ProtectedRoute skipPlanCheck><AguardandoPagamento /></ProtectedRoute>} />
                 <Route path="/onboarding-modulos" element={<ProtectedRoute skipPlanCheck><OnboardingModulos /></ProtectedRoute>} />
                 <Route path="/onboarding-resumo" element={<ProtectedRoute skipPlanCheck><OnboardingResumo /></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/agenda" replace />} />
