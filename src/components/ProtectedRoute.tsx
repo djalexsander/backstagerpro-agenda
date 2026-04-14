@@ -30,7 +30,7 @@ export function ProtectedRoute({ children, adminOnly = false, masterOnly = false
   // When empresa is blocked/inactive, allow only view access + /plano full access
   if (empresaBloqueada && !isMasterAdmin) {
     const isPlanoRoute = location.pathname === "/plano";
-    const isViewOnlyRoute = ["/agenda", "/dashboard", "/financeiro", "/documentos", "/funcionarios", "/backups", "/usuarios"].some(
+    const isViewOnlyRoute = ["/agenda", "/dashboard", "/financeiro", "/documentos", "/funcionarios", "/backups", "/usuarios", "/modulos"].some(
       r => location.pathname.startsWith(r)
     );
     const isEventView = location.pathname.startsWith("/evento/") && !location.pathname.includes("/editar") && !location.pathname.includes("/novo");
