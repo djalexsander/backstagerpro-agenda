@@ -380,6 +380,10 @@ export default function Planos() {
               <Switch checked={form.ativo} onCheckedChange={(v) => setForm(p => ({ ...p, ativo: v }))} />
               <Label>Ativo</Label>
             </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={form.disponivel_novo_cadastro} onCheckedChange={(v) => setForm(p => ({ ...p, disponivel_novo_cadastro: v }))} />
+              <Label>Disponível para novos cadastros</Label>
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.nome}>
