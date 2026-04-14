@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,22 +12,18 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CalendarIcon, FileText, Image, Loader2 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
-
-import { exportAgendaPDF, exportFinancialTotalPDF, type ExportFormat } from "@/lib/pdf-export";
-
-export type ReportType = "dashboard" | "financeiro" | "agenda";
-export type ExportMode = "periodo" | "mensal" | "evento";
-
-interface ExportFilters {
-  mode: ExportMode;
-  startDate?: Date;
-  endDate?: Date;
-  month?: number;
-  year?: number;
-  eventId?: string;
-}
+import { format, startOfMonth, parseISO } from "date-fns";
+import { toast } from "sonner";
+import type { ExportFormat } from "@/lib/pdf-export";
+import {
+  executeReportExport,
+  MONTHS,
+  MODES_BY_REPORT,
+  REPORT_TITLES,
+  type ExportFilters,
+  type ExportMode,
+  type ReportType,
+} from "@/lib/report-export-service";
 
 interface Props {
   open: boolean;
@@ -35,34 +31,6 @@ interface Props {
   reportType: ReportType;
   exportFormat: ExportFormat;
 }
-
-const REPORT_TITLES: Record<ReportType, string> = {
-  dashboard: "Relatório do Dashboard",
-  financeiro: "Relatório Financeiro",
-  agenda: "Relatório da Agenda",
-};
-
-const MODES_BY_REPORT: Record<ReportType, { value: ExportMode; label: string }[]> = {
-  dashboard: [
-    { value: "periodo", label: "Por período" },
-    { value: "mensal", label: "Mensal" },
-  ],
-  financeiro: [
-    { value: "periodo", label: "Por período" },
-    { value: "mensal", label: "Mensal" },
-    { value: "evento", label: "Evento específico" },
-  ],
-  agenda: [
-    { value: "periodo", label: "Por período" },
-    { value: "mensal", label: "Mensal" },
-    { value: "evento", label: "Evento específico" },
-  ],
-};
-
-const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 
 export function ReportExportModal({ open, onOpenChange, reportType, exportFormat }: Props) {
   const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
@@ -78,6 +46,22 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
   const currentYear = new Date().getFullYear();
   const years = useMemo(() => Array.from({ length: 5 }, (_, i) => currentYear - i), [currentYear]);
 
+  useEffect(() => {
+    const defaultMode = MODES_BY_REPORT[reportType][0]?.value ?? "periodo";
+
+    setFilters((prev) => {
+      if (MODES_BY_REPORT[reportType].some((mode) => mode.value === prev.mode)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        mode: defaultMode,
+        eventId: undefined,
+      };
+    });
+  }, [reportType]);
+
   // Load events for "evento específico" mode
   const { data: events = [] } = useQuery({
     queryKey: ["events-export-modal", empresaId],
@@ -88,7 +72,7 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
         .select("id, name, artist, date")
         .eq("empresa_id", empresaId)
         .order("date", { ascending: false })
-        .limit(100);
+        .limit(1000);
       if (error) throw error;
       return data;
     },
@@ -97,70 +81,27 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
 
   const availableModes = MODES_BY_REPORT[reportType];
 
-  const getDateRange = (): { start: string; end: string; title: string } => {
-    if (filters.mode === "mensal") {
-      const m = filters.month ?? 0;
-      const y = filters.year ?? currentYear;
-      const d = new Date(y, m, 1);
-      return {
-        start: format(startOfMonth(d), "yyyy-MM-dd"),
-        end: format(endOfMonth(d), "yyyy-MM-dd"),
-        title: `${MONTHS[m]} ${y}`,
-      };
-    }
-    return {
-      start: filters.startDate ? format(filters.startDate, "yyyy-MM-dd") : "",
-      end: filters.endDate ? format(filters.endDate, "yyyy-MM-dd") : "",
-      title: filters.startDate && filters.endDate
-        ? `${format(filters.startDate, "dd/MM/yyyy")} a ${format(filters.endDate, "dd/MM/yyyy")}`
-        : "Período personalizado",
-    };
-  };
-
   const handleConfirmExport = async () => {
+    if (!empresaId) {
+      toast.error("Não foi possível identificar a empresa para gerar o relatório.");
+      return;
+    }
+
     setExporting(true);
+
     try {
-      const branding = { empresaNome, empresaLogoUrl };
-      const { start, end, title } = getDateRange();
-
-      if (reportType === "agenda") {
-        let filtered = events;
-        if (filters.mode === "evento" && filters.eventId) {
-          filtered = events.filter(e => e.id === filters.eventId);
-        } else {
-          filtered = events.filter(e => {
-            const d = e.date;
-            return d >= start && d <= end;
-          });
-        }
-        await exportAgendaPDF(filtered as any, branding, exportFormat);
-      } else if (reportType === "financeiro") {
-        // Fetch financials with date range
-        let query = supabase
-          .from("financials")
-          .select("*, events!inner(name, artist, date, venue, city, status)")
-          .eq("empresa_id", empresaId!);
-
-        if (filters.mode === "evento" && filters.eventId) {
-          query = query.eq("event_id", filters.eventId);
-        } else {
-          query = query.gte("events.date", start).lte("events.date", end);
-        }
-
-        const { data: financials = [] } = await query;
-        await exportFinancialTotalPDF(financials as any, title, branding, exportFormat);
-      } else if (reportType === "dashboard") {
-        // For dashboard, export agenda-style with period filter as overview
-        const filtered = events.filter(e => {
-          const d = e.date;
-          return d >= start && d <= end;
-        });
-        await exportAgendaPDF(filtered as any, branding, exportFormat);
-      }
+      await executeReportExport({
+        empresaId,
+        reportType,
+        exportFormat,
+        filters,
+        branding: { empresaNome, empresaLogoUrl },
+      });
 
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Export error:", err);
+      toast.error(err instanceof Error ? err.message : "Não foi possível gerar o relatório.");
     } finally {
       setExporting(false);
     }
@@ -287,7 +228,7 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
           </Button>
           <Button onClick={handleConfirmExport} disabled={exporting}>
             {exporting ? (
-              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando...</>
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando {exportFormat.toUpperCase()}...</>
             ) : (
               <>Gerar {exportFormat.toUpperCase()}</>
             )}
