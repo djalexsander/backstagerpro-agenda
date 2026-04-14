@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     }
 
     // 1. Find or create Asaas customer
-    const customerName = empresa?.nome_empresa || "Cliente Backstage Pro";
+    const customerName = `[Backstage Pro] ${empresa?.nome_empresa || "Cliente"}`;
     const customerEmail = empresa?.email || user.email;
 
     const searchRes = await fetch(`${ASAAS_API_URL}/customers?email=${encodeURIComponent(customerEmail!)}`, {
