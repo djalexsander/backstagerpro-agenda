@@ -427,6 +427,127 @@ export default function FinanceiroMaster() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* ─── ABA ASAAS ─── */}
+        <TabsContent value="asaas" className="space-y-6 mt-4">
+          {/* KPIs Asaas */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-accent/20 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-accent" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{formatCurrency(asaasTotalConfirmed)}</p>
+                    <p className="text-sm text-muted-foreground">Confirmado</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                    <Clock className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{formatCurrency(asaasTotalPending)}</p>
+                    <p className="text-sm text-muted-foreground">Pendente</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                    <CreditCard className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{asaasPayments.length}</p>
+                    <p className="text-sm text-muted-foreground">Total de Cobranças</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tabela Asaas */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Cobranças Asaas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {asaasPayments.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-6">Nenhuma cobrança Asaas registrada.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left">
+                        <th className="pb-3 font-medium text-muted-foreground">Empresa</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Tipo</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Valor</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Status</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Método</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Criado em</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Confirmado em</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Vencimento</th>
+                        <th className="pb-3 font-medium text-muted-foreground text-center">Fatura</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {asaasPayments.map((p: any) => {
+                        const sc = asaasStatusConfig[p.status] || { label: p.status, variant: "outline" as const };
+                        return (
+                          <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                            <td className="py-3 font-medium">{p.empresas?.nome_empresa || "—"}</td>
+                            <td className="py-3">
+                              <Badge variant="outline" className="text-xs">{paymentTypeLabel(p.payment_type)}</Badge>
+                            </td>
+                            <td className="py-3 font-semibold">{formatCurrency(Number(p.amount || 0))}</td>
+                            <td className="py-3">
+                              <Badge variant={sc.variant}>{sc.label}</Badge>
+                            </td>
+                            <td className="py-3 capitalize text-muted-foreground">{p.payment_method || "pix"}</td>
+                            <td className="py-3 text-muted-foreground">
+                              {format(new Date(p.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                            </td>
+                            <td className="py-3 text-muted-foreground">
+                              {p.payment_confirmed_at
+                                ? format(new Date(p.payment_confirmed_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                                : "—"}
+                            </td>
+                            <td className="py-3 text-muted-foreground">
+                              {p.due_date
+                                ? format(new Date(p.due_date), "dd/MM/yyyy", { locale: ptBR })
+                                : "—"}
+                            </td>
+                            <td className="py-3 text-center">
+                              {p.invoice_url ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                                  <a href={p.invoice_url} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
