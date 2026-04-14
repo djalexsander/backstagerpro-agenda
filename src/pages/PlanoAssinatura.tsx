@@ -54,6 +54,31 @@ export default function PlanoAssinatura() {
   const [generatingModuleCharge, setGeneratingModuleCharge] = useState(false);
   const [showModulePix, setShowModulePix] = useState(false);
 
+  // Fetch pending Asaas payments for this empresa
+  const { data: pendingAsaasPayments = [], refetch: refetchPending } = useQuery({
+    queryKey: ["asaas-pending-payments", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("asaas_payments")
+        .select("*")
+        .eq("empresa_id", empresaId)
+        .eq("source_app", "backstage_pro")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+    refetchInterval: 15000, // Poll every 15s to check if payment was confirmed via webhook
+  });
+
+  const pendingPlanPayment = pendingAsaasPayments.find(p => p.payment_type === "base_plan");
+  const pendingModulePayment = pendingAsaasPayments.find(p => p.payment_type === "modules");
+
+  // When a pending payment disappears (confirmed via webhook), refresh everything
+  const prevPendingCount = useMemo(() => pendingAsaasPayments.length, [pendingAsaasPayments]);
+
   // Fetch empresa
   const { data: empresa } = useQuery({
     queryKey: ["empresa-plano", empresaId],
