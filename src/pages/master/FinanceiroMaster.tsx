@@ -32,6 +32,7 @@ function getYearOptions() {
 export default function FinanceiroMaster() {
   const [filterMonth, setFilterMonth] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>(String(new Date().getFullYear()));
+  const [activeTab, setActiveTab] = useState("manual");
 
   const { data: pagamentos = [] } = useQuery({
     queryKey: ["master-pagamentos"],
@@ -51,6 +52,20 @@ export default function FinanceiroMaster() {
       const { data, error } = await supabase
         .from("empresas")
         .select("id, nome_empresa, plano, status, created_at");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Asaas payments
+  const { data: asaasPayments = [] } = useQuery({
+    queryKey: ["master-asaas-payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("asaas_payments")
+        .select("*, empresas(nome_empresa)")
+        .eq("source_app", "backstage_pro")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
