@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon, Upload, X, ImageIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon, Upload, X, ImageIcon, Sparkles, AlertTriangle, Layers } from "lucide-react";
 import { EmpresaModulesManager } from "@/components/master/EmpresaModulesManager";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,6 +47,46 @@ export default function Empresas() {
       return data;
     },
   });
+
+  // Module counts per empresa
+  const { data: moduleCounts = {} } = useQuery({
+    queryKey: ["master-empresas-module-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("empresa_modules")
+        .select("empresa_id, status");
+      if (error) throw error;
+      const counts: Record<string, { active: number; pending: number; total: number }> = {};
+      (data || []).forEach((m: any) => {
+        if (!counts[m.empresa_id]) counts[m.empresa_id] = { active: 0, pending: 0, total: 0 };
+        counts[m.empresa_id].total++;
+        if (m.status === "active") counts[m.empresa_id].active++;
+        if (m.status === "pending") counts[m.empresa_id].pending++;
+      });
+      return counts;
+    },
+  });
+
+  // All planos (including inactive) for legacy detection
+  const { data: allPlanos = [] } = useQuery({
+    queryKey: ["master-all-planos"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("planos").select("id, nome, disponivel_novo_cadastro, periodicidade, valor");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const classifyEmpresaModel = (empresa: any): "novo" | "legado" | "onboarding" => {
+    if (empresa.precisa_escolher_plano) return "onboarding";
+    if (!empresa.plano_id) {
+      // Trial or no plan = new model
+      return empresa.trial_expires_at ? "novo" : "novo";
+    }
+    const plano = allPlanos.find((p: any) => p.id === empresa.plano_id);
+    if (!plano) return "novo";
+    return plano.disponivel_novo_cadastro === false ? "legado" : "novo";
+  };
 
   const { data: detailPagamentos = [] } = useQuery({
     queryKey: ["empresa-pagamentos", detailEmpresa?.id],
@@ -476,11 +516,24 @@ export default function Empresas() {
       <Dialog open={!!detailEmpresa} onOpenChange={(o) => !o && setDetailEmpresa(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl">{detailEmpresa?.nome_empresa}</DialogTitle>
+            <div className="flex items-center gap-3">
+              <DialogTitle className="text-xl">{detailEmpresa?.nome_empresa}</DialogTitle>
+              {detailEmpresa && (() => {
+                const modelo = classifyEmpresaModel(detailEmpresa);
+                return modelo === "novo" ? (
+                  <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs"><Sparkles className="h-3 w-3 mr-0.5" /> Modelo Novo</Badge>
+                ) : modelo === "onboarding" ? (
+                  <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30 text-xs">Onboarding</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground text-xs"><AlertTriangle className="h-3 w-3 mr-0.5" /> Modelo Legado</Badge>
+                );
+              })()}
+            </div>
           </DialogHeader>
           {detailEmpresa && (() => {
             const planoInfo = getPlanoInfo(detailEmpresa);
             const vencido = isVencimentoExpired(detailEmpresa);
+            const mods = moduleCounts[detailEmpresa.id];
             return (
               <div className="space-y-6">
                 {/* Info da empresa */}
@@ -491,8 +544,18 @@ export default function Empresas() {
                     <Badge className={detailEmpresa.status === "ativo" ? "bg-accent text-accent-foreground" : "bg-destructive text-destructive-foreground"}>
                       {detailEmpresa.plano_bloqueado ? "Bloqueado" : detailEmpresa.status}
                     </Badge>
+                    {detailEmpresa.status_pagamento === "pendente" && (
+                      <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30 ml-1 text-[10px]">Pgto Pendente</Badge>
+                    )}
                   </div>
                   <div><span className="text-muted-foreground">Criado em:</span> <span className="font-medium">{format(new Date(detailEmpresa.created_at), "dd/MM/yyyy", { locale: ptBR })}</span></div>
+                  {mods && mods.total > 0 && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Módulos:</span>{" "}
+                      <span className="font-medium">{mods.active} ativo{mods.active !== 1 ? "s" : ""}</span>
+                      {mods.pending > 0 && <span className="text-amber-600 ml-1">• {mods.pending} pendente{mods.pending !== 1 ? "s" : ""}</span>}
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
@@ -654,7 +717,9 @@ export default function Empresas() {
             <TableRow>
               <TableHead>Empresa</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Modelo</TableHead>
               <TableHead>Plano</TableHead>
+              <TableHead>Módulos</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -662,16 +727,57 @@ export default function Empresas() {
           </TableHeader>
           <TableBody>
             {empresas.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma empresa cadastrada.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhuma empresa cadastrada.</TableCell></TableRow>
             ) : (
               empresas.map((e: any) => {
                 const vencido = isVencimentoExpired(e);
                 const blocked = e.plano_bloqueado;
+                const modelo = classifyEmpresaModel(e);
+                const mods = moduleCounts[e.id];
                 return (
                   <TableRow key={e.id} className={`${blocked ? "opacity-60" : ""} cursor-pointer hover:bg-muted/50`} onClick={() => setDetailEmpresa(e)}>
                     <TableCell className="font-medium">{e.nome_empresa}</TableCell>
-                    <TableCell>{e.email || "—"}</TableCell>
-                    <TableCell><Badge variant="secondary" className="capitalize">{e.plano}</Badge></TableCell>
+                    <TableCell className="text-sm">{e.email || "—"}</TableCell>
+                    <TableCell>
+                      {modelo === "novo" && (
+                        <Badge className="bg-primary/15 text-primary border border-primary/30 text-[10px]">
+                          <Sparkles className="h-3 w-3 mr-0.5" /> Novo
+                        </Badge>
+                      )}
+                      {modelo === "onboarding" && (
+                        <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30 text-[10px]">
+                          Onboarding
+                        </Badge>
+                      )}
+                      {modelo === "legado" && (
+                        <Badge variant="outline" className="text-muted-foreground text-[10px]">
+                          <AlertTriangle className="h-3 w-3 mr-0.5" /> Legado
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <Badge variant="secondary" className="capitalize text-xs w-fit">{e.plano || "—"}</Badge>
+                        {e.trial_expires_at && (
+                          <span className={`text-[10px] ${new Date(e.trial_expires_at) < new Date() ? "text-destructive" : "text-primary"}`}>
+                            Trial {new Date(e.trial_expires_at) < new Date() ? "expirado" : "ativo"}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {mods ? (
+                        <div className="flex items-center gap-1">
+                          <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs font-medium">{mods.total}</span>
+                          {mods.pending > 0 && (
+                            <Badge className="bg-amber-500/15 text-amber-700 text-[10px] px-1 py-0">{mods.pending} pend.</Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {(() => {
                         const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
@@ -688,6 +794,8 @@ export default function Empresas() {
                     <TableCell>
                       {blocked ? (
                         <Badge className="bg-destructive text-destructive-foreground">Bloqueado</Badge>
+                      ) : e.status_pagamento === "pendente" ? (
+                        <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30">Pgto Pendente</Badge>
                       ) : (
                         <Badge className={e.status === "ativo" ? "bg-accent text-accent-foreground" : "bg-destructive text-destructive-foreground"}>
                           {e.status}
