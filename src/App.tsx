@@ -24,6 +24,8 @@ import Backups from "@/pages/Backups";
 import Documentos from "@/pages/Documentos";
 import Funcionarios from "@/pages/Funcionarios";
 import Relatorios from "@/pages/Relatorios";
+import PainelOperacional from "@/pages/PainelOperacional";
+import ChecklistCentral from "@/pages/ChecklistCentral";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -81,6 +83,8 @@ const App = () => (
                   <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
                   <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
                   <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />
+                  <Route path="/painel-operacional" element={<ProtectedRoute adminOnly><PainelOperacional /></ProtectedRoute>} />
+                  <Route path="/checklist" element={<ProtectedRoute adminOnly><ChecklistCentral /></ProtectedRoute>} />
                   <Route path="/modulos" element={<Navigate to="/plano" replace />} />
                   
                   {/* Master Admin Routes */}

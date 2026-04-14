@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -33,6 +33,8 @@ export function AppSidebar() {
     { title: "Documentos", url: "/documentos", icon: FileText },
     { title: "Funcionários", url: "/funcionarios", icon: HardHat },
     { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+    { title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard },
+    { title: "Checklist", url: "/checklist", icon: ClipboardList },
     { title: "Backups", url: "/backups", icon: Database },
   ] : [
     ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
@@ -40,6 +42,8 @@ export function AppSidebar() {
     ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
     ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
     ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Relatórios", url: "/relatorios", icon: BarChart3 }] : []),
+    ...(hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) ? [{ title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard }] : []),
+    ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) ? [{ title: "Checklist", url: "/checklist", icon: ClipboardList }] : []),
     ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
   ];
 
