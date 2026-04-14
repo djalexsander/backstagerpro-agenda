@@ -108,100 +108,29 @@ export async function smartSavePNG(
   nameOpts: SmartPDFNameOptions | string
 ): Promise<void> {
   try {
-    // Generate PDF as blob, then render each page via an offscreen iframe
-    const pdfBlob = doc.output("blob");
-    const pdfUrl = URL.createObjectURL(pdfBlob);
-    const pageCount = doc.getNumberOfPages();
+    // Convert jsPDF doc to ArrayBuffer, then use pdf.js to render each page
+    const pdfArrayBuffer = doc.output("arraybuffer");
+    const pdfDoc = await pdfjsLib.getDocument({ data: pdfArrayBuffer }).promise;
+    const totalPages = pdfDoc.numPages;
+    const scale = 2; // 2x for high quality
 
-    // Use jsPDF's internal canvas rendering per page
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-
-      const scale = 2;
-      const pxW = Math.round(pageWidth * scale * (96 / 72));
-      const pxH = Math.round(pageHeight * scale * (96 / 72));
+    for (let i = 1; i <= totalPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const viewport = page.getViewport({ scale });
 
       const canvas = document.createElement("canvas");
-      canvas.width = pxW;
-      canvas.height = pxH;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas context not available");
 
-      // Get the page as a data URL image via jsPDF's internal rendering
-      // jsPDF can output the whole document; we render it to a temporary canvas
-      const pdfDataUri = doc.output("dataurlstring");
+      // White background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Since browsers cannot render PDF data URIs in <img>, we use a different
-      // approach: render each page by creating an SVG foreignObject wrapper
-      // that embeds the PDF, or simply use the canvas output from jsPDF directly.
-      
-      // Fallback: Use jsPDF's canvas plugin if available, otherwise
-      // convert via a temporary image by re-rendering the page content.
-      // The most reliable cross-browser method is to use the page's raw content.
-      
-      // Create a high-res image from the PDF using an object URL approach
-      await new Promise<void>((resolve, reject) => {
-        const iframe = document.createElement("iframe");
-        iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:" + pxW + "px;height:" + pxH + "px;border:none;opacity:0;pointer-events:none;";
-        iframe.src = pdfUrl + "#page=" + i;
-        document.body.appendChild(iframe);
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
-        // Give the iframe time to render the PDF page
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error("PDF render timeout"));
-        }, 10000);
-
-        const cleanup = () => {
-          clearTimeout(timeout);
-          try { document.body.removeChild(iframe); } catch {}
-        };
-
-        iframe.onload = () => {
-          // Wait a bit for the PDF to fully render inside the iframe
-          setTimeout(() => {
-            try {
-              // Draw white background
-              ctx.fillStyle = "#ffffff";
-              ctx.fillRect(0, 0, pxW, pxH);
-
-              // Try to capture iframe content
-              // Since cross-origin restrictions may apply to PDF rendering,
-              // we use a simpler approach: re-generate as individual page images
-              // using jsPDF's SVG output
-              const svgString = doc.output("dataurlstring", { 
-                type: "image/jpeg",
-                quality: 0.98
-              });
-              
-              const img = new Image();
-              img.onload = () => {
-                ctx.drawImage(img, 0, 0, pxW, pxH);
-                cleanup();
-                resolve();
-              };
-              img.onerror = () => {
-                // Final fallback: just save the PDF page data as-is
-                cleanup();
-                resolve();
-              };
-              img.src = svgString;
-            } catch {
-              cleanup();
-              resolve();
-            }
-          }, 1000);
-        };
-
-        iframe.onerror = () => {
-          cleanup();
-          reject(new Error("Failed to load PDF in iframe"));
-        };
-      });
-
-      const suffix = pageCount > 1 ? `-pagina-${i}` : "";
+      const suffix = totalPages > 1 ? `-pagina-${i}` : "";
       const baseName = typeof nameOpts === "string"
         ? nameOpts.replace(/\.pdf$/i, "")
         : buildPDFFileName(nameOpts, "").replace(/\.$/, "");
@@ -234,8 +163,7 @@ export async function smartSavePNG(
       });
     }
 
-    URL.revokeObjectURL(pdfUrl);
-    toast.success(pageCount > 1 ? `${pageCount} imagens PNG geradas!` : "PNG gerado com sucesso!");
+    toast.success(totalPages > 1 ? `${totalPages} imagens PNG geradas!` : "PNG gerado com sucesso!");
   } catch (err) {
     console.error("PNG export failed:", err);
     toast.error("Erro ao gerar PNG. Tente novamente.");
