@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft, Users } from "lucide-react";
+import { Calendar, Clock, MapPin, Music, FileText, Download, Trash2, Edit, Truck, Upload, Replace, ArrowLeft, Users, ImageIcon } from "lucide-react";
 import { useRef, useCallback, useState } from "react";
 import {
   AlertDialog,
@@ -255,7 +255,10 @@ export default function EventDetail() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })))}>
-            <FileText className="h-4 w-4 mr-1" /> Exportar PDF
+            <FileText className="h-4 w-4 mr-1" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })), "png")}>
+            <ImageIcon className="h-4 w-4 mr-1" /> PNG
           </Button>
           {isAdmin && (
             <>
