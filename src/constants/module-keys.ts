@@ -27,7 +27,7 @@ export const MODULE_KEYS = {
   DOCUMENTOS_AVANCADOS: "documentos_avancados",
   /** Painel operacional */
   PAINEL_OPERACIONAL: "painel_operacional",
-  /** Exportações especiais (DOCX, Excel, relatórios PDF customizados) */
+  /** @deprecated Descontinuado — funcionalidade incorporada ao módulo RELATORIOS */
   EXPORTACOES_ESPECIAIS: "exportacoes_especiais",
   /** Notificações premium */
   NOTIFICACOES_PREMIUM: "notificacoes_premium",
