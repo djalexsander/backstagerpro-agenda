@@ -109,7 +109,7 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, f
   }
 }
 
-export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[]) {
+export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[], fmt: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -176,10 +176,15 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     });
   }
 
-  await smartSavePDF(doc, { tipo: "evento", evento: event.name, cidade: event.city, data: event.date });
+  const nameOpts: SmartPDFNameOptions = { tipo: "evento", evento: event.name, cidade: event.city, data: event.date };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }
 
-export async function exportFinancialPDF(financial: any, branding?: PdfBranding) {
+export async function exportFinancialPDF(financial: any, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const eventName = financial.events?.name || "Evento";
@@ -273,10 +278,15 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding)
     },
   });
 
-  await smartSavePDF(doc, { tipo: "financeiro", evento: eventName });
+  const nameOpts: SmartPDFNameOptions = { tipo: "financeiro", evento: eventName };
+  if (fmt === "png") {
+    await smartSavePNG(doc, nameOpts);
+  } else {
+    await smartSavePDF(doc, nameOpts);
+  }
 }
 
-export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding) {
+export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
   const doc = new jsPDF("landscape");
   const b = branding || {};
   const subtitle = periodTitle ? `Período: ${periodTitle}` : "Consolidado";
