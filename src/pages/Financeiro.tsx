@@ -16,6 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { exportFinancialPDF, exportFinancialTotalPDF } from "@/lib/pdf-export";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
 import { FinanceCards } from "@/components/financeiro/FinanceCards";
+import { useModuleAccess } from "@/components/ModuleGate";
+import { MODULE_KEYS } from "@/constants/module-keys";
 
 const fieldLabels: Record<string, string> = {
   cache: "Cachê",

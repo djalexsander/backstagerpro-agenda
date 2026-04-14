@@ -183,12 +183,16 @@ export default function EventDetail() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })))}>
-            <FileText className="h-4 w-4 mr-1" /> PDF
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })), "png")}>
-            <ImageIcon className="h-4 w-4 mr-1" /> PNG
-          </Button>
+          {useModuleAccess(MODULE_KEYS.RELATORIOS).canAccess && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })))}>
+                <FileText className="h-4 w-4 mr-1" /> PDF
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportEventPDF(event, eventDays, { empresaNome, empresaLogoUrl }, teamMembers.map((tm: any) => ({ nome: tm.funcionarios?.nome || "", funcao: tm.funcionarios?.funcao || "" })), "png")}>
+                <ImageIcon className="h-4 w-4 mr-1" /> PNG
+              </Button>
+            </>
+          )}
           {isAdmin && (
             <>
               <Button variant="outline" size="sm" onClick={() => navigate(`/evento/${id}/editar`)}>
