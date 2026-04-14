@@ -48,6 +48,46 @@ export default function Empresas() {
     },
   });
 
+  // Module counts per empresa
+  const { data: moduleCounts = {} } = useQuery({
+    queryKey: ["master-empresas-module-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("empresa_modules")
+        .select("empresa_id, status");
+      if (error) throw error;
+      const counts: Record<string, { active: number; pending: number; total: number }> = {};
+      (data || []).forEach((m: any) => {
+        if (!counts[m.empresa_id]) counts[m.empresa_id] = { active: 0, pending: 0, total: 0 };
+        counts[m.empresa_id].total++;
+        if (m.status === "active") counts[m.empresa_id].active++;
+        if (m.status === "pending") counts[m.empresa_id].pending++;
+      });
+      return counts;
+    },
+  });
+
+  // All planos (including inactive) for legacy detection
+  const { data: allPlanos = [] } = useQuery({
+    queryKey: ["master-all-planos"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("planos").select("id, nome, disponivel_novo_cadastro, periodicidade, valor");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const classifyEmpresaModel = (empresa: any): "novo" | "legado" | "onboarding" => {
+    if (empresa.precisa_escolher_plano) return "onboarding";
+    if (!empresa.plano_id) {
+      // Trial or no plan = new model
+      return empresa.trial_expires_at ? "novo" : "novo";
+    }
+    const plano = allPlanos.find((p: any) => p.id === empresa.plano_id);
+    if (!plano) return "novo";
+    return plano.disponivel_novo_cadastro === false ? "legado" : "novo";
+  };
+
   const { data: detailPagamentos = [] } = useQuery({
     queryKey: ["empresa-pagamentos", detailEmpresa?.id],
     queryFn: async () => {
