@@ -168,22 +168,38 @@ export default function PlanoAssinatura() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pagamentos"] }),
   });
 
-  // Module request mutation
-  const sendModuleRequest = useMutation({
+  // Batch module request mutation
+  const batchModuleMutation = useMutation({
     mutationFn: async () => {
-      if (!empresaId || !requestModule) throw new Error("Dados insuficientes");
-      const { error } = await supabase.from("module_requests").insert({
+      if (!empresaId || selectedModuleIds.size === 0) throw new Error("Selecione ao menos um módulo");
+      const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
+      const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
+
+      const { data: batch, error: batchError } = await supabase
+        .from("module_batch_requests")
+        .insert({ empresa_id: empresaId, valor_total: total, observacao: batchObservacao || null })
+        .select("id")
+        .single();
+      if (batchError) throw batchError;
+
+      const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
+      const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
+      if (itemsError) throw itemsError;
+
+      const moduleNames = selectedMods.map(m => m.nome).join(", ");
+      await supabase.from("notificacoes_master").insert({
         empresa_id: empresaId,
-        module_id: requestModule.id,
-        observacao: observacao || null,
+        tipo: "solicitacao_modulos_lote",
+        mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
+        dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["module-requests"] });
-      toast.success("Solicitação de módulo enviada!");
-      setRequestModule(null);
-      setObservacao("");
+      queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
+      toast.success("Solicitação de módulos enviada! Aguarde aprovação.");
+      setSelectedModuleIds(new Set());
+      setBatchObservacao("");
+      setShowBatchSummary(false);
     },
     onError: (err: any) => toast.error(err.message),
   });
