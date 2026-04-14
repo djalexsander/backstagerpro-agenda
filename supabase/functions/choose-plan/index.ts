@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
           plano_bloqueado: true,
           status_pagamento: "pendente",
           plano: plano?.nome || null,
+          plano_id: plano_id,
         })
         .eq("id", profile.empresa_id);
 
