@@ -12,6 +12,7 @@ import { useModuleAccess } from "@/components/ModuleGate";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { EventChecklistTab } from "@/components/evento/EventChecklistTab";
 import { EventOperationalPanel } from "@/components/evento/EventOperationalPanel";
+import { EventDetailContent } from "@/components/evento/EventDetailContent";
 import {
   AlertDialog,
   AlertDialogAction,
