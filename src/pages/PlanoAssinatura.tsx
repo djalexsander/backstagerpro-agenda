@@ -1,7 +1,9 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscriptionSummary } from "@/hooks/useSubscriptionSummary";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,73 +11,50 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package, Users, Calendar, HardDrive, Upload, FileCheck, Download } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package,
+  Users, Calendar, HardDrive, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { generatePixPayload } from "@/lib/pix";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import type { ModuleCatalogRow } from "@/types/subscription";
 
 export default function PlanoAssinatura() {
   const { empresaId } = useAuth();
   const queryClient = useQueryClient();
+  const sub = useSubscriptionSummary();
+  const { catalog, activeModules, allModules } = useCompanyModules();
+
   const [showPix, setShowPix] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
+  const [requestModule, setRequestModule] = useState<ModuleCatalogRow | null>(null);
+  const [observacao, setObservacao] = useState("");
 
-  // Fetch empresa with plano details
+  // Fetch empresa
   const { data: empresa } = useQuery({
     queryKey: ["empresa-plano", empresaId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("empresas")
-        .select("*")
-        .eq("id", empresaId!)
-        .single();
+      const { data, error } = await supabase.from("empresas").select("*").eq("id", empresaId!).single();
       if (error) throw error;
       return data;
     },
     enabled: !!empresaId,
   });
 
-  // Fetch current plan details (by plano_id or by plano name fallback)
-  const { data: planoAtual } = useQuery({
-    queryKey: ["plano-atual", empresa?.plano_id, empresa?.plano],
-    queryFn: async () => {
-      if (empresa?.plano_id) {
-        const { data, error } = await supabase
-          .from("planos")
-          .select("*")
-          .eq("id", empresa.plano_id)
-          .single();
-        if (!error && data) return data;
-      }
-      // Fallback: match by plan name
-      if (empresa?.plano) {
-        const { data, error } = await supabase
-          .from("planos")
-          .select("*")
-          .ilike("nome", empresa.plano)
-          .single();
-        if (!error && data) return data;
-      }
-      return null;
-    },
-    enabled: !!empresa,
-  });
-
   // Fetch all active plans
   const { data: planos } = useQuery({
     queryKey: ["planos-ativos"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("planos")
-        .select("*")
-        .eq("ativo", true)
-        .order("valor", { ascending: true });
+      const { data, error } = await supabase.from("planos").select("*").eq("ativo", true).order("valor", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -85,10 +64,7 @@ export default function PlanoAssinatura() {
   const { data: pixSettings } = useQuery({
     queryKey: ["pix-settings"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("key, value")
-        .in("key", ["pix_chave", "pix_nome_recebedor", "pix_cidade", "pix_banco"]);
+      const { data, error } = await supabase.from("system_settings").select("key, value").in("key", ["pix_chave", "pix_nome_recebedor", "pix_cidade", "pix_banco"]);
       if (error) throw error;
       const map: Record<string, string | null> = {};
       data.forEach((r: any) => { map[r.key] = r.value; });
@@ -100,11 +76,31 @@ export default function PlanoAssinatura() {
   const { data: pagamentos } = useQuery({
     queryKey: ["pagamentos", empresaId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pagamentos")
-        .select("*")
-        .eq("empresa_id", empresaId!)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("pagamentos").select("*").eq("empresa_id", empresaId!).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  // Fetch module requests
+  const { data: moduleRequests = [] } = useQuery({
+    queryKey: ["module-requests", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("module_requests").select("*, module_catalog(*)").eq("empresa_id", empresaId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  // Fetch module payments
+  const { data: modulePayments = [] } = useQuery({
+    queryKey: ["module-payments", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("module_payments").select("*, module_catalog(*)").eq("empresa_id", empresaId).order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -115,8 +111,6 @@ export default function PlanoAssinatura() {
   const upgradeMutation = useMutation({
     mutationFn: async (planoId: string) => {
       const selectedPlano = planos?.find((p) => p.id === planoId);
-
-      // Notify master admin (don't update plan yet — master must accept)
       await supabase.from("notificacoes_master").insert({
         empresa_id: empresaId!,
         tipo: "upgrade_plano",
@@ -126,7 +120,6 @@ export default function PlanoAssinatura() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["empresa-plano"] });
-      queryClient.invalidateQueries({ queryKey: ["plano-atual"] });
       setShowUpgrade(false);
       setShowConfirm(false);
       setSelectedPlanoId(null);
@@ -135,122 +128,139 @@ export default function PlanoAssinatura() {
     onError: () => toast.error("Erro ao solicitar upgrade."),
   });
 
-  // Register payment mutation
+  // Register payment
   const paymentMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("pagamentos").insert({
         empresa_id: empresaId!,
         plano_id: empresa?.plano_id,
-        valor: planoAtual?.valor || 0,
+        valor: sub.planoBase?.valor || 0,
         status: "pendente",
         metodo: "pix",
         descricao: `Assinatura Backstage Pro - ${empresa?.nome_empresa}`,
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pagamentos"] }),
+  });
+
+  // Module request mutation
+  const sendModuleRequest = useMutation({
+    mutationFn: async () => {
+      if (!empresaId || !requestModule) throw new Error("Dados insuficientes");
+      const { error } = await supabase.from("module_requests").insert({
+        empresa_id: empresaId,
+        module_id: requestModule.id,
+        observacao: observacao || null,
+      });
+      if (error) throw error;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["module-requests"] });
+      toast.success("Solicitação de módulo enviada!");
+      setRequestModule(null);
+      setObservacao("");
+    },
+    onError: (err: any) => toast.error(err.message),
   });
 
   const handlePagar = () => {
-    if (!pixSettings?.pix_chave) {
-      toast.error("Chave PIX não configurada. Contate o administrador.");
-      return;
-    }
-    if (!planoAtual) {
-      toast.error("Nenhum plano associado.");
-      return;
-    }
-
+    if (!pixSettings?.pix_chave) { toast.error("Chave PIX não configurada."); return; }
+    if (!sub.planoBase) { toast.error("Nenhum plano associado."); return; }
     const payload = generatePixPayload({
       chave: pixSettings.pix_chave,
       nomeRecebedor: pixSettings.pix_nome_recebedor || "Backstage Pro",
       cidade: pixSettings.pix_cidade || "Maringa",
-      valor: Number(planoAtual.valor),
+      valor: Number(sub.planoBase.valor),
       descricao: `Assinatura - ${empresa?.nome_empresa?.substring(0, 15)}`,
     });
-
     setPixPayload(payload);
     setShowPix(true);
     paymentMutation.mutate();
   };
 
-  const copyPix = () => {
-    navigator.clipboard.writeText(pixPayload);
-    toast.success("Código PIX copiado!");
-  };
+  const copyPix = () => { navigator.clipboard.writeText(pixPayload); toast.success("Código PIX copiado!"); };
 
-  const statusColor = (s: string) => {
-    if (s === "pago") return "default";
-    if (s === "pendente") return "secondary";
-    return "destructive";
-  };
+  const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
+
+  // Available modules (not already active or pending request)
+  const pendingRequestIds = new Set(moduleRequests.filter((r: any) => r.status === "pending").map((r: any) => r.module_id));
+  const activeModuleIds = new Set(allModules.filter(m => m.status !== "cancelled" && m.status !== "rejected").map(m => m.module_id));
+  const availableModules = catalog.filter(c => !activeModuleIds.has(c.id) && !pendingRequestIds.has(c.id));
+
+  if (sub.isLoading) return <div className="p-8 text-center text-muted-foreground">Carregando...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Plano & Assinatura</h1>
 
-      {/* Current Plan Card */}
-      <Card>
-        <CardHeader>
+      {/* ─── PLANO BASE ─── */}
+      <Card className="border-primary/20 shadow-sm">
+        <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <Package className="h-5 w-5 text-primary" />
-            Plano Atual
+            <Shield className="h-5 w-5 text-primary" />
+            Plano Base
           </CardTitle>
+          {sub.isOnTrial && (
+            <Badge variant="secondary" className="w-fit">
+              <Clock className="h-3 w-3 mr-1" /> Período de Teste
+            </Badge>
+          )}
+          {sub.isExpired && <Badge variant="destructive" className="w-fit">Expirado</Badge>}
         </CardHeader>
         <CardContent>
-          {planoAtual ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="flex items-center gap-3">
-                <CreditCard className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Plano</p>
-                  <p className="font-semibold">{planoAtual.nome}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <CreditCard className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    {(planoAtual as any).periodicidade === "vitalicio" ? "Valor Único" : (planoAtual as any).periodicidade === "anual" ? "Valor Anual" : "Valor Mensal"}
-                  </p>
-                  <p className="font-semibold">
-                    R${Number(planoAtual.valor).toFixed(2)}
-                    {(planoAtual as any).periodicidade === "vitalicio" ? "" : (planoAtual as any).periodicidade === "anual" ? "/ano" : "/mês"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Calendar className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Eventos Permitidos</p>
-                  <p className="font-semibold">{planoAtual.max_eventos ?? "Ilimitado"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Users className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Usuários Permitidos</p>
-                  <p className="font-semibold">{planoAtual.max_usuarios ?? "Ilimitado"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <HardDrive className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Armazenamento</p>
-                  <p className="font-semibold">{(planoAtual as any).storage_limit ?? 5}GB</p>
-                </div>
-              </div>
-              {empresa?.vencimento && (
+          {sub.planoBase ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-muted-foreground" />
+                  <CreditCard className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Próximo Vencimento</p>
-                    <p className="font-semibold">{format(new Date(empresa.vencimento), "dd/MM/yyyy")}</p>
+                    <p className="text-xs text-muted-foreground">Plano</p>
+                    <p className="font-semibold text-lg">{sub.planoBase.nome}</p>
                   </div>
                 </div>
-              )}
+                <div className="flex items-center gap-3">
+                  <CreditCard className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      {sub.planoBase.periodicidade === "vitalicio" ? "Valor Único" : sub.planoBase.periodicidade === "anual" ? "Valor Anual" : "Valor Mensal"}
+                    </p>
+                    <p className="font-semibold text-lg">
+                      R$ {Number(sub.planoBase.valor).toFixed(2)}
+                      {sub.planoBase.periodicidade !== "vitalicio" && <span className="text-sm font-normal text-muted-foreground">/{sub.planoBase.periodicidade === "anual" ? "ano" : "mês"}</span>}
+                    </p>
+                  </div>
+                </div>
+                {sub.vencimento && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Vencimento</p>
+                      <p className="font-semibold">{format(new Date(sub.vencimento), "dd/MM/yyyy")}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {sub.planoBase.descricao && <p className="text-sm text-muted-foreground">{sub.planoBase.descricao}</p>}
+
+              {/* Limits */}
+              <div className="flex flex-wrap gap-4 pt-2">
+                <div className="flex items-center gap-1.5 text-sm">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Eventos:</span>
+                  <span className="font-medium">{sub.capabilities.maxEventos ?? "∞"}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Usuários:</span>
+                  <span className="font-medium">{sub.capabilities.maxUsuarios ?? "∞"}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <HardDrive className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Storage:</span>
+                  <span className="font-medium">{sub.capabilities.storageLimitGb ?? "∞"} GB</span>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="text-muted-foreground">Nenhum plano associado. Selecione um plano abaixo.</p>
@@ -258,60 +268,266 @@ export default function PlanoAssinatura() {
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
+      {/* ─── ACTION BUTTONS ─── */}
       <div className="flex flex-wrap gap-3">
-        <Button onClick={handlePagar} disabled={!planoAtual}>
-          <QrCode className="h-4 w-4 mr-2" />
-          Pagar Mensalidade
+        <Button onClick={handlePagar} disabled={!sub.planoBase}>
+          <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade
         </Button>
         <Button variant="outline" onClick={() => setShowUpgrade(true)}>
-          <ArrowUpCircle className="h-4 w-4 mr-2" />
-          Fazer Upgrade de Plano
-        </Button>
-        <Button variant="outline" onClick={() => setShowHistory(true)}>
-          <History className="h-4 w-4 mr-2" />
-          Histórico de Pagamentos
+          <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
         </Button>
       </div>
 
-      {/* PIX Payment Dialog */}
+      {/* ─── MÓDULOS ATIVOS ─── */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" /> Módulos Ativos
+        </h2>
+        {activeModules.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-muted-foreground">
+              Nenhum módulo ativo no momento. Explore os módulos disponíveis abaixo.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {activeModules.map((mod) => (
+              <Card key={mod.id} className="border-accent/30">
+                <CardContent className="pt-4 pb-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4 text-accent" />
+                      {mod.catalog?.nome || "Módulo"}
+                    </p>
+                    {mod.granted_by_admin && Number(mod.valor_cobrado) === 0 && (
+                      <Badge variant="outline" className="text-xs gap-1"><Gift className="h-3 w-3" /> Cortesia</Badge>
+                    )}
+                    {mod.granted_by_admin && Number(mod.valor_cobrado) > 0 && (
+                      <Badge variant="outline" className="text-xs">Admin</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    R$ {Number(mod.valor_cobrado).toFixed(2)}/{mod.catalog?.periodicidade || "mês"}
+                  </p>
+                  {mod.catalog?.is_capacity_module && (
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {(mod.catalog.capacidade_extra_usuarios ?? 0) > 0 && <p>+{mod.catalog.capacidade_extra_usuarios} usuários</p>}
+                      {(mod.catalog.capacidade_extra_eventos ?? 0) > 0 && <p>+{mod.catalog.capacidade_extra_eventos} eventos</p>}
+                      {Number(mod.catalog.capacidade_extra_storage ?? 0) > 0 && <p>+{Number(mod.catalog.capacidade_extra_storage)} GB</p>}
+                    </div>
+                  )}
+                  {mod.activated_at && (
+                    <p className="text-xs text-muted-foreground">Desde {new Date(mod.activated_at).toLocaleDateString("pt-BR")}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─── MÓDULOS DISPONÍVEIS ─── */}
+      {availableModules.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" /> Módulos Disponíveis
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {availableModules.map((mod) => (
+              <Card key={mod.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="pt-4 pb-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium">{mod.nome}</p>
+                    <Badge variant="outline" className="text-xs">{mod.is_capacity_module ? "Capacidade" : "Funcionalidade"}</Badge>
+                  </div>
+                  {mod.descricao && <p className="text-sm text-muted-foreground">{mod.descricao}</p>}
+                  <p className="text-lg font-semibold">
+                    R$ {Number(mod.valor).toFixed(2)}
+                    <span className="text-xs text-muted-foreground font-normal">/{mod.periodicidade}</span>
+                  </p>
+                  {mod.is_capacity_module && (
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
+                      {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
+                      {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB</p>}
+                    </div>
+                  )}
+                  <Button size="sm" className="w-full" onClick={() => { setRequestModule(mod); setObservacao(""); }}>
+                    <Send className="h-4 w-4 mr-1" /> Solicitar
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── RESUMO FINANCEIRO ─── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" /> Resumo Financeiro
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Plano Base ({sub.planoBase?.nome || "—"})</span>
+              <span>R$ {sub.valorBase.toFixed(2)}</span>
+            </div>
+            {activeModules.map((mod) => (
+              <div key={mod.id} className="flex justify-between text-sm">
+                <span className="text-muted-foreground">{mod.catalog?.nome || "Módulo"}</span>
+                <span>R$ {Number(mod.valor_cobrado).toFixed(2)}</span>
+              </div>
+            ))}
+            <Separator />
+            <div className="flex justify-between font-semibold text-base">
+              <span>Total Mensal</span>
+              <span>R$ {sub.valorTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ─── HISTÓRICO ─── */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <History className="h-5 w-5 text-primary" /> Histórico
+        </h2>
+        <Tabs defaultValue="pagamentos">
+          <TabsList>
+            <TabsTrigger value="pagamentos">Pagamentos Plano</TabsTrigger>
+            <TabsTrigger value="solicitacoes">Solicitações Módulos</TabsTrigger>
+            <TabsTrigger value="pgto-modulos">Pagamentos Módulos</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pagamentos">
+            {pagamentos && pagamentos.length > 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Método</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Comprovante</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagamentos.map((p: any) => (
+                      <TableRow key={p.id}>
+                        <TableCell>{format(new Date(p.created_at), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                        <TableCell>R$ {Number(p.valor).toFixed(2)}</TableCell>
+                        <TableCell className="uppercase text-xs">{p.metodo}</TableCell>
+                        <TableCell><Badge variant={statusColor(p.status) as any}>{p.status}</Badge></TableCell>
+                        <TableCell>
+                          {p.comprovante_path ? (
+                            <Badge variant="outline" className="gap-1"><FileCheck className="h-3 w-3" /> Enviado</Badge>
+                          ) : p.status === "pendente" ? (
+                            <Button variant="outline" size="sm" className="text-xs" onClick={() => {
+                              const input = document.createElement("input");
+                              input.type = "file";
+                              input.accept = "image/*,.pdf";
+                              input.onchange = async (e) => {
+                                const file = (e.target as HTMLInputElement).files?.[0];
+                                if (!file) return;
+                                const path = `${empresaId}/${p.id}-${file.name}`;
+                                const { error: uploadError } = await supabase.storage.from("comprovantes").upload(path, file, { upsert: true });
+                                if (uploadError) { toast.error("Erro ao enviar comprovante"); return; }
+                                await supabase.from("pagamentos").update({ comprovante_path: path } as any).eq("id", p.id);
+                                await supabase.from("notificacoes_master").insert({
+                                  empresa_id: empresaId!,
+                                  tipo: "comprovante_pagamento",
+                                  mensagem: `${empresa?.nome_empresa} enviou comprovante - R$${Number(p.valor).toFixed(2)}`,
+                                  dados: { comprovante_path: path },
+                                } as any);
+                                queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
+                                toast.success("Comprovante enviado!");
+                              };
+                              input.click();
+                            }}>
+                              <Upload className="h-3 w-3 mr-1" /> Enviar
+                            </Button>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-6">Nenhum pagamento registrado.</p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="solicitacoes">
+            {moduleRequests.length > 0 ? (
+              <div className="space-y-2">
+                {moduleRequests.map((req: any) => (
+                  <Card key={req.id}>
+                    <CardContent className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium text-sm">{req.module_catalog?.nome || "Módulo"}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(req.requested_at).toLocaleDateString("pt-BR")}</p>
+                      </div>
+                      <Badge variant={req.status === "approved" ? "default" : req.status === "rejected" ? "destructive" : "secondary"}>
+                        {req.status === "pending" ? "Pendente" : req.status === "approved" ? "Aprovado" : req.status === "rejected" ? "Rejeitado" : req.status}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : <p className="text-muted-foreground text-center py-6">Nenhuma solicitação.</p>}
+          </TabsContent>
+
+          <TabsContent value="pgto-modulos">
+            {modulePayments.length > 0 ? (
+              <div className="space-y-2">
+                {modulePayments.map((pay: any) => (
+                  <Card key={pay.id}>
+                    <CardContent className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium text-sm">{pay.module_catalog?.nome || "Módulo"}</p>
+                        <p className="text-xs text-muted-foreground">R$ {Number(pay.amount).toFixed(2)} • {new Date(pay.created_at).toLocaleDateString("pt-BR")}</p>
+                      </div>
+                      <Badge variant={pay.status === "approved" ? "default" : pay.status === "rejected" ? "destructive" : "secondary"}>
+                        {pay.status === "pending" ? "Pendente" : pay.status === "approved" ? "Aprovado" : pay.status === "rejected" ? "Rejeitado" : pay.status}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : <p className="text-muted-foreground text-center py-6">Nenhum pagamento de módulo.</p>}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* ─── PIX DIALOG ─── */}
       <Dialog open={showPix} onOpenChange={setShowPix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <QrCode className="h-5 w-5" />
-              Pagamento via PIX
-            </DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> Pagamento via PIX</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
-            <div className="bg-white p-4 rounded-lg">
-              <QRCodeSVG value={pixPayload} size={220} />
-            </div>
+            <div className="bg-white p-4 rounded-lg"><QRCodeSVG value={pixPayload} size={220} /></div>
             <Separator />
             <div className="w-full space-y-2">
               <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
               <div className="flex gap-2">
-                <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">
-                  {pixPayload}
-                </code>
-                <Button variant="outline" size="icon" onClick={copyPix}>
-                  <Copy className="h-4 w-4" />
-                </Button>
+                <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{pixPayload}</code>
+                <Button variant="outline" size="icon" onClick={copyPix}><Copy className="h-4 w-4" /></Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Escaneie o QR Code ou copie o código acima para realizar o pagamento.
-            </p>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Upgrade Plan Dialog */}
+      {/* ─── UPGRADE DIALOG ─── */}
       <Dialog open={showUpgrade} onOpenChange={setShowUpgrade}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Selecionar Plano</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Selecionar Plano</DialogTitle></DialogHeader>
           <div className="flex-1 overflow-y-auto">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 py-4">
               {planos?.map((plano) => {
@@ -320,22 +536,18 @@ export default function PlanoAssinatura() {
                 return (
                   <Card
                     key={plano.id}
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      selectedPlanoId === plano.id ? "ring-2 ring-primary" : ""
-                    } ${empresa?.plano_id === plano.id ? "opacity-60" : ""}`}
+                    className={`cursor-pointer transition-all hover:shadow-md ${selectedPlanoId === plano.id ? "ring-2 ring-primary" : ""} ${empresa?.plano_id === plano.id ? "opacity-60" : ""}`}
                     onClick={() => setSelectedPlanoId(plano.id)}
                   >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base">{plano.nome}</CardTitle>
-                      <CardDescription>R${Number(plano.valor).toFixed(2)}{sufixo}</CardDescription>
+                      <CardDescription>R$ {Number(plano.valor).toFixed(2)}{sufixo}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
                       <p className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {plano.max_eventos ?? "∞"} eventos</p>
                       <p className="flex items-center gap-1"><Users className="h-3 w-3" /> {plano.max_usuarios ?? "∞"} usuários</p>
                       <p className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {(plano as any).storage_limit ?? 5}GB</p>
-                      {empresa?.plano_id === plano.id && (
-                        <Badge variant="secondary" className="mt-2">Plano Atual</Badge>
-                      )}
+                      {empresa?.plano_id === plano.id && <Badge variant="secondary" className="mt-2">Plano Atual</Badge>}
                     </CardContent>
                   </Card>
                 );
@@ -343,122 +555,49 @@ export default function PlanoAssinatura() {
             </div>
           </div>
           <DialogFooter className="shrink-0">
-            <Button
-              disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id}
-              onClick={() => setShowConfirm(true)}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Confirmar Plano
+            <Button disabled={!selectedPlanoId || selectedPlanoId === empresa?.plano_id} onClick={() => setShowConfirm(true)}>
+              <CheckCircle className="h-4 w-4 mr-2" /> Confirmar Plano
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Upgrade Confirmation Dialog */}
+      {/* ─── UPGRADE CONFIRM ─── */}
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Upgrade de Plano?</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar Upgrade?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja alterar seu plano para <strong>{planos?.find(p => p.id === selectedPlanoId)?.nome}</strong>? 
-              O administrador será notificado sobre esta alteração.
+              Alterar para <strong>{planos?.find(p => p.id === selectedPlanoId)?.nome}</strong>? O administrador será notificado.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              disabled={upgradeMutation.isPending}
-              onClick={() => selectedPlanoId && upgradeMutation.mutate(selectedPlanoId)}
-            >
-              {upgradeMutation.isPending ? "Atualizando..." : "Sim, confirmar"}
+            <AlertDialogAction disabled={upgradeMutation.isPending} onClick={() => selectedPlanoId && upgradeMutation.mutate(selectedPlanoId)}>
+              {upgradeMutation.isPending ? "Enviando..." : "Sim, confirmar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Payment History Dialog */}
-      <Dialog open={showHistory} onOpenChange={setShowHistory}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Histórico de Pagamentos</DialogTitle>
-          </DialogHeader>
-          {pagamentos && pagamentos.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Método</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Comprovante</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagamentos.map((p: any) => (
-                  <TableRow key={p.id}>
-                    <TableCell>{format(new Date(p.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</TableCell>
-                    <TableCell>R${Number(p.valor).toFixed(2)}</TableCell>
-                    <TableCell className="uppercase">{p.metodo}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusColor(p.status) as any}>{p.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {p.comprovante_path ? (
-                        <Badge variant="outline" className="text-accent border-accent gap-1">
-                          <FileCheck className="h-3 w-3" /> Enviado
-                        </Badge>
-                      ) : p.status === "pendente" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() => {
-                            const input = document.createElement("input");
-                            input.type = "file";
-                            input.accept = "image/*,.pdf";
-                            input.onchange = async (e) => {
-                              const file = (e.target as HTMLInputElement).files?.[0];
-                              if (!file) return;
-                              const path = `${empresaId}/${p.id}-${file.name}`;
-                              const { error: uploadError } = await supabase.storage
-                                .from("comprovantes")
-                                .upload(path, file, { upsert: true });
-                              if (uploadError) {
-                                toast.error("Erro ao enviar comprovante");
-                                return;
-                              }
-                              await supabase
-                                .from("pagamentos")
-                                .update({ comprovante_path: path } as any)
-                                .eq("id", p.id);
-                              
-                              // Notify master admin
-                              await supabase.from("notificacoes_master").insert({
-                                empresa_id: empresaId!,
-                                tipo: "comprovante_pagamento",
-                                mensagem: `${empresa?.nome_empresa} enviou comprovante de pagamento - R$${Number(p.valor).toFixed(2)}`,
-                                dados: { comprovante_path: path },
-                              } as any);
-
-                              queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
-                              toast.success("Comprovante enviado com sucesso!");
-                            };
-                            input.click();
-                          }}
-                        >
-                          <Upload className="h-3 w-3 mr-1" /> Enviar
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-muted-foreground text-center py-8">Nenhum pagamento registrado.</p>
-          )}
+      {/* ─── MODULE REQUEST DIALOG ─── */}
+      <Dialog open={!!requestModule} onOpenChange={(o) => !o && setRequestModule(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Solicitar: {requestModule?.nome}</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            {requestModule?.descricao && <p className="text-sm text-muted-foreground">{requestModule.descricao}</p>}
+            <p className="font-semibold">Valor: R$ {Number(requestModule?.valor || 0).toFixed(2)}/{requestModule?.periodicidade}</p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Observação (opcional)</label>
+              <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Algo para o administrador..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRequestModule(null)}>Cancelar</Button>
+            <Button onClick={() => sendModuleRequest.mutate()} disabled={sendModuleRequest.isPending}>
+              <Send className="h-4 w-4 mr-1" /> Enviar Solicitação
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
