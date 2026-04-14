@@ -70,13 +70,25 @@ export default function Cadastro() {
         try {
           const ext = logoFile.name.split(".").pop();
           const path = `${empresaId}/logo.${ext}`;
-          await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
-          const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
-          if (urlData?.publicUrl) {
-            await supabase.from("empresas").update({ logo_url: urlData.publicUrl + "?t=" + Date.now() } as any).eq("id", empresaId);
+          const { error: uploadErr } = await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
+          if (uploadErr) {
+            console.error("Logo upload error:", uploadErr);
+            toast({ title: "Aviso", description: "Não foi possível enviar a logo. Você pode adicioná-la depois.", variant: "destructive" });
+          } else {
+            const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
+            if (urlData?.publicUrl) {
+              const { error: updateErr } = await supabase
+                .from("empresas")
+                .update({ logo_url: urlData.publicUrl + "?t=" + Date.now() } as any)
+                .eq("id", empresaId);
+              if (updateErr) {
+                console.error("Logo URL save error:", updateErr);
+                toast({ title: "Aviso", description: "Logo enviada mas não foi possível vincular à empresa.", variant: "destructive" });
+              }
+            }
           }
-        } catch {
-          // Logo upload is non-blocking
+        } catch (logoErr) {
+          console.error("Logo process error:", logoErr);
         }
       }
 
