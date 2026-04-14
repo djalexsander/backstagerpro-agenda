@@ -37,7 +37,7 @@ import FinanceiroMaster from "@/pages/master/FinanceiroMaster";
 import Modulos from "@/pages/master/Modulos";
 import SolicitacoesModulos from "@/pages/master/SolicitacoesModulos";
 import PagamentosModulos from "@/pages/master/PagamentosModulos";
-import ModulosDisponiveis from "@/pages/ModulosDisponiveis";
+
 import OnboardingModulos from "@/pages/OnboardingModulos";
 import OnboardingResumo from "@/pages/OnboardingResumo";
 import NotFound from "@/pages/NotFound";
