@@ -22,8 +22,6 @@ import {
 } from "lucide-react";
 import type { ModuleCatalogRow } from "@/types/subscription";
 import { MODULE_CATEGORIES, getCategoryLabel, getBadgeInfo } from "@/constants/module-categories";
-import { generatePixPayload } from "@/lib/pix";
-import { QRCodeSVG } from "qrcode.react";
 import { toast as sonnerToast } from "sonner";
 
 export default function ModulosDisponiveis() {
