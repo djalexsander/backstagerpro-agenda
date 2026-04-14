@@ -24,9 +24,11 @@ export default function EscolherPlano() {
         .from("planos")
         .select("*")
         .eq("ativo", true)
+        .gt("valor", 0)
         .order("valor", { ascending: true });
       if (error) throw error;
-      return data;
+      // Filter to only plans available for new signups
+      return (data || []).filter((p: any) => p.disponivel_novo_cadastro !== false);
     },
   });
 
@@ -133,7 +135,7 @@ export default function EscolherPlano() {
 
         {/* Paid Plans — filter out trial/free plans */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {planos.filter((p) => Number(p.valor) > 0).map((plano) => {
+          {planos.map((plano) => {
             const periodicidade = (plano as any).periodicidade || "mensal";
             const sufixo = getSuffix(periodicidade);
             const bestValue = isBestValue(plano);
@@ -194,7 +196,7 @@ export default function EscolherPlano() {
           })}
         </div>
 
-        {planos.filter((p) => Number(p.valor) > 0).length === 0 && (
+        {planos.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-lg">Nenhum plano pago disponível no momento.</p>
             <Button variant="link" onClick={handleFreeTrial} className="mt-2 text-base">

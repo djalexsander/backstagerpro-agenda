@@ -924,6 +924,7 @@ export type Database = {
           ativo: boolean
           created_at: string
           descricao: string | null
+          disponivel_novo_cadastro: boolean
           id: string
           max_eventos: number | null
           max_usuarios: number | null
@@ -938,6 +939,7 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           descricao?: string | null
+          disponivel_novo_cadastro?: boolean
           id?: string
           max_eventos?: number | null
           max_usuarios?: number | null
@@ -952,6 +954,7 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           descricao?: string | null
+          disponivel_novo_cadastro?: boolean
           id?: string
           max_eventos?: number | null
           max_usuarios?: number | null

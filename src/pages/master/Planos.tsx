@@ -25,13 +25,14 @@ interface Plano {
   trial_days: number;
   ativo: boolean;
   periodicidade: string;
+  disponivel_novo_cadastro: boolean;
 }
 
 type PlanoTipo = "trial" | "base" | "legado";
 
 function classificarPlano(p: Plano): PlanoTipo {
-  if (p.valor === 0 || p.trial_days > 0 && p.valor === 0) return "trial";
-  if (!p.ativo) return "legado";
+  if (p.valor === 0 || (p.trial_days > 0 && p.valor === 0)) return "trial";
+  if (!p.ativo || !p.disponivel_novo_cadastro) return "legado";
   return "base";
 }
 
@@ -48,7 +49,7 @@ export default function Planos() {
   const [editItem, setEditItem] = useState<Plano | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true, periodicidade: "mensal",
+    nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true, periodicidade: "mensal", disponivel_novo_cadastro: true,
   });
 
   const { data: planos = [] } = useQuery({
@@ -89,6 +90,7 @@ export default function Planos() {
         trial_days: parseInt(form.trial_days) || 0,
         ativo: form.ativo,
         periodicidade: form.periodicidade,
+        disponivel_novo_cadastro: form.disponivel_novo_cadastro,
       };
       if (editItem) {
         const { error } = await supabase.from("planos").update(payload as any).eq("id", editItem.id);
@@ -125,13 +127,14 @@ export default function Planos() {
       nome: p.nome, valor: String(p.valor), descricao: p.descricao || "",
       max_usuarios: String(p.max_usuarios), max_eventos: String(p.max_eventos),
       trial_days: String(p.trial_days), ativo: p.ativo, periodicidade: p.periodicidade || "mensal",
+      disponivel_novo_cadastro: p.disponivel_novo_cadastro,
     });
     setDialogOpen(true);
   };
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true, periodicidade: "mensal" });
+    setForm({ nome: "", valor: "", descricao: "", max_usuarios: "5", max_eventos: "50", trial_days: "0", ativo: true, periodicidade: "mensal", disponivel_novo_cadastro: true });
     setDialogOpen(true);
   };
 
@@ -376,6 +379,10 @@ export default function Planos() {
             <div className="flex items-center gap-2">
               <Switch checked={form.ativo} onCheckedChange={(v) => setForm(p => ({ ...p, ativo: v }))} />
               <Label>Ativo</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={form.disponivel_novo_cadastro} onCheckedChange={(v) => setForm(p => ({ ...p, disponivel_novo_cadastro: v }))} />
+              <Label>Disponível para novos cadastros</Label>
             </div>
           </div>
           <DialogFooter>
