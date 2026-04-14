@@ -110,6 +110,7 @@ export type Database = {
           module_id: string
           origem: string
           status: string
+          trial_granted: boolean
           updated_at: string
           valor_cobrado: number
         }
@@ -123,6 +124,7 @@ export type Database = {
           module_id: string
           origem?: string
           status?: string
+          trial_granted?: boolean
           updated_at?: string
           valor_cobrado?: number
         }
@@ -136,6 +138,7 @@ export type Database = {
           module_id?: string
           origem?: string
           status?: string
+          trial_granted?: boolean
           updated_at?: string
           valor_cobrado?: number
         }
@@ -1087,6 +1090,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      deactivate_trial_modules: {
+        Args: { _empresa_id: string }
+        Returns: undefined
+      }
       get_user_empresa_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

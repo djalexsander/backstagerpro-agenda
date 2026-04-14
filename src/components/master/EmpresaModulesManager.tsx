@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Power, PowerOff, Gift, Zap, HardDrive } from "lucide-react";
+import { Plus, Power, PowerOff, Gift, Zap, HardDrive, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -40,6 +40,7 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
   const [selectedModuleId, setSelectedModuleId] = useState("");
   const [valorCobrado, setValorCobrado] = useState("0");
   const [isCortesia, setIsCortesia] = useState(false);
+  const [isTrialGrant, setIsTrialGrant] = useState(false);
 
   // Catálogo de módulos ativos
   const { data: catalog = [] } = useQuery({
@@ -99,6 +100,7 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
         granted_by_admin: true,
         valor_cobrado: valor,
         origem: isCortesia ? "cortesia_admin" : "manual_admin",
+        trial_granted: isTrialGrant,
       } as any);
       if (error) throw error;
 
@@ -114,6 +116,7 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
           feature_key: mod?.feature_key,
           valor_cobrado: valor,
           cortesia: isCortesia,
+          trial_granted: isTrialGrant,
         },
       } as any);
     },
@@ -124,6 +127,7 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
       setSelectedModuleId("");
       setValorCobrado("0");
       setIsCortesia(false);
+      setIsTrialGrant(false);
     },
     onError: (err: any) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
   });
@@ -184,6 +188,7 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
     setSelectedModuleId("");
     setValorCobrado("0");
     setIsCortesia(false);
+    setIsTrialGrant(false);
     setAddOpen(true);
   };
 
@@ -256,15 +261,22 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
                       )}
                     </TableCell>
                     <TableCell>
-                      {isCort ? (
-                        <Badge variant="outline" className="text-[10px] gap-0.5 border-primary text-primary">
-                          <Gift className="h-2.5 w-2.5" /> Cortesia
-                        </Badge>
-                      ) : isManual ? (
-                        <Badge variant="outline" className="text-[10px]">Manual</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px]">Contratado</Badge>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {em.trial_granted && (
+                          <Badge variant="outline" className="text-[10px] gap-0.5 border-[hsl(var(--warning))] text-[hsl(var(--warning))]">
+                            <Clock className="h-2.5 w-2.5" /> Trial
+                          </Badge>
+                        )}
+                        {isCort ? (
+                          <Badge variant="outline" className="text-[10px] gap-0.5 border-primary text-primary">
+                            <Gift className="h-2.5 w-2.5" /> Cortesia
+                          </Badge>
+                        ) : isManual ? (
+                          <Badge variant="outline" className="text-[10px]">Manual</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">Contratado</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {em.activated_at ? format(new Date(em.activated_at), "dd/MM/yy", { locale: ptBR }) : "—"}
@@ -344,6 +356,18 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
                   }
                 }}
               />
+            </div>
+
+            {/* Trial toggle */}
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-[hsl(var(--warning))]" />
+                <div>
+                  <p className="text-sm font-medium">Módulo temporário (trial)</p>
+                  <p className="text-xs text-muted-foreground">Será desativado quando o trial expirar</p>
+                </div>
+              </div>
+              <Switch checked={isTrialGrant} onCheckedChange={setIsTrialGrant} />
             </div>
 
             {/* Valor */}
