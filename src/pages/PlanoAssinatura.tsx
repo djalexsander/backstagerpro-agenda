@@ -92,12 +92,27 @@ export default function PlanoAssinatura() {
     enabled: !!empresaId,
   });
 
-  // Fetch module requests
+  // Fetch module requests (individual + batch)
   const { data: moduleRequests = [] } = useQuery({
     queryKey: ["module-requests", empresaId],
     queryFn: async () => {
       if (!empresaId) return [];
       const { data, error } = await supabase.from("module_requests").select("*, module_catalog(*)").eq("empresa_id", empresaId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: batchRequests = [] } = useQuery({
+    queryKey: ["module-batch-requests", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("module_batch_requests")
+        .select("*, module_batch_request_items(*, module_catalog(*))")
+        .eq("empresa_id", empresaId)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
