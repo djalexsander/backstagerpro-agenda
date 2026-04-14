@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon, Upload, X, ImageIcon } from "lucide-react";
+import { EmpresaModulesManager } from "@/components/master/EmpresaModulesManager";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -567,6 +568,11 @@ export default function Empresas() {
                     </CardContent>
                   </Card>
                 </div>
+
+                <Separator />
+
+                {/* Módulos da empresa */}
+                <EmpresaModulesManager empresaId={detailEmpresa.id} empresaNome={detailEmpresa.nome_empresa} />
 
                 <Separator />
 
