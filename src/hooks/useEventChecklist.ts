@@ -120,5 +120,5 @@ export function useEventChecklist(eventId: string | undefined) {
     concluidos: items.filter(i => i.categoria === cat.value && i.concluido).length,
   })).filter(c => c.total > 0);
 
-  return { items, isLoading, addItem, toggleItem, updateItem, deleteItem, total, concluidos, progress, byCategory };
+  return { items, isLoading, addItem, toggleItem, updateItem, deleteItem, batchAddItems, total, concluidos, progress, byCategory };
 }

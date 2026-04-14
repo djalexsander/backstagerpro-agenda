@@ -11,6 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, CheckCircle2, Circle, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ChecklistPdfImport } from "./ChecklistPdfImport";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   Accordion,
   AccordionContent,
