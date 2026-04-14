@@ -1,18 +1,18 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, DollarSign, Calendar, FileText, Image,
-  ArrowRight, BarChart3, Users, ClipboardList, UserCheck, Music
+  ArrowRight, BarChart3, Users, ClipboardList, Music
 } from "lucide-react";
 import { useModuleAccess } from "@/components/ModuleGate";
 import { MODULE_KEYS } from "@/constants/module-keys";
-import { exportAgendaPDF } from "@/lib/pdf-export";
-
-import { useAuth } from "@/contexts/AuthContext";
+import { ReportExportModal, type ReportType } from "@/components/relatorios/ReportExportModal";
+import type { ExportFormat } from "@/lib/pdf-export";
 
 interface ReportCard {
-  id: string;
+  id: ReportType;
   title: string;
   description: string;
   icon: React.ElementType;
@@ -24,9 +24,18 @@ interface ReportCard {
 export default function Relatorios() {
   const navigate = useNavigate();
   const { canAccess } = useModuleAccess(MODULE_KEYS.RELATORIOS);
-  const { empresaNome } = useAuth();
 
-  const reports: ReportCard[] = [
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ReportType>("dashboard");
+  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("pdf");
+
+  const handleOpenExportModal = (reportType: ReportType, format: ExportFormat) => {
+    setSelectedReport(reportType);
+    setSelectedFormat(format);
+    setModalOpen(true);
+  };
+
+  const reports: (ReportCard & { id: ReportType | string })[] = [
     {
       id: "dashboard",
       title: "Relatório do Dashboard",
@@ -52,7 +61,7 @@ export default function Relatorios() {
       navigateTo: "/agenda",
     },
     {
-      id: "equipe",
+      id: "equipe" as any,
       title: "Relatório de Equipe",
       description: "Análise da equipe com frequência em eventos e cachês acumulados.",
       icon: Users,
@@ -60,7 +69,7 @@ export default function Relatorios() {
       comingSoon: true,
     },
     {
-      id: "operacional",
+      id: "operacional" as any,
       title: "Relatório Operacional",
       description: "Painel operacional com logística, materiais e preparação de eventos.",
       icon: ClipboardList,
@@ -68,7 +77,7 @@ export default function Relatorios() {
       comingSoon: true,
     },
     {
-      id: "evento",
+      id: "evento" as any,
       title: "Relatório por Evento",
       description: "Relatório detalhado individual de cada evento com todos os dados.",
       icon: Music,
@@ -140,10 +149,26 @@ export default function Relatorios() {
                     Abrir <ArrowRight className="h-3 w-3" />
                   </Button>
                   <div className="flex gap-1 ml-auto">
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] px-2 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenExportModal(report.id as ReportType, "pdf");
+                      }}
+                    >
                       <FileText className="h-3 w-3" /> PDF
                     </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] px-2 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenExportModal(report.id as ReportType, "png");
+                      }}
+                    >
                       <Image className="h-3 w-3" /> PNG
                     </Button>
                   </div>
@@ -166,6 +191,14 @@ export default function Relatorios() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Export Modal */}
+      <ReportExportModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        reportType={selectedReport}
+        exportFormat={selectedFormat}
+      />
     </div>
   );
 }
