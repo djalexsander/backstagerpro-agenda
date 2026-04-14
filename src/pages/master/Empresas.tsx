@@ -694,7 +694,9 @@ export default function Empresas() {
             <TableRow>
               <TableHead>Empresa</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Modelo</TableHead>
               <TableHead>Plano</TableHead>
+              <TableHead>Módulos</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -702,16 +704,57 @@ export default function Empresas() {
           </TableHeader>
           <TableBody>
             {empresas.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma empresa cadastrada.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhuma empresa cadastrada.</TableCell></TableRow>
             ) : (
               empresas.map((e: any) => {
                 const vencido = isVencimentoExpired(e);
                 const blocked = e.plano_bloqueado;
+                const modelo = classifyEmpresaModel(e);
+                const mods = moduleCounts[e.id];
                 return (
                   <TableRow key={e.id} className={`${blocked ? "opacity-60" : ""} cursor-pointer hover:bg-muted/50`} onClick={() => setDetailEmpresa(e)}>
                     <TableCell className="font-medium">{e.nome_empresa}</TableCell>
-                    <TableCell>{e.email || "—"}</TableCell>
-                    <TableCell><Badge variant="secondary" className="capitalize">{e.plano}</Badge></TableCell>
+                    <TableCell className="text-sm">{e.email || "—"}</TableCell>
+                    <TableCell>
+                      {modelo === "novo" && (
+                        <Badge className="bg-primary/15 text-primary border border-primary/30 text-[10px]">
+                          <Sparkles className="h-3 w-3 mr-0.5" /> Novo
+                        </Badge>
+                      )}
+                      {modelo === "onboarding" && (
+                        <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30 text-[10px]">
+                          Onboarding
+                        </Badge>
+                      )}
+                      {modelo === "legado" && (
+                        <Badge variant="outline" className="text-muted-foreground text-[10px]">
+                          <AlertTriangle className="h-3 w-3 mr-0.5" /> Legado
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <Badge variant="secondary" className="capitalize text-xs w-fit">{e.plano || "—"}</Badge>
+                        {e.trial_expires_at && (
+                          <span className={`text-[10px] ${new Date(e.trial_expires_at) < new Date() ? "text-destructive" : "text-primary"}`}>
+                            Trial {new Date(e.trial_expires_at) < new Date() ? "expirado" : "ativo"}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {mods ? (
+                        <div className="flex items-center gap-1">
+                          <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs font-medium">{mods.total}</span>
+                          {mods.pending > 0 && (
+                            <Badge className="bg-amber-500/15 text-amber-700 text-[10px] px-1 py-0">{mods.pending} pend.</Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {(() => {
                         const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
@@ -728,6 +771,8 @@ export default function Empresas() {
                     <TableCell>
                       {blocked ? (
                         <Badge className="bg-destructive text-destructive-foreground">Bloqueado</Badge>
+                      ) : e.status_pagamento === "pendente" ? (
+                        <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30">Pgto Pendente</Badge>
                       ) : (
                         <Badge className={e.status === "ativo" ? "bg-accent text-accent-foreground" : "bg-destructive text-destructive-foreground"}>
                           {e.status}
