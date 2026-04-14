@@ -40,7 +40,7 @@ export default function EscolherPlano() {
 
       await refreshProfile();
       toast({ title: "Teste grátis ativado!", description: "Você tem 7 dias para experimentar o sistema." });
-      navigate("/modulos", { replace: true });
+      navigate("/onboarding-modulos", { replace: true });
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
