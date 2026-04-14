@@ -38,8 +38,9 @@ export default function PlanoAssinatura() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
-  const [requestModule, setRequestModule] = useState<ModuleCatalogRow | null>(null);
-  const [observacao, setObservacao] = useState("");
+  const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
+  const [showBatchSummary, setShowBatchSummary] = useState(false);
+  const [batchObservacao, setBatchObservacao] = useState("");
 
   // Fetch empresa
   const { data: empresa } = useQuery({
