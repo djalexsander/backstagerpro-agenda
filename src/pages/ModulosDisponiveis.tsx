@@ -98,15 +98,6 @@ export default function ModulosDisponiveis() {
     },
     enabled: !!empresaId,
   });
-    queryKey: ["pix-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("system_settings").select("key, value").in("key", ["pix_chave", "pix_nome_recebedor", "pix_cidade", "pix_banco"]);
-      if (error) throw error;
-      const map: Record<string, string | null> = {};
-      data.forEach((r: any) => { map[r.key] = r.value; });
-      return map;
-    },
-  });
 
   // Build sets for status checks
   const activeFeatureKeys = new Set(activeModules.map((m) => m.catalog?.feature_key));
