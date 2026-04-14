@@ -131,9 +131,9 @@ export default function EscolherPlano() {
           <div className="flex-1 h-px bg-border" />
         </div>
 
-        {/* Paid Plans */}
+        {/* Paid Plans — filter out trial/free plans */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {planos.map((plano) => {
+          {planos.filter((p) => Number(p.valor) > 0).map((plano) => {
             const periodicidade = (plano as any).periodicidade || "mensal";
             const sufixo = getSuffix(periodicidade);
             const bestValue = isBestValue(plano);
@@ -194,9 +194,9 @@ export default function EscolherPlano() {
           })}
         </div>
 
-        {planos.length === 0 && (
+        {planos.filter((p) => Number(p.valor) > 0).length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
-            <p className="text-lg">Nenhum plano disponível no momento.</p>
+            <p className="text-lg">Nenhum plano pago disponível no momento.</p>
             <Button variant="link" onClick={handleFreeTrial} className="mt-2 text-base">
               Iniciar teste grátis de 7 dias
             </Button>
