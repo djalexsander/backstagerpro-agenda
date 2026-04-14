@@ -39,6 +39,7 @@ import SolicitacoesModulos from "@/pages/master/SolicitacoesModulos";
 import PagamentosModulos from "@/pages/master/PagamentosModulos";
 import ModulosDisponiveis from "@/pages/ModulosDisponiveis";
 import OnboardingModulos from "@/pages/OnboardingModulos";
+import OnboardingResumo from "@/pages/OnboardingResumo";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="/escolher-plano" element={<ProtectedRoute skipPlanCheck><EscolherPlano /></ProtectedRoute>} />
                 <Route path="/pagamento-plano/:planoId" element={<ProtectedRoute skipPlanCheck><PagamentoPlano /></ProtectedRoute>} />
                 <Route path="/onboarding-modulos" element={<ProtectedRoute skipPlanCheck><OnboardingModulos /></ProtectedRoute>} />
+                <Route path="/onboarding-resumo" element={<ProtectedRoute skipPlanCheck><OnboardingResumo /></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/agenda" replace />} />
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<ProtectedRoute adminOnly><Dashboard /></ProtectedRoute>} />
