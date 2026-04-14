@@ -698,21 +698,41 @@ export default function PlanoAssinatura() {
         </Tabs>
       </div>
 
-      {/* ─── PIX DIALOG ─── */}
+      {/* ─── PIX DIALOG (Asaas) ─── */}
       <Dialog open={showPix} onOpenChange={setShowPix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> Pagamento via PIX</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-4">
-            <div className="bg-white p-4 rounded-lg"><QRCodeSVG value={pixPayload} size={220} /></div>
-            <Separator />
-            <div className="w-full space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
-              <div className="flex gap-2">
-                <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{pixPayload}</code>
-                <Button variant="outline" size="icon" onClick={copyPix}><Copy className="h-4 w-4" /></Button>
+            {asaasData?.pix_qr_code && (
+              <div className="bg-white p-4 rounded-lg">
+                <img src={`data:image/png;base64,${asaasData.pix_qr_code}`} alt="QR Code PIX" className="w-[220px] h-[220px]" />
               </div>
+            )}
+            {asaasData?.pix_copy_paste && (
+              <>
+                <Separator />
+                <div className="w-full space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{asaasData.pix_copy_paste}</code>
+                    <Button variant="outline" size="icon" onClick={copyPix}><Copy className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {asaasData?.invoice_url && (
+              <>
+                <Separator />
+                <Button variant="outline" className="w-full" asChild>
+                  <a href={asaasData.invoice_url} target="_blank" rel="noopener noreferrer">Ver fatura completa</a>
+                </Button>
+              </>
+            )}
+            <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1 w-full">
+              <p>• O pagamento será confirmado automaticamente</p>
+              <p>• Após confirmação, seu acesso será liberado</p>
             </div>
           </div>
         </DialogContent>
