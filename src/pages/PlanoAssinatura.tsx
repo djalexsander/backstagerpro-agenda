@@ -352,11 +352,48 @@ export default function PlanoAssinatura() {
             </div>
           </div>
 
+          {/* Pending payment banner */}
+          {pendingPlanPayment && (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-warning">
+                <Clock className="h-5 w-5 animate-pulse" />
+                <span className="font-semibold">Aguardando confirmação do pagamento...</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Cobrança de <strong>R$ {Number(pendingPlanPayment.amount).toFixed(2)}</strong> gerada em{" "}
+                {format(new Date(pendingPlanPayment.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+                O acesso será liberado automaticamente após a confirmação.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {pendingPlanPayment.pix_copy_paste && (
+                  <Button variant="outline" size="sm" onClick={() => {
+                    navigator.clipboard.writeText(pendingPlanPayment.pix_copy_paste!);
+                    toast.success("Código PIX copiado!");
+                  }}>
+                    <Copy className="h-4 w-4 mr-1" /> Copiar PIX
+                  </Button>
+                )}
+                {pendingPlanPayment.invoice_url && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={pendingPlanPayment.invoice_url} target="_blank" rel="noopener noreferrer">
+                      <CreditCard className="h-4 w-4 mr-1" /> Abrir link de pagamento
+                    </a>
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => refetchPending()}>
+                  <Loader2 className="h-4 w-4 mr-1" /> Verificar status
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 pt-1">
-            <Button onClick={handlePagar} disabled={!sub.planoBase || generatingCharge} size="lg">
+            <Button onClick={handlePagar} disabled={!sub.planoBase || generatingCharge || !!pendingPlanPayment} size="lg">
               {generatingCharge ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando cobrança...</>
+              ) : pendingPlanPayment ? (
+                <><Clock className="h-4 w-4 mr-2" /> Pagamento pendente</>
               ) : (
                 <><QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}</>
               )}
