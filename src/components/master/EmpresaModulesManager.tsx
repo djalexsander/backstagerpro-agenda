@@ -358,6 +358,18 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
               />
             </div>
 
+            {/* Trial toggle */}
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-[hsl(var(--warning))]" />
+                <div>
+                  <p className="text-sm font-medium">Módulo temporário (trial)</p>
+                  <p className="text-xs text-muted-foreground">Será desativado quando o trial expirar</p>
+                </div>
+              </div>
+              <Switch checked={isTrialGrant} onCheckedChange={setIsTrialGrant} />
+            </div>
+
             {/* Valor */}
             {!isCortesia && (
               <div className="space-y-1.5">
