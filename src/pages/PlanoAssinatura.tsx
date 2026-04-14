@@ -417,39 +417,79 @@ export default function PlanoAssinatura() {
         )}
       </div>
 
-      {/* ─── MÓDULOS DISPONÍVEIS ─── */}
+      {/* ─── MÓDULOS DISPONÍVEIS (multi-select) ─── */}
       {availableModules.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" /> Módulos Disponíveis
           </h2>
+          <p className="text-sm text-muted-foreground">Selecione os módulos desejados e solicite todos de uma vez.</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {availableModules.map((mod) => (
-              <Card key={mod.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="pt-4 pb-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{mod.nome}</p>
-                    <Badge variant="outline" className="text-xs">{mod.is_capacity_module ? "Capacidade" : "Funcionalidade"}</Badge>
-                  </div>
-                  {mod.descricao && <p className="text-sm text-muted-foreground">{mod.descricao}</p>}
-                  <p className="text-lg font-semibold">
-                    R$ {Number(mod.valor).toFixed(2)}
-                    <span className="text-xs text-muted-foreground font-normal">/{mod.periodicidade}</span>
-                  </p>
-                  {mod.is_capacity_module && (
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
-                      {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
-                      {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB</p>}
+            {availableModules.map((mod) => {
+              const isSelected = selectedModuleIds.has(mod.id);
+              return (
+                <Card
+                  key={mod.id}
+                  className={`cursor-pointer transition-all ${isSelected ? "ring-2 ring-primary border-primary/50 shadow-md" : "hover:shadow-md"}`}
+                  onClick={() => toggleModuleSelect(mod.id)}
+                >
+                  <CardContent className="pt-4 pb-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleModuleSelect(mod.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <p className="font-medium">{mod.nome}</p>
+                      </div>
+                      <Badge variant="outline" className="text-xs">{mod.is_capacity_module ? "Capacidade" : "Funcionalidade"}</Badge>
                     </div>
-                  )}
-                  <Button size="sm" className="w-full" onClick={() => { setRequestModule(mod); setObservacao(""); }}>
-                    <Send className="h-4 w-4 mr-1" /> Solicitar
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    {mod.descricao && <p className="text-sm text-muted-foreground">{mod.descricao}</p>}
+                    <p className="text-lg font-semibold">
+                      R$ {Number(mod.valor).toFixed(2)}
+                      <span className="text-xs text-muted-foreground font-normal">/{mod.periodicidade}</span>
+                    </p>
+                    {mod.is_capacity_module && (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
+                        {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
+                        {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB</p>}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
+
+          {/* Summary bar when modules are selected */}
+          {selectedModuleIds.size > 0 && (
+            <Card className="border-primary/30 bg-primary/[0.03]">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <ShoppingCart className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="font-semibold text-sm">
+                        {selectedModuleIds.size} módulo{selectedModuleIds.size > 1 ? "s" : ""} selecionado{selectedModuleIds.size > 1 ? "s" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{selectedModules.map(m => m.nome).join(", ")}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-lg text-primary">R$ {totalSelectedValue.toFixed(2)}</p>
+                    <Button onClick={() => { setBatchObservacao(""); setShowBatchSummary(true); }}>
+                      <Send className="h-4 w-4 mr-1" /> Solicitar módulos
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setSelectedModuleIds(new Set())}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
