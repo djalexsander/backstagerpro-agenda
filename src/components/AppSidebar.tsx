@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -67,6 +67,7 @@ export function AppSidebar() {
     { title: "Planos", url: "/master/planos", icon: CreditCard },
     { title: "Módulos", url: "/master/modulos", icon: Package },
     { title: "Solicitações", url: "/master/solicitacoes-modulos", icon: FileCheck },
+    { title: "Lote Módulos", url: "/master/solicitacoes-lote", icon: Layers },
     { title: "Pgto Módulos", url: "/master/pagamentos-modulos", icon: Wallet },
     { title: "Usuários Globais", url: "/master/usuarios", icon: Users },
     { title: "Configurações", url: "/master/configuracoes", icon: Settings },
