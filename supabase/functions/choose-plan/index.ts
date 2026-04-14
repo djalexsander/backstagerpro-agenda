@@ -69,9 +69,23 @@ Deno.serve(async (req) => {
       // Get plano info
       const { data: plano } = await supabaseAdmin
         .from("planos")
-        .select("nome")
+        .select("nome, periodicidade")
         .eq("id", plano_id)
         .single();
+
+      // Calculate vencimento based on periodicidade
+      const now = new Date();
+      let vencimento: string | null = null;
+      if (plano?.periodicidade === "mensal") {
+        const v = new Date(now);
+        v.setDate(v.getDate() + 30);
+        vencimento = v.toISOString();
+      } else if (plano?.periodicidade === "anual") {
+        const v = new Date(now);
+        v.setFullYear(v.getFullYear() + 1);
+        vencimento = v.toISOString();
+      }
+      // vitalicio = null (sem vencimento)
 
       await supabaseAdmin
         .from("empresas")
@@ -82,6 +96,8 @@ Deno.serve(async (req) => {
           plano: plano?.nome || null,
           plano_id: plano_id,
           trial_expires_at: null,
+          data_contrato: now.toISOString(),
+          vencimento: vencimento,
         })
         .eq("id", profile.empresa_id);
 
