@@ -277,7 +277,7 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
                   className="flex items-center gap-2 p-2 rounded-md border bg-muted/30 text-sm"
                 >
                   {f.file_name?.endsWith(".xlsx") || f.file_name?.endsWith(".xls") ? (
-                    <FileSpreadsheet className="h-4 w-4 text-green-600 shrink-0" />
+                    <FileSpreadsheet className="h-4 w-4 text-accent-foreground shrink-0" />
                   ) : (
                     <FileText className="h-4 w-4 text-primary shrink-0" />
                   )}
