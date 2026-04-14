@@ -135,6 +135,18 @@ Deno.serve(async (req) => {
 
       if (diffDays > 5) continue;
 
+      // When trial has expired, deactivate trial-granted modules
+      if (diffDays < 0) {
+        const { error: deactError } = await supabase.rpc("deactivate_trial_modules", {
+          _empresa_id: empresa.id,
+        });
+        if (deactError) {
+          console.error(`Error deactivating trial modules for ${empresa.nome_empresa}:`, deactError);
+        } else {
+          console.log(`Trial modules deactivated for ${empresa.nome_empresa}`);
+        }
+      }
+
       const tipo = diffDays < 0 ? "trial_expirado" : "trial_expirando";
       const mensagem = diffDays < 0
         ? `⚠️ Trial da empresa "${empresa.nome_empresa}" expirou há ${Math.abs(diffDays)} dia(s).`
