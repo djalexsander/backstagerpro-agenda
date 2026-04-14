@@ -56,8 +56,8 @@ export default function Cadastro() {
         body: { nome_empresa: nomeEmpresa, nome_responsavel: nomeResponsavel, email, telefone, password },
       });
 
-      if (res.error) throw new Error(res.error.message || "Erro ao criar conta");
-      if (res.data?.error) throw new Error(res.data.error);
+      const errorMsg = res.data?.error || (res.error && (typeof res.error === 'object' && 'message' in res.error ? res.error.message : String(res.error)));
+      if (errorMsg) throw new Error(errorMsg);
 
       const empresaId = res.data.empresa_id;
 
