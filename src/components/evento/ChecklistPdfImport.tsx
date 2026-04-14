@@ -102,15 +102,24 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
     return [...new Set(lines)];
   }, []);
 
-  const ACCEPTED_TYPES = [
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-excel",
-  ];
+  const extractTextFromWord = useCallback(async (file: File): Promise<string[]> => {
+    const mammoth = await import("mammoth");
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const lines = result.value
+      .split(/[\n\r]+/)
+      .map((l: string) => l.trim())
+      .filter((l: string) => l.length > 2);
+    return [...new Set(lines)];
+  }, []);
 
   const isExcel = (file: File) =>
     file.name.endsWith(".xlsx") || file.name.endsWith(".xls") ||
     file.type.includes("spreadsheet") || file.type.includes("excel");
+
+  const isWord = (file: File) =>
+    file.name.endsWith(".docx") || file.name.endsWith(".doc") ||
+    file.type.includes("wordprocessing") || file.type === "application/msword";
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,9 +127,10 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
 
     const isPdf = file.type === "application/pdf";
     const isXls = isExcel(file);
+    const isDoc = isWord(file);
 
-    if (!isPdf && !isXls) {
-      toast({ title: "Selecione um arquivo PDF ou Excel (.xlsx)", variant: "destructive" });
+    if (!isPdf && !isXls && !isDoc) {
+      toast({ title: "Selecione um arquivo PDF, Excel ou Word", variant: "destructive" });
       return;
     }
 
@@ -128,7 +138,9 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
     try {
       const lines = isPdf
         ? await extractTextFromPdf(file)
-        : await extractTextFromExcel(file);
+        : isXls
+          ? await extractTextFromExcel(file)
+          : await extractTextFromWord(file);
 
       if (lines.length === 0) {
         toast({ title: "Nenhum conteúdo encontrado no arquivo", variant: "destructive" });
@@ -155,7 +167,8 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
       if (insErr) throw insErr;
 
       queryClient.invalidateQueries({ queryKey: ["checklist-pdfs", eventId] });
-      toast({ title: `${isPdf ? "PDF" : "Excel"} anexado ao evento` });
+      const fileLabel = isPdf ? "PDF" : isXls ? "Excel" : "Word";
+      toast({ title: `${fileLabel} anexado ao evento` });
     } catch (err: any) {
       toast({ title: "Erro ao processar arquivo", description: err.message, variant: "destructive" });
     } finally {
@@ -237,7 +250,7 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileUp className="h-4 w-4" />
-            Importar Lista de Material (PDF / Excel)
+            Importar Lista de Material (PDF / Excel / Word)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -253,24 +266,24 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
               ) : (
                 <Upload className="h-4 w-4 mr-1" />
               )}
-              {extracting ? "Extraindo..." : "Enviar PDF / Excel"}
+              {extracting ? "Extraindo..." : "Enviar Arquivo"}
             </Button>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.xlsx,.xls"
+              accept=".pdf,.xlsx,.xls,.docx,.doc"
               className="hidden"
               onChange={handleFileSelect}
             />
             <span className="text-xs text-muted-foreground">
-              PDF ou Excel será anexado e o conteúdo extraído para importação
+              PDF, Excel ou Word — será anexado e o conteúdo extraído para importação
             </span>
           </div>
 
           {/* Attached files */}
           {attachedFiles.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">PDFs anexados:</p>
+              <p className="text-xs font-medium text-muted-foreground">Arquivos anexados:</p>
               {attachedFiles.map((f) => (
                 <div
                   key={f.id}
@@ -278,6 +291,8 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
                 >
                   {f.file_name?.endsWith(".xlsx") || f.file_name?.endsWith(".xls") ? (
                     <FileSpreadsheet className="h-4 w-4 text-accent-foreground shrink-0" />
+                  ) : f.file_name?.endsWith(".docx") || f.file_name?.endsWith(".doc") ? (
+                    <FileText className="h-4 w-4 text-accent-foreground shrink-0" />
                   ) : (
                     <FileText className="h-4 w-4 text-primary shrink-0" />
                   )}
