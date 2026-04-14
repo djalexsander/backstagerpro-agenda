@@ -294,17 +294,22 @@ export default function PlanoAssinatura() {
             {activeModules.map((mod) => (
               <Card key={mod.id} className="border-accent/30">
                 <CardContent className="pt-4 pb-4 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-1">
                     <p className="font-medium flex items-center gap-1.5">
                       <CheckCircle className="h-4 w-4 text-accent" />
                       {mod.catalog?.nome || "Módulo"}
                     </p>
-                    {mod.granted_by_admin && Number(mod.valor_cobrado) === 0 && (
-                      <Badge variant="outline" className="text-xs gap-1"><Gift className="h-3 w-3" /> Cortesia</Badge>
-                    )}
-                    {mod.granted_by_admin && Number(mod.valor_cobrado) > 0 && (
-                      <Badge variant="outline" className="text-xs">Admin</Badge>
-                    )}
+                    <div className="flex gap-1">
+                      {(mod as any).trial_granted && (
+                        <Badge variant="secondary" className="text-xs gap-1"><Clock className="h-3 w-3" /> Trial</Badge>
+                      )}
+                      {mod.granted_by_admin && Number(mod.valor_cobrado) === 0 && (
+                        <Badge variant="outline" className="text-xs gap-1"><Gift className="h-3 w-3" /> Cortesia</Badge>
+                      )}
+                      {mod.granted_by_admin && Number(mod.valor_cobrado) > 0 && (
+                        <Badge variant="outline" className="text-xs">Admin</Badge>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     R$ {Number(mod.valor_cobrado).toFixed(2)}/{mod.catalog?.periodicidade || "mês"}
