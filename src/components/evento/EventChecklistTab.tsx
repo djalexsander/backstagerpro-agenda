@@ -137,6 +137,15 @@ export function EventChecklistTab({ eventId }: Props) {
         </Card>
       )}
 
+      {/* PDF Import */}
+      {isAdmin && empresaId && (
+        <ChecklistPdfImport
+          eventId={eventId}
+          empresaId={empresaId}
+          onImportItems={batchAddItems}
+        />
+      )}
+
       {/* Checklist by Category */}
       {items.length === 0 ? (
         <Card>
