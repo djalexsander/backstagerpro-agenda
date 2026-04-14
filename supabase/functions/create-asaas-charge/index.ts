@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     }
 
     // 1. Find or create Asaas customer
-    const customerName = empresa?.nome_empresa || "Cliente Backstage Pro";
+    const customerName = `[Backstage Pro] ${empresa?.nome_empresa || "Cliente"}`;
     const customerEmail = empresa?.email || user.email;
 
     const searchRes = await fetch(`${ASAAS_API_URL}/customers?email=${encodeURIComponent(customerEmail!)}`, {
@@ -84,8 +84,10 @@ Deno.serve(async (req) => {
 
     // 2. Create charge — ALWAYS PIX for Backstage Pro
     const dueDate = due_date || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const chargeDescription = description || `Backstage Pro - ${payment_type === "base_plan" ? "Plano Base" : "Módulos Adicionais"}`;
-    const externalRef = `bsp:${profile.empresa_id.substring(0, 36)}:${payment_type}`;
+    const chargeDescription = description
+      ? `[Backstage Pro] ${description}`
+      : `[Backstage Pro] ${payment_type === "base_plan" ? "Plano Base" : "Módulos Adicionais"} - ${empresa?.nome_empresa || ""}`;
+    const externalRef = `backstage_pro:${profile.empresa_id}:${payment_type}`;
 
     const chargeRes = await fetch(`${ASAAS_API_URL}/payments`, {
       method: "POST",
