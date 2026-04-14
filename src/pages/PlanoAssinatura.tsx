@@ -34,11 +34,25 @@ export default function PlanoAssinatura() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [pixPayload, setPixPayload] = useState("");
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
   const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
   const [showBatchSummary, setShowBatchSummary] = useState(false);
   const [batchObservacao, setBatchObservacao] = useState("");
+  const [generatingCharge, setGeneratingCharge] = useState(false);
+
+  // Asaas charge data (for both plan payment and module batch)
+  const [asaasData, setAsaasData] = useState<{
+    pix_qr_code: string | null;
+    pix_copy_paste: string | null;
+    invoice_url: string | null;
+  } | null>(null);
+  const [asaasModuleData, setAsaasModuleData] = useState<{
+    pix_qr_code: string | null;
+    pix_copy_paste: string | null;
+    invoice_url: string | null;
+  } | null>(null);
+  const [generatingModuleCharge, setGeneratingModuleCharge] = useState(false);
+  const [showModulePix, setShowModulePix] = useState(false);
 
   // Fetch empresa
   const { data: empresa } = useQuery({
