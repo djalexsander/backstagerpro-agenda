@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -45,6 +45,7 @@ export function AppSidebar() {
         { title: "Plano / Assinatura", url: "/plano", icon: CreditCard },
         { title: "Documentos", url: "/documentos", icon: FileText },
         { title: "Funcionários", url: "/funcionarios", icon: HardHat },
+        { title: "Módulos", url: "/modulos", icon: Package },
         { title: "Backups", url: "/backups", icon: Database },
       ];
 
@@ -54,6 +55,8 @@ export function AppSidebar() {
     { title: "Financeiro", url: "/master/financeiro", icon: DollarSign },
     { title: "Planos", url: "/master/planos", icon: CreditCard },
     { title: "Módulos", url: "/master/modulos", icon: Package },
+    { title: "Solicitações", url: "/master/solicitacoes-modulos", icon: FileCheck },
+    { title: "Pgto Módulos", url: "/master/pagamentos-modulos", icon: Wallet },
     { title: "Usuários Globais", url: "/master/usuarios", icon: Users },
     { title: "Configurações", url: "/master/configuracoes", icon: Settings },
     { title: "Logs do Sistema", url: "/master/logs", icon: ScrollText },
