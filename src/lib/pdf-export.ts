@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { format, parseISO } from "date-fns";
+import { format as formatDate, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 import { PdfBranding, addBrandingHeader } from "./pdf-branding";
 import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
