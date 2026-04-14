@@ -25,6 +25,8 @@ import {
   type ReportType,
 } from "@/lib/report-export-service";
 
+export type { ExportFilters, ExportMode, ReportType } from "@/lib/report-export-service";
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
