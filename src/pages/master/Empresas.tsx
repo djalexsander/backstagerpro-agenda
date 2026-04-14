@@ -516,11 +516,24 @@ export default function Empresas() {
       <Dialog open={!!detailEmpresa} onOpenChange={(o) => !o && setDetailEmpresa(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl">{detailEmpresa?.nome_empresa}</DialogTitle>
+            <div className="flex items-center gap-3">
+              <DialogTitle className="text-xl">{detailEmpresa?.nome_empresa}</DialogTitle>
+              {detailEmpresa && (() => {
+                const modelo = classifyEmpresaModel(detailEmpresa);
+                return modelo === "novo" ? (
+                  <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs"><Sparkles className="h-3 w-3 mr-0.5" /> Modelo Novo</Badge>
+                ) : modelo === "onboarding" ? (
+                  <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30 text-xs">Onboarding</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground text-xs"><AlertTriangle className="h-3 w-3 mr-0.5" /> Modelo Legado</Badge>
+                );
+              })()}
+            </div>
           </DialogHeader>
           {detailEmpresa && (() => {
             const planoInfo = getPlanoInfo(detailEmpresa);
             const vencido = isVencimentoExpired(detailEmpresa);
+            const mods = moduleCounts[detailEmpresa.id];
             return (
               <div className="space-y-6">
                 {/* Info da empresa */}
@@ -531,8 +544,18 @@ export default function Empresas() {
                     <Badge className={detailEmpresa.status === "ativo" ? "bg-accent text-accent-foreground" : "bg-destructive text-destructive-foreground"}>
                       {detailEmpresa.plano_bloqueado ? "Bloqueado" : detailEmpresa.status}
                     </Badge>
+                    {detailEmpresa.status_pagamento === "pendente" && (
+                      <Badge className="bg-amber-500/15 text-amber-700 border border-amber-500/30 ml-1 text-[10px]">Pgto Pendente</Badge>
+                    )}
                   </div>
                   <div><span className="text-muted-foreground">Criado em:</span> <span className="font-medium">{format(new Date(detailEmpresa.created_at), "dd/MM/yyyy", { locale: ptBR })}</span></div>
+                  {mods && mods.total > 0 && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Módulos:</span>{" "}
+                      <span className="font-medium">{mods.active} ativo{mods.active !== 1 ? "s" : ""}</span>
+                      {mods.pending > 0 && <span className="text-amber-600 ml-1">• {mods.pending} pendente{mods.pending !== 1 ? "s" : ""}</span>}
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
