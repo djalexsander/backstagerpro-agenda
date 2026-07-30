@@ -26,6 +26,10 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { exportEventPDF } from "@/lib/pdf-export";
+import {
+  removeEventFile,
+  uploadEventFile,
+} from "@/lib/event-file-service";
 
 const statusColors: Record<string, string> = {
   confirmado: "bg-accent text-accent-foreground",
@@ -40,7 +44,7 @@ const statusColors: Record<string, string> = {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin, empresaNome, empresaLogoUrl } = useAuth();
+  const { isAdmin, empresaNome, empresaLogoUrl, role } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [downloadPending, setDownloadPending] = useState<{ path: string; name: string } | null>(null);
@@ -129,24 +133,20 @@ export default function EventDetail() {
 
   const handleUploadRider = async (dayId: string, file: File) => {
     try {
-      // Delete existing rider for this day
       const existingFile = files.find((f) => f.event_day_id === dayId && f.file_type !== "material_list");
-      if (existingFile) {
-        await supabase.storage.from("event-files").remove([existingFile.file_path]);
-        await supabase.from("event_files").delete().eq("id", existingFile.id);
-      }
-      const path = `${id}/day_${dayId}_${Date.now()}_${file.name}`;
-      const { error: upErr } = await supabase.storage.from("event-files").upload(path, file);
-      if (upErr) throw upErr;
-      const { error: insErr } = await supabase.from("event_files").insert({
-        event_id: id!,
-        event_day_id: dayId,
-        file_type: "artist_rider" as any,
-        file_path: path,
-        file_name: file.name,
-        empresa_id: event?.empresa_id,
-      } as any);
-      if (insErr) throw insErr;
+      if (!id || !event?.empresa_id) throw new Error("Evento sem empresa válida");
+      await uploadEventFile({
+        eventId: id,
+        eventDayId: dayId,
+        empresaId: event.empresa_id,
+        file,
+        fileType: "artist_rider",
+        kind: "day",
+        role,
+        replacement: existingFile
+          ? { id: existingFile.id, file_path: existingFile.file_path }
+          : undefined,
+      });
       queryClient.invalidateQueries({ queryKey: ["event-files", id] });
       toast({ title: "Rider atualizado!" });
     } catch (err: any) {
@@ -156,8 +156,13 @@ export default function EventDetail() {
 
   const handleRemoveRider = async (fileId: string, filePath: string) => {
     try {
-      await supabase.storage.from("event-files").remove([filePath]);
-      await supabase.from("event_files").delete().eq("id", fileId);
+      if (!id) throw new Error("Evento inválido");
+      await removeEventFile({
+        eventId: id,
+        fileId,
+        filePath,
+        role,
+      });
       queryClient.invalidateQueries({ queryKey: ["event-files", id] });
       toast({ title: "Rider removido!" });
     } catch (err: any) {

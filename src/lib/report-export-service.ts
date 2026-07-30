@@ -1,4 +1,4 @@
-import { endOfMonth, format, startOfMonth } from "date-fns";
+import { endOfMonth, format, parseISO, startOfMonth } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import type { PdfBranding } from "@/lib/pdf-branding";
@@ -167,7 +167,9 @@ export function buildExportFileName(ctx: FileNameContext): string {
     if (ctx.eventName) parts.push(slugify(ctx.eventName));
     if (ctx.eventDate) {
       try {
-        const d = new Date(ctx.eventDate);
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(ctx.eventDate)
+          ? parseISO(ctx.eventDate)
+          : new Date(ctx.eventDate);
         if (!isNaN(d.getTime())) {
           parts.push(`${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`);
         }
@@ -274,15 +276,16 @@ export async function executeReportExport({
 
   const events = await fetchEventsForExport(empresaId, filters);
 
-  if (events.length === 0) {
+  const firstEvent = events[0];
+  if (!firstEvent) {
     throw new Error("Nenhum evento foi encontrado para os filtros selecionados.");
   }
 
   const fileName = buildExportFileName({
     reportType: reportType === "dashboard" ? "dashboard" : "agenda",
     filters,
-    eventName: filters.mode === "evento" && events.length > 0 ? events[0].name : undefined,
-    eventDate: filters.mode === "evento" && events.length > 0 ? events[0].date : undefined,
+    eventName: filters.mode === "evento" ? firstEvent.name : undefined,
+    eventDate: filters.mode === "evento" ? firstEvent.date : undefined,
   });
   await exportAgendaPDF(events, branding, exportFormat, buildNameOpts(fileName));
 }

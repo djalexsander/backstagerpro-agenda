@@ -17,13 +17,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Power, PowerOff, Gift, Zap, HardDrive, Clock, Pencil, Trash2, CheckCircle, Star } from "lucide-react";
+import { Plus, Power, PowerOff, Gift, Zap, HardDrive, Clock, Pencil, Trash2, CheckCircle, Star, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface Props {
   empresaId: string;
   empresaNome: string;
+  isLifetime?: boolean;
 }
 
 const STATUS_BADGE: Record<string, { className: string; label: string }> = {
@@ -42,7 +43,11 @@ const ORIGEM_LABELS: Record<string, string> = {
   pagamento: "Pagamento",
 };
 
-export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
+export function EmpresaModulesManager({
+  empresaId,
+  empresaNome,
+  isLifetime = false,
+}: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -277,6 +282,37 @@ export function EmpresaModulesManager({ empresaId, empresaNome }: Props) {
     setEditValor(String(em.valor_cobrado));
     setEditOpen(true);
   };
+
+  if (isLifetime) {
+    return (
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Zap className="h-4 w-4 text-primary" /> Módulos
+          <Badge className="bg-primary/15 text-primary border border-primary/30 text-[10px]">
+            <Sparkles className="h-3 w-3 mr-1" /> Todos inclusos
+          </Badge>
+        </h3>
+        <Card className="border-primary/30 bg-primary/[0.03]">
+          <CardContent className="py-5">
+            <p className="font-medium">Licença Vitalícia</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Todos os módulos atuais e futuros estão liberados sem cobrança,
+              atribuição individual ou vencimento.
+            </p>
+            {activeCatalog.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {activeCatalog.map((module) => (
+                  <Badge key={module.id} variant="outline">
+                    {module.nome}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>

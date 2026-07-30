@@ -78,6 +78,7 @@ export interface SubscriptionSummary {
   vencimento: string | null;
   /** Se a empresa está em trial */
   isOnTrial: boolean;
+  isLifetime: boolean;
   /** Se o acesso está expirado */
   isExpired: boolean;
   /** Se está em modo read-only */

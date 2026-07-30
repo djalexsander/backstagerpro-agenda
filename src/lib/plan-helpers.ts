@@ -179,6 +179,17 @@ export function computeConsolidatedCapabilities(
   planoBase: Tables<"planos"> | null,
   activeModules: EnrichedEmpresaModule[] = [],
 ): NewPlanCapabilities {
+  if (planoBase?.periodicidade === "vitalicio") {
+    return {
+      maxUsuarios: null,
+      maxEventos: null,
+      storageLimitGb: null,
+      activeFeatures: activeModules
+        .map((module) => module.catalog?.feature_key)
+        .filter((feature): feature is string => Boolean(feature)),
+    };
+  }
+
   let maxUsuarios: number | null = planoBase?.max_usuarios ?? null;
   let maxEventos: number | null = planoBase?.max_eventos ?? null;
   let storageLimitGb: number | null = planoBase?.storage_limit ?? null;

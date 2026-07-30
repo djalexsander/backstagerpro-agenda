@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
+import { canShowMaterialsNavigation } from "@/lib/material-permissions";
+import { canShowStockNavigation } from "@/lib/stock-permissions";
 import appVersion from "../../package.json";
 
 const APP_VERSION = appVersion.version;
@@ -25,6 +27,14 @@ export function AppSidebar() {
   const displayName = isMasterAdmin ? platformName : (empresaNome || platformName);
 
   const isUsuario = !isMasterAdmin && !isAdminEmpresa;
+  const hasMaterialsAccess = canShowMaterialsNavigation({
+    isMasterAdmin,
+    moduleEnabled: hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
+  });
+  const hasStockAccess = canShowStockNavigation({
+    isMasterAdmin,
+    moduleEnabled: hasModule(MODULE_KEYS.CONTROLE_ESTOQUE),
+  });
 
   // Items that require specific modules (only shown when module is active or user is master)
   const moduleGatedItems = isMasterAdmin ? [
@@ -51,11 +61,23 @@ export function AppSidebar() {
   const companyItems = isUsuario
     ? [
         { title: "Agenda", url: "/agenda", icon: Calendar },
+        ...(hasMaterialsAccess
+          ? [{ title: "Materiais", url: "/materiais", icon: Package }]
+          : []),
+        ...(hasStockAccess
+          ? [{ title: "Estoque", url: "/estoque", icon: Warehouse }]
+          : []),
         ...(empresaReadOnly ? [{ title: "Assinatura e Módulos", url: "/plano", icon: CreditCard }] : []),
       ]
     : [
         { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { title: "Agenda", url: "/agenda", icon: Calendar },
+        ...(hasMaterialsAccess
+          ? [{ title: "Materiais", url: "/materiais", icon: Package }]
+          : []),
+        ...(hasStockAccess
+          ? [{ title: "Estoque", url: "/estoque", icon: Warehouse }]
+          : []),
         ...moduleGatedItems,
         { title: "Assinatura e Módulos", url: "/plano", icon: CreditCard },
       ];

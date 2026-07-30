@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, Upload, Globe, Shield, Image, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
+import { useAuth } from "@/contexts/AuthContext";
+import { uploadPlatformLogo } from "@/lib/logo-service";
+import { validateLogoFile } from "@/lib/logo-security";
 
 type SettingsMap = Record<string, string | null>;
 
@@ -29,6 +32,7 @@ const SAVEABLE_KEYS = [
 
 export default function ConfiguracoesSistema() {
   const queryClient = useQueryClient();
+  const { role } = useAuth();
   const [form, setForm] = useState<SettingsMap>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -84,23 +88,7 @@ export default function ConfiguracoesSistema() {
     setIsUploadingLogo(true);
 
     try {
-      const ext = logoFile.name.split(".").pop()?.toLowerCase() || "png";
-      const path = `platform-logo-${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("logos")
-        .upload(path, logoFile, { upsert: true });
-
-      if (uploadError) {
-        toast.error(`Erro ao fazer upload da logo: ${uploadError.message}`);
-        return;
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("logos")
-        .getPublicUrl(path);
-
-      const url = `${urlData.publicUrl}?v=${Date.now()}`;
+      const url = await uploadPlatformLogo({ file: logoFile, role });
 
       const { error: updateError } = await supabase
         .from("system_settings")
@@ -118,6 +106,12 @@ export default function ConfiguracoesSistema() {
       if (logoInputRef.current) logoInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["system-settings"] });
       toast.success("Logo enviada com sucesso!");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? `Erro ao fazer upload da logo: ${error.message}`
+          : "Erro ao fazer upload da logo",
+      );
     } finally {
       setIsUploadingLogo(false);
     }
@@ -196,12 +190,20 @@ export default function ConfiguracoesSistema() {
               <Input
                 ref={logoInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    setLogoFile(file);
-                    setLogoPreview(URL.createObjectURL(file));
+                    try {
+                      validateLogoFile(file);
+                      setLogoFile(file);
+                      setLogoPreview(URL.createObjectURL(file));
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error ? error.message : "Logo inválida",
+                      );
+                      e.target.value = "";
+                    }
                   }
                 }}
               />

@@ -18,9 +18,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { format, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  removeCompanyLogo,
+  uploadCompanyLogo,
+} from "@/lib/logo-service";
+import { validateLogoFile } from "@/lib/logo-security";
+import {
+  getSubscriptionLimitLabel,
+  getSubscriptionValueLabel,
+  isLifetimePlan,
+} from "@/lib/subscription-license";
 
 export default function Empresas() {
   const { toast } = useToast();
+  const { role, empresaId: actorCompanyId } = useAuth();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
@@ -85,6 +97,7 @@ export default function Empresas() {
     }
     const plano = allPlanos.find((p: any) => p.id === empresa.plano_id);
     if (!plano) return "novo";
+    if (isLifetimePlan(plano)) return "novo";
     return plano.disponivel_novo_cadastro === false ? "legado" : "novo";
   };
 
@@ -101,14 +114,12 @@ export default function Empresas() {
 
   const uploadLogo = async (empresaId: string): Promise<string | null> => {
     if (!logoFile) return null;
-    const ext = logoFile.name.split(".").pop();
-    const path = `${empresaId}/logo.${ext}`;
-    // Remove old logo if exists
-    await supabase.storage.from("logos").remove([path]);
-    const { error } = await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
-    if (error) throw new Error("Erro ao fazer upload da logo: " + error.message);
-    const { data } = supabase.storage.from("logos").getPublicUrl(path);
-    return data.publicUrl + "?t=" + Date.now();
+    return uploadCompanyLogo({
+      companyId: empresaId,
+      actorCompanyId,
+      file: logoFile,
+      role,
+    });
   };
 
   const saveMutation = useMutation({
@@ -117,7 +128,7 @@ export default function Empresas() {
       const trialDays = plano?.trial_days || 0;
 
       const selectedPlano = planos.find((p: any) => p.nome === form.plano);
-      const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
+      const isVitalicio = isLifetimePlan(selectedPlano);
       const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null) };
 
       if (!editItem) {
@@ -132,7 +143,7 @@ export default function Empresas() {
           payload.trial_expires_at = expiresAt.toISOString();
         }
 
-        if (plano) {
+        if (plano && !isVitalicio) {
           payload.plano_id = plano.id;
         }
       }
@@ -148,7 +159,7 @@ export default function Empresas() {
             payload.trial_expires_at = null;
             payload.plano_bloqueado = false;
           }
-          if (plano) {
+          if (plano && !isVitalicio) {
             payload.plano_id = plano.id;
           }
         }
@@ -158,17 +169,47 @@ export default function Empresas() {
           payload.logo_url = await uploadLogo(editItem.id);
         }
 
-        const { error } = await supabase.from("empresas").update(payload).eq("id", editItem.id);
+        const directPayload = isVitalicio
+          ? {
+              nome_empresa: payload.nome_empresa,
+              email: payload.email,
+              telefone: payload.telefone,
+              ...(payload.logo_url ? { logo_url: payload.logo_url } : {}),
+            }
+          : payload;
+        const { error } = await supabase
+          .from("empresas")
+          .update(directPayload)
+          .eq("id", editItem.id);
         if (error) throw error;
+        if (isVitalicio) {
+          const { error: lifetimeError } = await supabase.rpc(
+            "set_company_lifetime_subscription",
+            { _empresa_id: editItem.id },
+          );
+          if (lifetimeError) throw lifetimeError;
+        }
       } else {
         const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
         if (error) throw error;
+
+        if (isVitalicio) {
+          const { error: lifetimeError } = await supabase.rpc(
+            "set_company_lifetime_subscription",
+            { _empresa_id: newEmpresa.id },
+          );
+          if (lifetimeError) throw lifetimeError;
+        }
 
         // Upload logo after creating empresa
         if (logoFile) {
           const logoUrl = await uploadLogo(newEmpresa.id);
           if (logoUrl) {
-            await supabase.from("empresas").update({ logo_url: logoUrl } as any).eq("id", newEmpresa.id);
+            const { error: logoUpdateError } = await supabase
+              .from("empresas")
+              .update({ logo_url: logoUrl })
+              .eq("id", newEmpresa.id);
+            if (logoUpdateError) throw logoUpdateError;
           }
         }
 
@@ -188,6 +229,7 @@ export default function Empresas() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
+      queryClient.invalidateQueries({ queryKey: ["company-lifetime-license"] });
       toast({ title: editItem ? "Empresa atualizada!" : "Empresa e usuário criados!" });
       setAddOpen(false);
       setEditItem(null);
@@ -220,15 +262,22 @@ export default function Empresas() {
       await supabase.from("notificacoes_master").delete().eq("empresa_id", id);
       await supabase.from("system_logs").delete().eq("empresa_id", id);
 
-      // Delete profiles and user_roles for users of this empresa
-      const { data: profiles } = await supabase.from("profiles").select("user_id").eq("empresa_id", id);
-      const userIds = (profiles || []).map((p: any) => p.user_id);
+      // Remove only this company's memberships. delete-user decides whether
+      // each global Auth identity is now orphaned.
+      const { data: memberships, error: membershipsError } = await supabase
+        .from("empresa_usuarios")
+        .select("user_id")
+        .eq("empresa_id", id);
+      if (membershipsError) throw membershipsError;
+      const userIds = (memberships || []).map((membership) => membership.user_id);
       if (userIds.length > 0) {
-        await supabase.from("user_roles").delete().in("user_id", userIds);
-        await supabase.from("profiles").delete().eq("empresa_id", id);
-        // Delete auth users via edge function
         for (const uid of userIds) {
-          await supabase.functions.invoke("delete-user", { body: { user_id: uid } });
+          const { data, error: unlinkError } = await supabase.functions.invoke(
+            "delete-user",
+            { body: { user_id: uid, empresa_id: id } },
+          );
+          if (unlinkError) throw unlinkError;
+          if (data?.error) throw new Error(data.error);
         }
       }
 
@@ -263,7 +312,7 @@ export default function Empresas() {
       const empresa = empresas.find((e: any) => e.id === pagamento.empresa_id);
       if (empresa) {
         const planoInfo = planos.find((p: any) => p.nome === empresa.plano || p.id === empresa.plano_id);
-        const isVitalicio = planoInfo?.periodicidade === "vitalicio";
+        const isVitalicio = isLifetimePlan(planoInfo);
         
         const updatePayload: any = {
           plano_bloqueado: false,
@@ -304,8 +353,15 @@ export default function Empresas() {
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: "Máximo 2MB", variant: "destructive" });
+    try {
+      validateLogoFile(file);
+    } catch (error) {
+      toast({
+        title: "Logo inválida",
+        description: error instanceof Error ? error.message : "Arquivo inválido",
+        variant: "destructive",
+      });
+      e.target.value = "";
       return;
     }
     setLogoFile(file);
@@ -314,7 +370,16 @@ export default function Empresas() {
 
   const removeLogo = useMutation({
     mutationFn: async (empresaId: string) => {
-      await supabase.from("empresas").update({ logo_url: null } as any).eq("id", empresaId);
+      await removeCompanyLogo({
+        companyId: empresaId,
+        actorCompanyId,
+        role,
+      });
+      const { error } = await supabase
+        .from("empresas")
+        .update({ logo_url: null })
+        .eq("id", empresaId);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-empresas"] });
@@ -327,7 +392,7 @@ export default function Empresas() {
     setLogoFile(null);
     setLogoPreview(e.logo_url || null);
     const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
-    const isVitalicio = planoInfo?.periodicidade === "vitalicio";
+    const isVitalicio = isLifetimePlan(planoInfo);
     setForm({ nome_empresa: e.nome_empresa, email: e.email || "", telefone: e.telefone || "", plano: e.plano || "basico", status: e.status || "ativo", papel: "admin_empresa", vencimento: isVitalicio ? null : (e.vencimento ? new Date(e.vencimento) : addMonths(new Date(), 1)) });
     setAddOpen(true);
   };
@@ -373,7 +438,7 @@ export default function Empresas() {
               <input
                 ref={logoInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/svg+xml"
+                accept="image/png,image/jpeg,image/webp"
                 className="hidden"
                 onChange={handleLogoSelect}
               />
@@ -398,7 +463,7 @@ export default function Empresas() {
                   <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
                     <Upload className="h-4 w-4 mr-1" /> {logoPreview ? "Trocar" : "Upload"}
                   </Button>
-                  <p className="text-[10px] text-muted-foreground">PNG, JPG ou SVG • Máx 2MB</p>
+                  <p className="text-[10px] text-muted-foreground">PNG, JPG ou WebP • Máx 2MB</p>
                 </div>
                 {editItem?.logo_url && !logoFile && logoPreview && (
                   <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => { removeLogo.mutate(editItem.id); setLogoPreview(null); }}>
@@ -532,6 +597,7 @@ export default function Empresas() {
           </DialogHeader>
           {detailEmpresa && (() => {
             const planoInfo = getPlanoInfo(detailEmpresa);
+            const isLifetime = isLifetimePlan(planoInfo);
             const vencido = isVencimentoExpired(detailEmpresa);
             const mods = moduleCounts[detailEmpresa.id];
             return (
@@ -549,11 +615,19 @@ export default function Empresas() {
                     )}
                   </div>
                   <div><span className="text-muted-foreground">Criado em:</span> <span className="font-medium">{format(new Date(detailEmpresa.created_at), "dd/MM/yyyy", { locale: ptBR })}</span></div>
-                  {mods && mods.total > 0 && (
+                  {(isLifetime || (mods && mods.total > 0)) && (
                     <div className="col-span-2">
                       <span className="text-muted-foreground">Módulos:</span>{" "}
-                      <span className="font-medium">{mods.active} ativo{mods.active !== 1 ? "s" : ""}</span>
-                      {mods.pending > 0 && <span className="text-amber-600 ml-1">• {mods.pending} pendente{mods.pending !== 1 ? "s" : ""}</span>}
+                      {isLifetime ? (
+                        <span className="font-medium text-primary">
+                          Todos liberados pela licença Vitalícia
+                        </span>
+                      ) : (
+                        <>
+                          <span className="font-medium">{mods.active} ativo{mods.active !== 1 ? "s" : ""}</span>
+                          {mods.pending > 0 && <span className="text-amber-600 ml-1">• {mods.pending} pendente{mods.pending !== 1 ? "s" : ""}</span>}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -573,15 +647,21 @@ export default function Empresas() {
                           </div>
                           <div>
                             <p className="text-muted-foreground text-xs">Valor</p>
-                            <p className="font-bold text-lg">R$ {Number(planoInfo.valor).toFixed(2)}</p>
+                            <p className="font-bold text-lg">
+                              {getSubscriptionValueLabel(planoInfo, Number(planoInfo.valor))}
+                            </p>
                           </div>
                           <div>
                             <p className="text-muted-foreground text-xs">Máx. Eventos</p>
-                            <p className="font-bold">{planoInfo.max_eventos ?? "Ilimitado"}</p>
+                            <p className="font-bold">
+                              {getSubscriptionLimitLabel(planoInfo.max_eventos, isLifetime)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-muted-foreground text-xs">Máx. Usuários</p>
-                            <p className="font-bold">{planoInfo.max_usuarios ?? "Ilimitado"}</p>
+                            <p className="font-bold">
+                              {getSubscriptionLimitLabel(planoInfo.max_usuarios, isLifetime)}
+                            </p>
                           </div>
                         </div>
                       ) : (
@@ -604,8 +684,8 @@ export default function Empresas() {
                           <CalendarDays className={`h-4 w-4 ${vencido ? "text-destructive" : "text-muted-foreground"}`} />
                           <div>
                             <p className="text-muted-foreground text-xs">Vencimento do Plano</p>
-                            {planoInfo?.periodicidade === "vitalicio" ? (
-                              <p className="font-medium text-accent">Vitalício</p>
+                            {isLifetime ? (
+                              <p className="font-medium text-accent">Sem vencimento</p>
                             ) : detailEmpresa.vencimento ? (
                               <p className={`font-medium ${vencido ? "text-destructive" : ""}`}>
                                 {format(new Date(detailEmpresa.vencimento), "dd/MM/yyyy", { locale: ptBR })}
@@ -618,7 +698,7 @@ export default function Empresas() {
                         </div>
                       </div>
 
-                      {detailEmpresa.trial_expires_at && (
+                      {!isLifetime && detailEmpresa.trial_expires_at && (
                         <div className="mt-3 pt-3 border-t border-border">
                           <div className="flex items-center gap-2 text-sm">
                             <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -635,7 +715,11 @@ export default function Empresas() {
                 <Separator />
 
                 {/* Módulos da empresa */}
-                <EmpresaModulesManager empresaId={detailEmpresa.id} empresaNome={detailEmpresa.nome_empresa} />
+                <EmpresaModulesManager
+                  empresaId={detailEmpresa.id}
+                  empresaNome={detailEmpresa.nome_empresa}
+                  isLifetime={isLifetime}
+                />
 
                 <Separator />
 
@@ -734,6 +818,8 @@ export default function Empresas() {
                 const blocked = e.plano_bloqueado;
                 const modelo = classifyEmpresaModel(e);
                 const mods = moduleCounts[e.id];
+                const planoInfo = getPlanoInfo(e);
+                const isLifetime = isLifetimePlan(planoInfo);
                 return (
                   <TableRow key={e.id} className={`${blocked ? "opacity-60" : ""} cursor-pointer hover:bg-muted/50`} onClick={() => setDetailEmpresa(e)}>
                     <TableCell className="font-medium">{e.nome_empresa}</TableCell>
@@ -757,8 +843,16 @@ export default function Empresas() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
-                        <Badge variant="secondary" className="capitalize text-xs w-fit">{e.plano || "—"}</Badge>
-                        {e.trial_expires_at && (
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "capitalize text-xs w-fit",
+                            isLifetime && "bg-primary/15 text-primary border border-primary/30",
+                          )}
+                        >
+                          {isLifetime ? "Vitalícia" : e.plano || "—"}
+                        </Badge>
+                        {!isLifetime && e.trial_expires_at && (
                           <span className={`text-[10px] ${new Date(e.trial_expires_at) < new Date() ? "text-destructive" : "text-primary"}`}>
                             Trial {new Date(e.trial_expires_at) < new Date() ? "expirado" : "ativo"}
                           </span>
@@ -766,7 +860,11 @@ export default function Empresas() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {mods ? (
+                      {isLifetime ? (
+                        <Badge className="bg-primary/15 text-primary border border-primary/30 text-[10px]">
+                          <Sparkles className="h-3 w-3 mr-1" /> Todos
+                        </Badge>
+                      ) : mods ? (
                         <div className="flex items-center gap-1">
                           <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-xs font-medium">{mods.total}</span>
@@ -780,8 +878,7 @@ export default function Empresas() {
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const planoInfo = planos.find((p: any) => p.nome === e.plano || p.id === e.plano_id);
-                        if (planoInfo?.periodicidade === "vitalicio") return <span className="text-xs font-medium text-accent">Vitalício</span>;
+                        if (isLifetime) return <span className="text-xs font-medium text-accent">Vitalício</span>;
                         return e.vencimento ? (
                           <span className={`text-xs ${vencido ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                             {vencido ? "Vencido " : ""}{format(new Date(e.vencimento), "dd/MM/yyyy", { locale: ptBR })}

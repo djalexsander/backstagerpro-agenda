@@ -5,9 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, CheckCircle, LogOut, Music } from "lucide-react";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
+import { getWaitingPaymentRedirect } from "@/lib/access-control";
 
 export default function AguardandoPagamento() {
-  const { statusPagamento, refreshProfile, signOut, isMasterAdmin } = useAuth();
+  const { statusPagamento, precisaEscolherPlano, refreshProfile, signOut, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
   const { platformLogoUrl, platformName } = usePlatformBranding();
 
@@ -19,16 +20,14 @@ export default function AguardandoPagamento() {
     return () => clearInterval(interval);
   }, [refreshProfile]);
 
-  // Auto-redirect when payment is confirmed
   useEffect(() => {
-    if (isMasterAdmin) {
-      navigate("/agenda", { replace: true });
-      return;
-    }
-    if (statusPagamento === "pago" || statusPagamento === "aprovado" || !statusPagamento) {
-      navigate("/agenda", { replace: true });
-    }
-  }, [statusPagamento, isMasterAdmin, navigate]);
+    const redirect = getWaitingPaymentRedirect({
+      isMasterAdmin,
+      needsPlanSelection: precisaEscolherPlano,
+      paymentStatus: statusPagamento,
+    });
+    if (redirect) navigate(redirect, { replace: true });
+  }, [statusPagamento, precisaEscolherPlano, isMasterAdmin, navigate]);
 
   const statusLabel = statusPagamento === "pagamento_em_analise"
     ? "Pagamento em Análise"

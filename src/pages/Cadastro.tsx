@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Music, ArrowLeft, Upload, X, ImageIcon } from "lucide-react";
+import { Music, ArrowLeft, MailCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
@@ -16,30 +16,12 @@ export default function Cadastro() {
   const [telefone, setTelefone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [website, setWebsite] = useState("");
   const [loading, setLoading] = useState(false);
-  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [submitted, setSubmitted] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { platformLogoUrl, platformName } = usePlatformBranding();
-
-  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: "Máximo 2MB", variant: "destructive" });
-      return;
-    }
-    setLogoFile(file);
-    setLogoPreview(URL.createObjectURL(file));
-  };
-
-  const removeLogo = () => {
-    setLogoFile(null);
-    setLogoPreview(null);
-    if (logoInputRef.current) logoInputRef.current.value = "";
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,55 +33,56 @@ export default function Cadastro() {
 
     setLoading(true);
     try {
-      // 1. Create empresa + user via edge function
       const res = await supabase.functions.invoke("self-register", {
-        body: { nome_empresa: nomeEmpresa, nome_responsavel: nomeResponsavel, email, telefone, password },
+        body: {
+          nome_empresa: nomeEmpresa,
+          nome_responsavel: nomeResponsavel,
+          email,
+          telefone,
+          password,
+          website,
+        },
       });
 
       const errorMsg = res.data?.error || (res.error && (typeof res.error === 'object' && 'message' in res.error ? res.error.message : String(res.error)));
       if (errorMsg) throw new Error(errorMsg);
 
-      const empresaId = res.data.empresa_id;
-
-      // 2. Auto sign-in
-      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInErr) throw signInErr;
-
-      // 3. Upload logo if provided (after sign-in so we have auth)
-      if (logoFile && empresaId) {
-        try {
-          const ext = logoFile.name.split(".").pop();
-          const path = `${empresaId}/logo.${ext}`;
-          const { error: uploadErr } = await supabase.storage.from("logos").upload(path, logoFile, { upsert: true });
-          if (uploadErr) {
-            console.error("Logo upload error:", uploadErr);
-            toast({ title: "Aviso", description: "Não foi possível enviar a logo. Você pode adicioná-la depois.", variant: "destructive" });
-          } else {
-            const { data: urlData } = supabase.storage.from("logos").getPublicUrl(path);
-            if (urlData?.publicUrl) {
-              const { error: updateErr } = await supabase
-                .from("empresas")
-                .update({ logo_url: urlData.publicUrl + "?t=" + Date.now() } as any)
-                .eq("id", empresaId);
-              if (updateErr) {
-                console.error("Logo URL save error:", updateErr);
-                toast({ title: "Aviso", description: "Logo enviada mas não foi possível vincular à empresa.", variant: "destructive" });
-              }
-            }
-          }
-        } catch (logoErr) {
-          console.error("Logo process error:", logoErr);
-        }
-      }
-
-      toast({ title: "Conta criada com sucesso!", description: "Escolha um plano para começar." });
-      navigate("/escolher-plano", { replace: true });
-    } catch (err: any) {
-      toast({ title: "Erro ao criar conta", description: err.message, variant: "destructive" });
+      setSubmitted(true);
+    } catch (err: unknown) {
+      toast({
+        title: "Erro ao criar conta",
+        description: err instanceof Error ? err.message : "Erro inesperado",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+              <MailCheck className="h-7 w-7 text-primary" />
+            </div>
+            <CardTitle>Confirme seu e-mail</CardTitle>
+            <CardDescription>
+              Se o cadastro puder ser iniciado, enviaremos um link de
+              confirmação para o endereço informado. Depois da confirmação,
+              você poderá entrar e escolher seu plano.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => navigate("/login")}>
+              Ir para o login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -124,42 +107,20 @@ export default function Cadastro() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Logo Upload */}
-              <div className="space-y-2">
-                <Label>Logo da Empresa</Label>
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/svg+xml"
-                  className="hidden"
-                  onChange={handleLogoSelect}
+              <div
+                className="absolute -left-[10000px] h-px w-px overflow-hidden"
+                aria-hidden="true"
+              >
+                <Label htmlFor="website">Website</Label>
+                <Input
+                  id="website"
+                  name="website"
+                  value={website}
+                  onChange={(event) => setWebsite(event.target.value)}
+                  autoComplete="off"
+                  tabIndex={-1}
                 />
-                <div className="flex items-center gap-3">
-                  {logoPreview ? (
-                    <div className="relative h-16 w-16 rounded-lg border border-border overflow-hidden bg-muted">
-                      <img src={logoPreview} alt="Preview" className="h-full w-full object-contain p-1" />
-                      <button
-                        type="button"
-                        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
-                        onClick={removeLogo}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="h-16 w-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/50">
-                      <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-1">
-                    <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                      <Upload className="h-4 w-4 mr-1" /> {logoPreview ? "Trocar" : "Upload"}
-                    </Button>
-                    <p className="text-[10px] text-muted-foreground">PNG, JPG ou SVG • Máx 2MB</p>
-                  </div>
-                </div>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="nomeEmpresa">Nome da Empresa *</Label>
                 <Input
@@ -208,8 +169,10 @@ export default function Cadastro() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
-                  placeholder="Mínimo 6 caracteres"
+                  minLength={8}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  placeholder="Mínimo 8 caracteres"
                 />
               </div>
               <div className="space-y-2">
@@ -220,7 +183,9 @@ export default function Cadastro() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
+                  maxLength={128}
+                  autoComplete="new-password"
                   placeholder="Repita a senha"
                 />
               </div>

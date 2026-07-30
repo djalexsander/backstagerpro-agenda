@@ -287,6 +287,11 @@ export default function PlanoAssinatura() {
               <Clock className="h-3 w-3 mr-1" /> Período de Teste
             </Badge>
           )}
+          {sub.isLifetime && (
+            <Badge className="w-fit bg-primary/15 text-primary border border-primary/30">
+              <Sparkles className="h-3 w-3 mr-1" /> Licença Vitalícia
+            </Badge>
+          )}
           {sub.isExpired && <Badge variant="destructive" className="w-fit">Expirado</Badge>}
         </CardHeader>
         <CardContent>
@@ -307,12 +312,26 @@ export default function PlanoAssinatura() {
                       {sub.planoBase.periodicidade === "vitalicio" ? "Valor Único" : sub.planoBase.periodicidade === "anual" ? "Valor Anual" : "Valor Mensal"}
                     </p>
                     <p className="font-semibold text-lg">
-                      R$ {Number(sub.planoBase.valor).toFixed(2)}
-                      {sub.planoBase.periodicidade !== "vitalicio" && <span className="text-sm font-normal text-muted-foreground">/{sub.planoBase.periodicidade === "anual" ? "ano" : "mês"}</span>}
+                      {sub.isLifetime ? (
+                        "Sem cobrança"
+                      ) : (
+                        <>
+                          R$ {Number(sub.planoBase.valor).toFixed(2)}
+                          {sub.planoBase.periodicidade !== "vitalicio" && <span className="text-sm font-normal text-muted-foreground">/{sub.planoBase.periodicidade === "anual" ? "ano" : "mês"}</span>}
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
-                {sub.vencimento && (
+                {sub.isLifetime ? (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Vencimento</p>
+                      <p className="font-semibold text-primary">Sem vencimento</p>
+                    </div>
+                  </div>
+                ) : sub.vencimento && (
                   <div className="flex items-center gap-3">
                     <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
@@ -365,18 +384,31 @@ export default function PlanoAssinatura() {
             )}
             <Separator />
             <div className="flex justify-between items-baseline">
-              <span className="font-semibold text-base">Total Mensal</span>
-              <span className="font-bold text-xl text-primary">R$ {sub.valorTotal.toFixed(2)}</span>
+              <span className="font-semibold text-base">
+                {sub.isLifetime ? "Licença permanente" : "Total Mensal"}
+              </span>
+              <span className="font-bold text-xl text-primary">
+                {sub.isLifetime ? "Sem cobrança" : `R$ ${sub.valorTotal.toFixed(2)}`}
+              </span>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-3 pt-1">
-            <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
-              <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
-            </Button>
-            <Button variant="outline" onClick={() => setShowUpgrade(true)}>
-              <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
-            </Button>
+            {sub.isLifetime ? (
+              <Badge className="bg-primary/15 text-primary border border-primary/30 px-3 py-2">
+                <Shield className="h-4 w-4 mr-2" />
+                Todos os módulos e capacidades estão incluídos
+              </Badge>
+            ) : (
+              <>
+                <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
+                  <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
+                </Button>
+                <Button variant="outline" onClick={() => setShowUpgrade(true)}>
+                  <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -386,7 +418,16 @@ export default function PlanoAssinatura() {
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-primary" /> Módulos Ativos
         </h2>
-        {activeModules.length === 0 ? (
+        {sub.isLifetime ? (
+          <Card className="border-primary/30 bg-primary/[0.03]">
+            <CardContent className="py-6 text-center">
+              <p className="font-medium text-primary">Todos os módulos liberados</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                A licença Vitalícia inclui automaticamente módulos atuais e futuros.
+              </p>
+            </CardContent>
+          </Card>
+        ) : activeModules.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center text-muted-foreground">
               Nenhum módulo ativo no momento. Explore os módulos disponíveis abaixo.
@@ -435,7 +476,7 @@ export default function PlanoAssinatura() {
       </div>
 
       {/* ─── MÓDULOS DISPONÍVEIS ─── */}
-      {availableModules.length > 0 && (
+      {!sub.isLifetime && availableModules.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" /> Módulos Disponíveis

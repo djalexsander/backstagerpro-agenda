@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSubscriptionRedirect } from "@/lib/access-control";
 
 interface Props {
   children: React.ReactNode;
@@ -22,28 +23,15 @@ export function ProtectedRoute({ children, adminOnly = false, masterOnly = false
 
   if (!user) return <Navigate to="/login" replace />;
 
-  // Redirect to plan selection if needed (skip for plan-related routes)
-  if (!skipPlanCheck && precisaEscolherPlano && !isMasterAdmin) {
-    return <Navigate to="/escolher-plano" replace />;
-  }
-
-  // Block access when payment is pending/in review — redirect to waiting page
-  if (!skipPlanCheck && !isMasterAdmin && statusPagamento && ["pendente", "aguardando_pagamento", "pagamento_em_analise"].includes(statusPagamento)) {
-    return <Navigate to="/aguardando-pagamento" replace />;
-  }
-
-  // When empresa is blocked/inactive, allow only view access + /plano full access
-  if (empresaBloqueada && !isMasterAdmin) {
-    const isPlanoRoute = location.pathname === "/plano";
-    const isViewOnlyRoute = ["/agenda", "/dashboard", "/financeiro", "/documentos", "/funcionarios", "/backups", "/usuarios", "/modulos"].some(
-      r => location.pathname.startsWith(r)
-    );
-    const isEventView = location.pathname.startsWith("/evento/") && !location.pathname.includes("/editar") && !location.pathname.includes("/novo");
-
-    if (!isPlanoRoute && !isViewOnlyRoute && !isEventView) {
-      return <Navigate to="/plano" replace />;
-    }
-  }
+  const subscriptionRedirect = getSubscriptionRedirect({
+    pathname: location.pathname,
+    skipPlanCheck,
+    isMasterAdmin,
+    companyBlocked: empresaBloqueada,
+    needsPlanSelection: precisaEscolherPlano,
+    paymentStatus: statusPagamento,
+  });
+  if (subscriptionRedirect) return <Navigate to={subscriptionRedirect} replace />;
 
   if (masterOnly && !isMasterAdmin) return <Navigate to="/agenda" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/agenda" replace />;

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "src/vite-env.d.ts",
+    "src/lib/pdf-branding.ts",
+    "src/lib/pdf-export.ts",
+    "src/lib/pdf-export-checklist.ts",
+    "src/lib/pdf-export-master.ts",
+    "src/lib/pdf-save.ts"
+  ]
+}

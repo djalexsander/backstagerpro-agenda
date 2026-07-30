@@ -1,97 +1,111 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  accessTokenHasActivationMethod,
+  normalizeActivationFlow,
+  validateActivationPassword,
+} from "../_shared/account-activation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "Método não permitido" }, 405);
+  }
 
   try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Link inválido ou expirado" }, 401);
+    }
+
+    const accessToken = authHeader.slice("Bearer ".length).trim();
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { email, password } = await req.json();
+    // getUser validates the access token with Supabase Auth. JWT claims are
+    // inspected only after this server-side validation.
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(accessToken);
+    if (userError || !user) {
+      return jsonResponse({ error: "Link inválido ou expirado" }, 401);
+    }
+    const { password: rawPassword, flow_type: rawFlow } = await req.json();
+    const password = validateActivationPassword(rawPassword);
+    const flow = normalizeActivationFlow(rawFlow);
+    const expectedFlow = normalizeActivationFlow(
+      user.user_metadata?.account_activation_flow,
+    );
 
-    if (!email || !password) {
-      throw new Error("Email e senha são obrigatórios");
+    if (
+      !flow ||
+      !expectedFlow ||
+      flow !== expectedFlow ||
+      !accessTokenHasActivationMethod(accessToken, flow)
+    ) {
+      return jsonResponse({ error: "Convite ou recuperação inválidos" }, 401);
     }
 
-    if (password.length < 6) {
-      throw new Error("A senha deve ter pelo menos 6 caracteres");
+    const { data: consumedAt, error: consumeError } = await supabaseAdmin.rpc(
+      "consume_account_activation",
+      { _user_id: user.id },
+    );
+    if (consumeError) throw consumeError;
+    if (!consumedAt) {
+      return jsonResponse(
+        { error: "Este link já foi utilizado ou a conta já está ativada" },
+        409,
+      );
     }
 
-    // Find user by email using filter (avoids pagination issues with listUsers)
-    const normalizedEmail = email.trim().toLowerCase();
-    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
-      perPage: 1,
-      page: 1,
+    const { error: passwordError } =
+      await supabaseAdmin.auth.admin.updateUserById(user.id, { password });
+    if (passwordError) {
+      // Release only the claim consumed by this request. A concurrent or later
+      // successful activation cannot be reverted by this compensation.
+      await supabaseAdmin
+        .from("profiles")
+        .update({ ativado: false, activated_at: null })
+        .eq("user_id", user.id)
+        .eq("activated_at", consumedAt);
+      throw passwordError;
+    }
+
+    const cleanMetadata = { ...(user.user_metadata ?? {}) };
+    delete cleanMetadata.account_activation_flow;
+    delete cleanMetadata.account_activation_requested_at;
+    await supabaseAdmin.auth.admin.updateUserById(user.id, {
+      user_metadata: cleanMetadata,
     });
 
-    // listUsers doesn't support email filter, so we search manually with pagination
-    let user = null;
-    let page = 1;
-    const perPage = 500;
-    while (!user) {
-      const { data: { users: batch }, error: batchErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
-      if (batchErr) throw batchErr;
-      if (batch.length === 0) break;
-      user = batch.find((u: any) => u.email === normalizedEmail);
-      if (batch.length < perPage) break;
-      page++;
-    }
-
-    if (!user) {
-      throw new Error("Email não encontrado no sistema. Verifique com o administrador.");
-    }
-
-    // Check if profile is already activated
-    const { data: profile, error: profileErr } = await supabaseAdmin
-      .from("profiles")
-      .select("ativado")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profileErr) throw new Error("Perfil não encontrado");
-
-    if (profile.ativado) {
-      throw new Error("Esta conta já foi ativada. Faça login normalmente.");
-    }
-
-    // Update password via admin API (user never sees the temporary password)
-    const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-      password,
-    });
-    if (updateErr) throw updateErr;
-
-    // Mark profile as activated
-    const { error: activateErr } = await supabaseAdmin
-      .from("profiles")
-      .update({ ativado: true })
-      .eq("user_id", user.id);
-    if (activateErr) throw activateErr;
-
-    // Log activation
     await supabaseAdmin.from("system_logs").insert({
       tipo: "auth",
       acao: "conta_ativada",
-      descricao: `Conta ativada pelo primeiro acesso: ${email}`,
+      descricao: `Conta ativada por ${flow} com OTP validado`,
       user_id: user.id,
-      user_name: email,
+      user_name: user.email,
     });
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ success: true });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    return jsonResponse({ error: message }, 400);
   }
 });

@@ -1,19 +1,45 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.99.2";
+import { authorizeInternalRequest } from "../_shared/internal-request.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+const responseHeaders = { "Content-Type": "application/json" };
+
+function jsonResponse(
+  body: Record<string, unknown>,
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: responseHeaders,
+  });
+}
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  const authorization = authorizeInternalRequest(
+    Deno.env.get("CHECK_VENCIMENTOS_SECRET"),
+    req.headers.get("x-internal-secret"),
+  );
+  if (authorization === "misconfigured") {
+    console.error(
+      "CHECK_VENCIMENTOS_SECRET is missing or shorter than 32 characters",
+    );
+    return jsonResponse({ error: "Scheduled task unavailable" }, 503);
+  }
+  if (authorization === "unauthorized") {
+    console.error("Unauthorized check-vencimentos invocation rejected");
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Supabase service configuration is missing");
+      return jsonResponse({ error: "Scheduled task unavailable" }, 503);
+    }
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const now = new Date();
@@ -28,10 +54,7 @@ Deno.serve(async (req) => {
 
     if (empError) {
       console.error("Error fetching empresas:", empError);
-      return new Response(JSON.stringify({ error: empError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Unable to check company expirations" }, 500);
     }
 
     // Also check plans to exclude vitalicio
@@ -41,8 +64,8 @@ Deno.serve(async (req) => {
 
     const vitalicioIds = new Set(
       (planos || [])
-        .filter((p: any) => p.periodicidade === "vitalicio")
-        .map((p: any) => p.id)
+        .filter((plan) => plan.periodicidade === "vitalicio")
+        .map((plan) => plan.id)
     );
 
     const results: { empresa: string; dias: number; tipo: string }[] = [];
@@ -178,15 +201,13 @@ Deno.serve(async (req) => {
 
     console.log(`Check completed. ${results.length} notifications created.`);
 
-    return new Response(
-      JSON.stringify({ success: true, notificacoes_criadas: results.length, detalhes: results }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      success: true,
+      notificacoes_criadas: results.length,
+      detalhes: results,
+    });
   } catch (err) {
     console.error("Unexpected error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Internal server error" }, 500);
   }
 });

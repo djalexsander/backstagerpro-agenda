@@ -23,4 +23,21 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: [
+      "src/lib/pdf-branding.ts",
+      "src/lib/pdf-export.ts",
+      "src/lib/pdf-export-checklist.ts",
+      "src/lib/pdf-export-master.ts",
+      "src/lib/pdf-save.ts",
+    ],
+    rules: {
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { prefer: "type-imports", fixStyle: "inline-type-imports" },
+      ],
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+    },
+  },
 );

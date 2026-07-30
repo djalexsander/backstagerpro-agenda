@@ -1,132 +1,166 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  isMissingAuthUserError,
+  validateUserRemovalRequest,
+} from "../_shared/user-removal.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "Método não permitido" }, 405);
+  }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      return jsonResponse({ error: "Serviço indisponível" }, 503);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const callerClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const {
-      data: { user: caller },
-    } = await callerClient.auth.getUser();
-    if (!caller) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const authHeader = req.headers.get("Authorization");
+    const bearerMatch = authHeader?.match(/^Bearer\s+(.+)$/i);
+    if (!bearerMatch) {
+      return jsonResponse({ error: "Não autorizado" }, 401);
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const {
+      data: { user: caller },
+      error: callerError,
+    } = await adminClient.auth.getUser(bearerMatch[1]);
+    if (callerError || !caller) {
+      return jsonResponse({ error: "Não autorizado" }, 401);
+    }
 
-    const { data: callerRole } = await adminClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", caller.id)
-      .single();
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return jsonResponse({ error: "Corpo JSON inválido" }, 400);
+    }
+    if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+      return jsonResponse({ error: "Corpo JSON inválido" }, 400);
+    }
 
-    if (
-      !callerRole ||
-      !["master_admin", "admin_empresa"].includes(callerRole.role)
-    ) {
-      return new Response(
-        JSON.stringify({ error: "Sem permissão para excluir usuários" }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+    let removalRequest;
+    try {
+      removalRequest = validateUserRemovalRequest(
+        rawBody as Record<string, unknown>,
       );
+    } catch (error) {
+      return jsonResponse({
+        error: error instanceof Error ? error.message : "Solicitação inválida",
+      }, 400);
     }
 
-    const { user_id } = await req.json();
-    if (!user_id) {
-      return new Response(
-        JSON.stringify({ error: "user_id é obrigatório" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    if (user_id === caller.id) {
-      return new Response(
-        JSON.stringify({ error: "Você não pode excluir a si mesmo" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    if (callerRole.role === "admin_empresa") {
-      const { data: callerProfile } = await adminClient
-        .from("profiles")
-        .select("empresa_id")
-        .eq("user_id", caller.id)
-        .single();
-
-      const { data: targetLink } = await adminClient
-        .from("empresa_usuarios")
-        .select("empresa_id")
-        .eq("user_id", user_id)
-        .eq("empresa_id", callerProfile?.empresa_id || "")
-        .maybeSingle();
-
-      if (!callerProfile?.empresa_id || !targetLink) {
-        return new Response(
-          JSON.stringify({
-            error: "Sem permissão para excluir este usuário",
-          }),
-          {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    // Delete from empresa_usuarios, user_roles, profiles (ignore errors if not found)
-    await adminClient.from("empresa_usuarios").delete().eq("user_id", user_id);
-    await adminClient.from("user_roles").delete().eq("user_id", user_id);
-    await adminClient.from("profiles").delete().eq("user_id", user_id);
-
-    // Delete from auth (ignore "User not found" — may already be deleted)
-    const { error: deleteError } = await adminClient.auth.admin.deleteUser(
-      user_id
+    const { data: unlinkData, error: unlinkError } = await adminClient.rpc(
+      "detach_company_user",
+      {
+        _actor_id: caller.id,
+        _target_user_id: removalRequest.userId,
+        _empresa_id: removalRequest.empresaId,
+      },
     );
-    if (deleteError && !deleteError.message?.includes("User not found")) {
-      throw deleteError;
+
+    if (unlinkError) {
+      console.error("Company user detach failed:", {
+        code: unlinkError.code,
+        message: unlinkError.message,
+      });
+      const status =
+        unlinkError.code === "42501"
+          ? 403
+          : unlinkError.code === "22023"
+            ? 400
+            : 500;
+      return jsonResponse({
+        error:
+          status === 403
+            ? "Sem permissão para remover este vínculo"
+            : status === 400
+              ? unlinkError.message
+              : "Não foi possível remover o vínculo",
+      }, status);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!unlinkData || typeof unlinkData !== "object" || Array.isArray(unlinkData)) {
+      throw new Error("Resposta inválida da remoção de vínculo");
+    }
+
+    const result = unlinkData as Record<string, unknown>;
+    const auditId = result.audit_id;
+    const shouldDeleteAuth = result.should_delete_auth === true;
+    if (typeof auditId !== "string") {
+      throw new Error("Auditoria da remoção não foi criada");
+    }
+
+    if (!shouldDeleteAuth) {
+      return jsonResponse({
+        success: true,
+        action: "company_unlinked",
+        auth_user_deleted: false,
+        remaining_links: result.remaining_links,
+        audit_id: auditId,
+      });
+    }
+
+    const { error: authDeleteError } =
+      await adminClient.auth.admin.deleteUser(removalRequest.userId);
+    const authDeleted =
+      !authDeleteError || isMissingAuthUserError(authDeleteError.message);
+
+    const { error: finalizeError } = await adminClient.rpc(
+      "finalize_user_auth_deletion",
+      {
+        _audit_id: auditId,
+        _success: authDeleted,
+        _error: authDeleteError?.message ?? null,
+      },
+    );
+
+    if (finalizeError) {
+      console.error("Unable to finalize user Auth deletion audit:", finalizeError);
+      return jsonResponse({
+        error: "Exclusão processada, mas a auditoria precisa ser retomada",
+        retryable: true,
+        audit_id: auditId,
+      }, 500);
+    }
+
+    if (!authDeleted) {
+      console.error("Supabase Auth user deletion failed:", authDeleteError);
+      return jsonResponse({
+        error: "Vínculo removido; exclusão da identidade Auth pendente",
+        retryable: true,
+        audit_id: auditId,
+      }, 500);
+    }
+
+    return jsonResponse({
+      success: true,
+      action: "auth_user_deleted",
+      auth_user_deleted: true,
+      remaining_links: 0,
+      audit_id: auditId,
     });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (error) {
+    console.error("delete-user error:", error);
+    return jsonResponse({ error: "Erro interno ao remover usuário" }, 500);
   }
 });

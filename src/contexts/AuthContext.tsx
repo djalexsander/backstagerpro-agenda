@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-
-type AppRole = "master_admin" | "admin_empresa" | "usuario";
+import { getCompanyAccessState } from "@/lib/access-control";
+import { selectHighestPriorityRole, type AppRole } from "@/lib/user-role";
 
 interface AuthContextType {
   user: User | null;
@@ -39,11 +39,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [empresaNome, setEmpresaNome] = useState<string | null>(null);
   const [statusPagamento, setStatusPagamento] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const authLoadIdRef = useRef(0);
 
   const fetchUserData = async (userId: string) => {
     const [profileRes, roleRes] = await Promise.all([
       supabase.from("profiles").select("full_name, avatar_url, empresa_id").eq("user_id", userId).single(),
-      supabase.from("user_roles").select("role").eq("user_id", userId).single(),
+      supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
     if (profileRes.data) {
       setProfile(profileRes.data as any);
@@ -51,22 +52,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileRes.data.empresa_id) {
         const { data: empresa } = await supabase
           .from("empresas")
-          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento, precisa_escolher_plano")
+          .select("plano_bloqueado, trial_expires_at, logo_url, nome_empresa, status, plano_id, vencimento, precisa_escolher_plano, status_pagamento, planos!empresas_plano_id_fkey(periodicidade)")
           .eq("id", profileRes.data.empresa_id)
           .single();
         if (empresa) {
-          const hasPlano = !!(empresa as any).plano_id;
-          const vencimento = (empresa as any).vencimento;
-          // If company has a plan, check vencimento; otherwise check trial_expires_at
-          const isExpired = hasPlano
-            ? (vencimento && new Date(vencimento) < new Date())
-            : (empresa.trial_expires_at && new Date(empresa.trial_expires_at) < new Date());
-          const isInactive = (empresa as any).status === "inativo";
-          setEmpresaBloqueada((empresa as any).plano_bloqueado || isExpired || isInactive);
-          setPrecisaEscolherPlano(!!(empresa as any).precisa_escolher_plano);
-          setEmpresaLogoUrl((empresa as any).logo_url || null);
-          setEmpresaNome((empresa as any).nome_empresa || null);
-          setStatusPagamento((empresa as any).status_pagamento || null);
+          const planRelation = empresa.planos as
+            | { periodicidade: string | null }
+            | null;
+          const access = getCompanyAccessState({
+            ...empresa,
+            plan_periodicity: planRelation?.periodicidade ?? null,
+          });
+          setEmpresaBloqueada(access.blocked);
+          setPrecisaEscolherPlano(access.needsPlanSelection);
+          setEmpresaLogoUrl(empresa.logo_url || null);
+          setEmpresaNome(empresa.nome_empresa || null);
+          setStatusPagamento(access.paymentStatus);
         } else {
           setEmpresaBloqueada(false);
           setPrecisaEscolherPlano(false);
@@ -76,22 +77,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setEmpresaBloqueada(false);
+        setPrecisaEscolherPlano(false);
         setEmpresaLogoUrl(null);
         setEmpresaNome(null);
         setStatusPagamento(null);
       }
     }
-    if (roleRes.data) setRole(roleRes.data.role as AppRole);
+    setRole(selectHighestPriorityRole(roleRes.data ?? []));
   };
 
   useEffect(() => {
+    let active = true;
+
+    const loadUserData = async (userId: string) => {
+      const loadId = ++authLoadIdRef.current;
+      setLoading(true);
+      try {
+        await fetchUserData(userId);
+      } finally {
+        if (active && authLoadIdRef.current === loadId) setLoading(false);
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          setTimeout(() => fetchUserData(session.user.id), 0);
+          setTimeout(() => {
+            if (active) void loadUserData(session.user.id);
+          }, 0);
         } else {
+          authLoadIdRef.current += 1;
           setProfile(null);
           setRole(null);
           setEmpresaBloqueada(false);
@@ -99,21 +116,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setEmpresaLogoUrl(null);
           setEmpresaNome(null);
           setStatusPagamento(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserData(session.user.id);
+        void loadUserData(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      authLoadIdRef.current += 1;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

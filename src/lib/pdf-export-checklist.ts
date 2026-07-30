@@ -1,8 +1,8 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format as formatDate } from "date-fns";
-import { PdfBranding, addBrandingHeader } from "./pdf-branding";
-import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
+import { addBrandingHeader, type PdfBranding } from "./pdf-branding";
+import { smartSavePDF, smartSavePNG, type SmartPDFNameOptions } from "./pdf-save";
 import type { ExportFormat } from "./pdf-export";
 import type { ChecklistItem } from "@/hooks/useEventChecklist";
 import { CHECKLIST_CATEGORIES } from "@/hooks/useEventChecklist";
@@ -18,6 +18,10 @@ interface ChecklistExportOptions {
     categoria?: string;
   };
 }
+
+type AutoTableDocument = jsPDF & {
+  lastAutoTable?: { finalY: number };
+};
 
 export async function exportChecklistPDF(opts: ChecklistExportOptions) {
   const { items, eventName, format, branding, filter } = opts;
@@ -85,7 +89,8 @@ export async function exportChecklistPDF(opts: ChecklistExportOptions) {
       },
     });
 
-    startY = (doc as any).lastAutoTable?.finalY + 6 || startY + 20;
+    const tableFinalY = (doc as AutoTableDocument).lastAutoTable?.finalY;
+    startY = tableFinalY ? tableFinalY + 6 : startY + 20;
   }
 
   // Build smart file name

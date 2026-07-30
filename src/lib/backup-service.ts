@@ -3,19 +3,26 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
   buildBackupPayload,
-  normalizeBackup,
-  validateBackup,
   MAX_AUTO_BACKUPS,
+  prepareBackupForRestore,
   setLastLocalBackupTime,
   type BackupPayload,
   type BackupData,
 } from "./backup-utils";
 import { format } from "date-fns";
+import {
+  assertBackupAdministrator,
+} from "./backup-security";
+import type { AppRole } from "./user-role";
+import type {
+  Json,
+  TablesInsert,
+} from "@/integrations/supabase/types";
 
 /**
  * Gathers all backup-worthy data for a given empresa.
  */
-export async function gatherBackupData(
+async function gatherBackupData(
   empresaId: string,
   dateStart?: string,
   dateEnd?: string
@@ -23,13 +30,14 @@ export async function gatherBackupData(
   let eventsQuery = supabase.from("events").select("*").eq("empresa_id", empresaId);
   if (dateStart) eventsQuery = eventsQuery.gte("date", dateStart);
   if (dateEnd) eventsQuery = eventsQuery.lte("date", dateEnd);
-  const { data: eventos } = await eventsQuery;
+  const { data: eventos, error: eventsError } = await eventsQuery;
+  if (eventsError) throw eventsError;
 
-  const eventIds = (eventos || []).map((e: any) => e.id);
+  const eventIds = (eventos || []).map((event) => event.id);
 
-  let eventDays: any[] = [];
-  let eventFiles: any[] = [];
-  let financials: any[] = [];
+  let eventDays: BackupData["event_days"] = [];
+  let eventFiles: BackupData["event_files"] = [];
+  let financials: BackupData["financials"] = [];
 
   if (eventIds.length > 0) {
     const [daysRes, filesRes, finRes] = await Promise.all([
@@ -37,6 +45,9 @@ export async function gatherBackupData(
       supabase.from("event_files").select("*").in("event_id", eventIds),
       supabase.from("financials").select("*").in("event_id", eventIds),
     ]);
+    if (daysRes.error) throw daysRes.error;
+    if (filesRes.error) throw filesRes.error;
+    if (finRes.error) throw finRes.error;
     eventDays = daysRes.data || [];
     eventFiles = filesRes.data || [];
     financials = finRes.data || [];
@@ -56,9 +67,11 @@ export async function gatherBackupData(
 export async function createBackup(
   empresaId: string,
   tipo: "auto" | "manual",
+  role: AppRole | null,
   dateStart?: string,
   dateEnd?: string
 ) {
+  assertBackupAdministrator(role);
   const data = await gatherBackupData(empresaId, dateStart, dateEnd);
 
   if (!data.eventos.length && tipo === "auto") {
@@ -68,14 +81,15 @@ export async function createBackup(
   const payload = buildBackupPayload(empresaId, tipo, data, dateStart, dateEnd);
   const nome = `Backup ${tipo === "auto" ? "Auto " : ""}${format(new Date(), "dd-MM-yyyy HH:mm")}`;
 
-  const { error } = await supabase.from("backups").insert({
+  const backupRow: TablesInsert<"backups"> = {
     empresa_id: empresaId,
     nome,
     tipo,
     periodo_inicio: dateStart || null,
     periodo_fim: dateEnd || null,
-    payload: payload as any,
-  } as any);
+    payload: payload as unknown as Json,
+  };
+  const { error } = await supabase.from("backups").insert(backupRow);
 
   if (error) throw error;
 
@@ -91,37 +105,45 @@ export async function createBackup(
 /**
  * Restores a backup, replacing all current empresa data.
  */
-export async function restoreBackup(empresaId: string, rawPayload: any) {
-  const normalized = normalizeBackup(rawPayload, empresaId);
-  const validation = validateBackup(normalized);
-
-  if (!validation.valid) {
-    throw new Error(`Backup inválido: ${validation.errors.join(", ")}`);
-  }
-
-  // Override empresa_id for safety
-  const payload = {
-    ...normalized,
-    meta: { ...normalized.meta, empresa_id: empresaId },
-    data: {
-      eventos: normalized.data.eventos.map((e: any) => ({ ...e, empresa_id: empresaId })),
-      event_days: normalized.data.event_days.map((d: any) => ({ ...d, empresa_id: empresaId })),
-      event_files: normalized.data.event_files.map((f: any) => ({ ...f, empresa_id: empresaId })),
-      financials: normalized.data.financials.map((f: any) => ({ ...f, empresa_id: empresaId })),
-    },
-  };
+export async function restoreBackup(
+  empresaId: string,
+  rawPayload: unknown,
+  role: AppRole | null,
+) {
+  assertBackupAdministrator(role);
+  const payload = prepareBackupForRestore(rawPayload, empresaId);
 
   try {
     // 1. Delete current data (order matters for FK constraints)
-    const { data: currentEvents } = await supabase.from("events").select("id").eq("empresa_id", empresaId);
-    const currentIds = (currentEvents || []).map((e: any) => e.id);
+    const { data: currentEvents, error: currentEventsError } = await supabase
+      .from("events")
+      .select("id")
+      .eq("empresa_id", empresaId);
+    if (currentEventsError) throw currentEventsError;
+    const currentIds = (currentEvents || []).map((event) => event.id);
 
     if (currentIds.length > 0) {
-      await supabase.from("event_files").delete().in("event_id", currentIds);
-      await supabase.from("event_days").delete().in("event_id", currentIds);
-      await supabase.from("financials").delete().in("event_id", currentIds);
+      const fileDelete = await supabase
+        .from("event_files")
+        .delete()
+        .in("event_id", currentIds);
+      if (fileDelete.error) throw fileDelete.error;
+      const dayDelete = await supabase
+        .from("event_days")
+        .delete()
+        .in("event_id", currentIds);
+      if (dayDelete.error) throw dayDelete.error;
+      const financialDelete = await supabase
+        .from("financials")
+        .delete()
+        .in("event_id", currentIds);
+      if (financialDelete.error) throw financialDelete.error;
     }
-    await supabase.from("events").delete().eq("empresa_id", empresaId);
+    const eventDelete = await supabase
+      .from("events")
+      .delete()
+      .eq("empresa_id", empresaId);
+    if (eventDelete.error) throw eventDelete.error;
 
     // 2. Insert backup data in correct order
     if (payload.data.eventos.length) {
@@ -149,16 +171,21 @@ export async function restoreBackup(empresaId: string, rawPayload: any) {
 /**
  * Keeps only the latest MAX_AUTO_BACKUPS auto backups.
  */
-export async function cleanupAutoBackups(empresaId: string) {
-  const { data } = await supabase
+async function cleanupAutoBackups(empresaId: string) {
+  const { data, error } = await supabase
     .from("backups")
     .select("id")
     .eq("empresa_id", empresaId)
     .eq("tipo", "auto")
     .order("created_at", { ascending: false });
+  if (error) throw error;
 
   if (data && data.length > MAX_AUTO_BACKUPS) {
-    const toDelete = data.slice(MAX_AUTO_BACKUPS).map((b: any) => b.id);
-    await supabase.from("backups").delete().in("id", toDelete);
+    const toDelete = data.slice(MAX_AUTO_BACKUPS).map((backup) => backup.id);
+    const { error: deleteError } = await supabase
+      .from("backups")
+      .delete()
+      .in("id", toDelete);
+    if (deleteError) throw deleteError;
   }
 }

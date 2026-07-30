@@ -1,16 +1,31 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import type { CellHookData } from "jspdf-autotable";
 import { format } from "date-fns";
-import { PdfBranding, addBrandingHeader } from "./pdf-branding";
-import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
+import type { Tables } from "@/integrations/supabase/types";
+import { addBrandingHeader, type PdfBranding } from "./pdf-branding";
+import { smartSavePDF, smartSavePNG, type SmartPDFNameOptions } from "./pdf-save";
 import type { ExportFormat } from "./pdf-export";
 
 const fmtBRL = (n: number | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
+type PaymentExportRow = Pick<
+  Tables<"pagamentos">,
+  "created_at" | "descricao" | "empresa_id" | "metodo" | "status" | "valor"
+> & {
+  empresas?: Pick<Tables<"empresas">, "nome_empresa"> | null;
+};
+
+type CompanyExportRow = Pick<Tables<"empresas">, "id" | "nome_empresa" | "plano">;
+
+type AutoTableDocument = jsPDF & {
+  lastAutoTable?: { finalY: number };
+};
+
 export async function exportMasterFinanceiroPDF(
-  pagamentos: any[],
-  empresas: any[],
+  pagamentos: PaymentExportRow[],
+  empresas: CompanyExportRow[],
   periodTitle: string,
   branding?: PdfBranding,
   fmt: ExportFormat = "pdf"
@@ -51,7 +66,8 @@ export async function exportMasterFinanceiroPDF(
     headStyles: { fillColor: [225, 29, 72] },
   });
 
-  let startY = (doc as any).lastAutoTable?.finalY + 12 || 120;
+  const tableFinalY = (doc as AutoTableDocument).lastAutoTable?.finalY;
+  let startY = tableFinalY ? tableFinalY + 12 : 120;
   
   if (startY > 170) {
     doc.addPage();
@@ -66,10 +82,10 @@ export async function exportMasterFinanceiroPDF(
     .map((e) => {
       const pago = pagamentos
         .filter((p) => p.empresa_id === e.id && p.status === "pago")
-        .reduce((a: number, p: any) => a + Number(p.valor || 0), 0);
+        .reduce((a, p) => a + Number(p.valor || 0), 0);
       const pendente = pagamentos
         .filter((p) => p.empresa_id === e.id && p.status === "pendente")
-        .reduce((a: number, p: any) => a + Number(p.valor || 0), 0);
+        .reduce((a, p) => a + Number(p.valor || 0), 0);
       if (pago === 0 && pendente === 0) return null;
       return [e.nome_empresa, e.plano || "—", fmtBRL(pago), fmtBRL(pendente), fmtBRL(pago + pendente)];
     })
@@ -84,7 +100,7 @@ export async function exportMasterFinanceiroPDF(
       body: empresaRows,
       styles: { fontSize: 9 },
       headStyles: { fillColor: [225, 29, 72] },
-      didParseCell: (data: any) => {
+      didParseCell: (data: CellHookData) => {
         if (data.row.index === empresaRows.length - 1) {
           data.cell.styles.fontStyle = "bold";
         }

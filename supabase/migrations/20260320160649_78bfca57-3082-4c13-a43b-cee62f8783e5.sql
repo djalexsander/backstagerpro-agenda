@@ -1,25 +1,20 @@
-
--- Delete all data except master admin user (92705736-b829-4145-bbba-537e6823a24c)
-
--- Delete event-related data
-DELETE FROM event_files;
-DELETE FROM event_funcionarios;
-DELETE FROM event_days;
-DELETE FROM financials;
-DELETE FROM events;
-
--- Delete company-related data
-DELETE FROM generated_documents;
-DELETE FROM document_templates;
-DELETE FROM backups;
-DELETE FROM pagamentos;
-DELETE FROM notificacoes_master;
-DELETE FROM system_logs;
-
--- Delete user linkage data (except master admin)
-DELETE FROM empresa_usuarios;
-DELETE FROM user_roles WHERE user_id != '92705736-b829-4145-bbba-537e6823a24c';
-DELETE FROM profiles WHERE user_id != '92705736-b829-4145-bbba-537e6823a24c';
-
--- Delete empresas
-DELETE FROM empresas;
+-- BLOCKED DESTRUCTIVE MIGRATION
+--
+-- The original migration deleted all operational and tenant data. It has been
+-- preserved verbatim outside the executable migration directory at:
+--   supabase/quarantined-migrations/
+--     20260320160649_78bfca57-3082-4c13-a43b-cee62f8783e5.sql
+--
+-- Keep this timestamp in place. Supabase identifies migration history by the
+-- version prefix, so this safe no-op works in both cases:
+--   1. remote already applied it: the version remains aligned;
+--   2. remote has not applied it: db push records the version without DELETEs.
+--
+-- Never restore the destructive statements here. Any exceptional data reset
+-- must be reviewed and executed as a separately approved operational procedure.
+DO $$
+BEGIN
+  RAISE NOTICE
+    'Migration 20260320160649 is quarantined; destructive data reset skipped';
+END;
+$$;

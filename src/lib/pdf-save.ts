@@ -26,6 +26,35 @@ export interface SmartPDFNameOptions {
   customName?: string;
 }
 
+interface PdfOutputDocument {
+  output(type: "arraybuffer"): ArrayBuffer;
+}
+
+interface WritableFileHandle {
+  write(data: Blob): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface SaveFileHandle {
+  createWritable(): Promise<WritableFileHandle>;
+}
+
+interface SaveFilePickerOptions {
+  suggestedName: string;
+  types: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}
+
+type WindowWithSaveFilePicker = Window & {
+  showSaveFilePicker?: (options: SaveFilePickerOptions) => Promise<SaveFileHandle>;
+};
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 /**
  * Build a professional filename from event metadata.
  */
@@ -56,7 +85,7 @@ export function buildPDFFileName(opts: SmartPDFNameOptions, extension: string = 
  * Save a jsPDF document with maximum cross-browser compatibility.
  */
 export async function smartSavePDF(
-  doc: { output: (type: string) => ArrayBuffer | Blob },
+  doc: PdfOutputDocument,
   nameOpts: SmartPDFNameOptions | string
 ): Promise<void> {
   const fileName = typeof nameOpts === "string" ? nameOpts : buildPDFFileName(nameOpts);
@@ -64,8 +93,9 @@ export async function smartSavePDF(
   const blob = new Blob([arrayBuffer], { type: "application/pdf" });
 
   try {
-    if ("showSaveFilePicker" in window) {
-      const handle = await (window as any).showSaveFilePicker({
+    const showSaveFilePicker = (window as WindowWithSaveFilePicker).showSaveFilePicker;
+    if (showSaveFilePicker) {
+      const handle = await showSaveFilePicker({
         suggestedName: fileName,
         types: [
           {
@@ -80,8 +110,8 @@ export async function smartSavePDF(
       toast.success("PDF salvo com sucesso!");
       return;
     }
-  } catch (err: any) {
-    if (err?.name === "AbortError") return;
+  } catch (err: unknown) {
+    if (isAbortError(err)) return;
     console.warn("showSaveFilePicker failed, using fallback:", err);
   }
 
@@ -109,7 +139,7 @@ export async function smartSavePDF(
  * Multi-page documents generate one PNG per page.
  */
 export async function smartSavePNG(
-  doc: any,
+  doc: PdfOutputDocument,
   nameOpts: SmartPDFNameOptions | string
 ): Promise<void> {
   try {

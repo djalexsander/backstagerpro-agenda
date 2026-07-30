@@ -1,4 +1,5 @@
 // Backup utility functions: validation, normalization, types
+import type { Tables } from "@/integrations/supabase/types";
 
 export const BACKUP_VERSION = "1.0";
 export const BACKUP_SYSTEM = "Backstage Pro";
@@ -15,10 +16,10 @@ export interface BackupMeta {
 }
 
 export interface BackupData {
-  eventos: any[];
-  event_days: any[];
-  event_files: any[];
-  financials: any[];
+  eventos: Tables<"events">[];
+  event_days: Tables<"event_days">[];
+  event_files: Tables<"event_files">[];
+  financials: Tables<"financials">[];
 }
 
 export interface BackupPayload {
@@ -32,23 +33,30 @@ export interface BackupPayload {
 interface LegacyPayload {
   empresa_id?: string;
   data_backup?: string;
-  eventos?: any[];
-  event_days?: any[];
-  event_files?: any[];
-  financials?: any[];
+  eventos?: BackupData["eventos"];
+  event_days?: BackupData["event_days"];
+  event_files?: BackupData["event_files"];
+  financials?: BackupData["financials"];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
  * Normalizes any backup payload (legacy or new) into the current format.
  */
-export function normalizeBackup(raw: any, fallbackEmpresaId?: string): BackupPayload {
+export function normalizeBackup(
+  raw: unknown,
+  fallbackEmpresaId?: string,
+): BackupPayload {
   // Already in new format
-  if (raw?.versao && raw?.meta && raw?.data) {
-    return raw as BackupPayload;
+  if (isRecord(raw) && raw.versao && raw.meta && raw.data) {
+    return raw as unknown as BackupPayload;
   }
 
   // Legacy format conversion
-  const legacy = raw as LegacyPayload;
+  const legacy = (isRecord(raw) ? raw : {}) as LegacyPayload;
   return {
     versao: BACKUP_VERSION,
     sistema: BACKUP_SYSTEM,
@@ -74,7 +82,7 @@ export interface ValidationResult {
 /**
  * Validates a backup payload structure.
  */
-export function validateBackup(payload: any): ValidationResult {
+export function validateBackup(payload: unknown): ValidationResult {
   const errors: string[] = [];
 
   if (!payload) {
@@ -135,6 +143,59 @@ export function buildBackupPayload(
       periodo_fim: periodoFim || null,
     },
     data,
+  };
+}
+
+/**
+ * Validates a backup and forces every restored row into the selected tenant.
+ * This pure step runs before any destructive database operation.
+ */
+export function prepareBackupForRestore(
+  rawPayload: unknown,
+  empresaId: string,
+): BackupPayload {
+  const hasCurrentStructure =
+    isRecord(rawPayload) &&
+    isRecord(rawPayload.meta) &&
+    isRecord(rawPayload.data);
+  const hasLegacyStructure =
+    isRecord(rawPayload) &&
+    ["eventos", "event_days", "event_files", "financials"].some((key) =>
+      Array.isArray(rawPayload[key]),
+    );
+
+  if (!hasCurrentStructure && !hasLegacyStructure) {
+    throw new Error("Backup inválido: estrutura não reconhecida");
+  }
+
+  const normalized = normalizeBackup(rawPayload, empresaId);
+  const validation = validateBackup(normalized);
+
+  if (!validation.valid) {
+    throw new Error(`Backup inválido: ${validation.errors.join(", ")}`);
+  }
+
+  return {
+    ...normalized,
+    meta: { ...normalized.meta, empresa_id: empresaId },
+    data: {
+      eventos: normalized.data.eventos.map((event) => ({
+        ...event,
+        empresa_id: empresaId,
+      })),
+      event_days: normalized.data.event_days.map((day) => ({
+        ...day,
+        empresa_id: empresaId,
+      })),
+      event_files: normalized.data.event_files.map((file) => ({
+        ...file,
+        empresa_id: empresaId,
+      })),
+      financials: normalized.data.financials.map((financial) => ({
+        ...financial,
+        empresa_id: empresaId,
+      })),
+    },
   };
 }
 

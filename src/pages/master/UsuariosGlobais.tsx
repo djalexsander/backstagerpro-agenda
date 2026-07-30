@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Pencil, Shield, Users, Globe, Trash2 } from "lucide-react";
+import { normalizeAppRole, selectHighestPriorityRole } from "@/lib/user-role";
 
 const roleLabels: Record<string, string> = {
   master_admin: "Master Admin",
@@ -42,11 +43,19 @@ export default function UsuariosGlobais() {
       if (pErr) throw pErr;
       const { data: roles, error: rErr } = await supabase.from("user_roles").select("*");
       if (rErr) throw rErr;
-      return profiles.map((p: any) => ({
-        ...p,
-        role: roles.find((r: any) => r.user_id === p.user_id)?.role || "usuario",
-        roleId: roles.find((r: any) => r.user_id === p.user_id)?.id,
-      }));
+      return profiles.map((p: any) => {
+        const userRoles = roles.filter((role) => role.user_id === p.user_id);
+        const selectedRole = selectHighestPriorityRole(userRoles) || "usuario";
+        const selectedRoleRecord = userRoles.find(
+          (role) => normalizeAppRole(role.role) === selectedRole,
+        );
+
+        return {
+          ...p,
+          role: selectedRole,
+          roleId: selectedRoleRecord?.id,
+        };
+      });
     },
   });
 
@@ -77,16 +86,27 @@ export default function UsuariosGlobais() {
   });
 
   const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async ({
+      userId,
+      empresaId,
+    }: {
+      userId: string;
+      empresaId: string | null;
+    }) => {
       const { data, error } = await supabase.functions.invoke("delete-user", {
-        body: { user_id: userId },
+        body: { user_id: userId, empresa_id: empresaId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["master-users"] });
-      toast({ title: "Usuário excluído com sucesso!" });
+      toast({
+        title: data?.auth_user_deleted
+          ? "Identidade Auth excluída"
+          : "Vínculo empresarial removido",
+      });
       setDeleteUser(null);
     },
     onError: (err: any) => toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" }),
@@ -147,17 +167,25 @@ export default function UsuariosGlobais() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir usuário</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir <strong>{deleteUser?.full_name}</strong>? Esta ação não pode ser desfeita. O usuário será removido completamente do sistema.
+              O vínculo empresarial de <strong>{deleteUser?.full_name}</strong>
+              será removido. A identidade Auth somente será excluída quando não
+              existir nenhum outro vínculo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.user_id)}
+              onClick={() =>
+                deleteUser &&
+                deleteUserMutation.mutate({
+                  userId: deleteUser.user_id,
+                  empresaId: deleteUser.empresa_id || null,
+                })
+              }
               disabled={deleteUserMutation.isPending}
             >
-              {deleteUserMutation.isPending ? "Excluindo..." : "Excluir"}
+              {deleteUserMutation.isPending ? "Removendo..." : "Remover vínculo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

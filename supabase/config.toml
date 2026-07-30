@@ -1,1 +1,7 @@
-project_id = "emmopbzhdlcmbycalloi"
+project_id = "zupcxxtnaglcappazciu"
+
+# This function authenticates scheduled calls with CHECK_VENCIMENTOS_SECRET
+# inside the handler. Disabling the JWT gateway check allows pg_net to send
+# that dedicated secret without storing a Supabase service-role credential.
+[functions.check-vencimentos]
+verify_jwt = false

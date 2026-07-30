@@ -11,11 +11,32 @@ import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 
 export default function EscolherPlano() {
-  const { refreshProfile } = useAuth();
+  const { empresaId, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { platformLogoUrl, platformName } = usePlatformBranding();
   const [loading, setLoading] = useState<string | null>(null);
+
+  const { data: trialState } = useQuery({
+    queryKey: ["trial-eligibility", empresaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("empresas")
+        .select(
+          "plano_id, trial_expires_at, trial_consumed_at, precisa_escolher_plano",
+        )
+        .eq("id", empresaId!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+  const trialAvailable =
+    trialState?.plano_id === null &&
+    trialState?.trial_expires_at === null &&
+    trialState?.trial_consumed_at === null &&
+    trialState?.precisa_escolher_plano === true;
 
   const { data: planos = [] } = useQuery({
     queryKey: ["planos-ativos-escolha"],
@@ -25,6 +46,7 @@ export default function EscolherPlano() {
         .select("*")
         .eq("ativo", true)
         .gt("valor", 0)
+        .neq("periodicidade", "vitalicio")
         .order("valor", { ascending: true });
       if (error) throw error;
       // Filter to only plans available for new signups
@@ -90,41 +112,43 @@ export default function EscolherPlano() {
         </div>
 
         {/* Free Trial Card */}
-        <Card className="mb-8 border-primary/40 bg-gradient-to-r from-primary/5 to-primary/10 shadow-sm">
-          <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 md:p-8">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                <Gift className="h-7 w-7 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold">Teste Gratuito de 7 Dias</h3>
-                <p className="text-muted-foreground mt-1">
-                  Experimente todas as funcionalidades sem compromisso. Sem cartão de crédito.
-                </p>
-                <div className="flex flex-wrap gap-3 mt-2">
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <CheckCircle className="h-3.5 w-3.5 text-primary" /> Acesso completo
-                  </span>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <CheckCircle className="h-3.5 w-3.5 text-primary" /> Sem compromisso
-                  </span>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <CheckCircle className="h-3.5 w-3.5 text-primary" /> Cancele quando quiser
-                  </span>
+        {trialAvailable && (
+          <Card className="mb-8 border-primary/40 bg-gradient-to-r from-primary/5 to-primary/10 shadow-sm">
+            <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 md:p-8">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                  <Gift className="h-7 w-7 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Teste Gratuito de 7 Dias</h3>
+                  <p className="text-muted-foreground mt-1">
+                    Experimente todas as funcionalidades sem compromisso. Sem cartão de crédito.
+                  </p>
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <CheckCircle className="h-3.5 w-3.5 text-primary" /> Acesso completo
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <CheckCircle className="h-3.5 w-3.5 text-primary" /> Sem compromisso
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <CheckCircle className="h-3.5 w-3.5 text-primary" /> Cancele quando quiser
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <Button
-              size="lg"
-              onClick={handleFreeTrial}
-              disabled={loading === "free"}
-              className="w-full sm:w-auto text-base px-8"
-            >
-              <Zap className="h-5 w-5 mr-2" />
-              {loading === "free" ? "Ativando..." : "Começar Grátis"}
-            </Button>
-          </CardContent>
-        </Card>
+              <Button
+                size="lg"
+                onClick={handleFreeTrial}
+                disabled={loading === "free"}
+                className="w-full sm:w-auto text-base px-8"
+              >
+                <Zap className="h-5 w-5 mr-2" />
+                {loading === "free" ? "Ativando..." : "Começar Grátis"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Divider */}
         <div className="flex items-center gap-4 mb-8">
@@ -199,9 +223,11 @@ export default function EscolherPlano() {
         {planos.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-lg">Nenhum plano pago disponível no momento.</p>
-            <Button variant="link" onClick={handleFreeTrial} className="mt-2 text-base">
-              Iniciar teste grátis de 7 dias
-            </Button>
+            {trialAvailable && (
+              <Button variant="link" onClick={handleFreeTrial} className="mt-2 text-base">
+                Iniciar teste grátis de 7 dias
+              </Button>
+            )}
           </div>
         )}
 

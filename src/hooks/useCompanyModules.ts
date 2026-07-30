@@ -17,6 +17,8 @@ import type {
   EmpresaModuleStatus,
 } from "@/types/subscription";
 import { useCallback, useMemo } from "react";
+import { isLifetimePlan } from "@/lib/subscription-license";
+import { isCompanyModuleAccessible } from "@/lib/company-module-access";
 
 interface UseCompanyModulesReturn {
   /** Todos os módulos da empresa (qualquer status) */
@@ -29,6 +31,7 @@ interface UseCompanyModulesReturn {
   inactiveModules: EnrichedEmpresaModule[];
   /** Verifica se a empresa possui um módulo ativo pela feature_key */
   hasModule: (featureKey: string) => boolean;
+  isLifetime: boolean;
   /** Catálogo completo de módulos disponíveis */
   catalog: ModuleCatalogRow[];
   /** Se está carregando */
@@ -37,6 +40,24 @@ interface UseCompanyModulesReturn {
 
 export function useCompanyModules(): UseCompanyModulesReturn {
   const { empresaId } = useAuth();
+
+  const { data: isLifetime = false, isLoading: loadingLicense } = useQuery({
+    queryKey: ["company-lifetime-license", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return false;
+      const { data, error } = await supabase
+        .from("empresas")
+        .select("planos!empresas_plano_id_fkey(periodicidade)")
+        .eq("id", empresaId)
+        .single();
+      if (error) throw error;
+      const planRelation = data.planos as
+        | { periodicidade: string | null }
+        | null;
+      return isLifetimePlan(planRelation);
+    },
+    enabled: !!empresaId,
+  });
 
   // Busca catálogo de módulos ativos
   const { data: catalog = [], isLoading: loadingCatalog } = useQuery({
@@ -90,10 +111,20 @@ export function useCompanyModules(): UseCompanyModulesReturn {
     () => new Set(activeModules.map((m) => m.catalog?.feature_key).filter(Boolean) as string[]),
     [activeModules],
   );
+  const activeCatalogFeatureKeys = useMemo(
+    () => new Set(catalog.map((module) => module.feature_key)),
+    [catalog],
+  );
 
   const hasModule = useCallback(
-    (featureKey: string) => activeFeatureKeys.has(featureKey),
-    [activeFeatureKeys],
+    (featureKey: string) =>
+      isCompanyModuleAccessible({
+        featureKey,
+        activeCatalogFeatureKeys,
+        activeEntitlementFeatureKeys: activeFeatureKeys,
+        isLifetime,
+      }),
+    [activeCatalogFeatureKeys, activeFeatureKeys, isLifetime],
   );
 
   return {
@@ -102,7 +133,8 @@ export function useCompanyModules(): UseCompanyModulesReturn {
     pendingModules,
     inactiveModules,
     hasModule,
+    isLifetime,
     catalog,
-    isLoading: loadingCatalog || loadingModules,
+    isLoading: loadingCatalog || loadingModules || loadingLicense,
   };
 }

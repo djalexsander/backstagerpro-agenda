@@ -37,6 +37,20 @@ export const MODULE_KEYS = {
   EXTRA_EVENTOS: "extra_eventos",
   /** Pacote extra de armazenamento */
   EXTRA_STORAGE: "extra_storage",
+  /** Cadastro patrimonial de materiais e equipamentos */
+  GESTAO_MATERIAIS: "gestao_materiais",
+  /** Movimentações e saldos de estoque por localização */
+  CONTROLE_ESTOQUE: "controle_estoque",
+  /** Retirada e devolução de materiais (planejado) */
+  CHECKIN_CHECKOUT: "checkin_checkout",
+  /** Locação e disponibilidade de materiais (planejado) */
+  LOCACAO_MATERIAIS: "locacao_materiais",
+  /** Manutenção preventiva e corretiva (planejado) */
+  MANUTENCAO_EQUIPAMENTOS: "manutencao_equipamentos",
+  /** Modelos, impressão e histórico de etiquetas físicas (planejado) */
+  ETIQUETAS_MATERIAIS: "etiquetas_materiais",
+  /** Relatórios consolidados da área de materiais (planejado) */
+  RELATORIOS_MATERIAIS: "relatorios_materiais",
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

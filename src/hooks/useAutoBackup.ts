@@ -9,7 +9,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 
 export function useAutoBackup() {
-  const { empresaId, isAdmin } = useAuth();
+  const { empresaId, isAdmin, role } = useAuth();
 
   useEffect(() => {
     if (!empresaId || !isAdmin) return;
@@ -39,7 +39,7 @@ export function useAutoBackup() {
           return;
         }
 
-        await createBackup(empresaId!, "auto");
+        await createBackup(empresaId!, "auto", role);
         console.log("[AutoBackup] Backup automático criado.");
       } catch (err) {
         console.error("[AutoBackup] Erro:", err);
@@ -47,5 +47,5 @@ export function useAutoBackup() {
     }
 
     checkAndCreateAutoBackup();
-  }, [empresaId, isAdmin]);
+  }, [empresaId, isAdmin, role]);
 }

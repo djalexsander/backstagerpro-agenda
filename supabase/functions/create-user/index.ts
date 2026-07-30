@@ -1,9 +1,39 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getActivationRedirectUrl,
+  mergeActivationMetadata,
+} from "../_shared/account-activation.ts";
+import {
+  assertCanonicalCompanyAssignment,
+  assertCompanyAdminEndpointAccess,
+  assertCompanyManagedTargetIsNotMaster,
+  deriveCompanyForCompanyAdmin,
+  validateCompanyManagedRole,
+} from "../_shared/company-tenancy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function findUserByEmail(
+  supabaseAdmin: Pick<ReturnType<typeof createClient<any>>, "auth">,
+  email: string,
+) {
+  const perPage = 500;
+
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+    if (error) throw new Error("Erro ao buscar usuários: " + error.message);
+
+    const user = data.users.find((candidate) => candidate.email === email);
+    if (user || data.users.length < perPage) return user ?? null;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,158 +41,198 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      supabaseUrl,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Verify caller is admin_empresa or master_admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Não autorizado");
+
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
+    const {
+      data: { user: caller },
+    } = await supabaseAdmin.auth.getUser(token);
     if (!caller) throw new Error("Não autorizado");
 
-    const { data: callerRoles } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", caller.id);
+    const [{ data: callerRoles, error: rolesError }, { data: callerProfile }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", caller.id),
+        supabaseAdmin
+          .from("profiles")
+          .select("empresa_id")
+          .eq("user_id", caller.id)
+          .maybeSingle(),
+      ]);
+    if (rolesError) throw rolesError;
 
-    const isMaster = callerRoles?.some((r: any) => r.role === "master_admin");
-    const isAdmin = callerRoles?.some((r: any) => r.role === "admin_empresa");
-    if (!isMaster && !isAdmin) throw new Error("Acesso negado");
+    assertCompanyAdminEndpointAccess(
+      callerRoles?.map((item) => item.role) ?? [],
+    );
 
     const { email, full_name, empresa_id, perfil } = await req.json();
+    if (typeof email !== "string" || !email.trim()) {
+      throw new Error("Email é obrigatório");
+    }
 
-    if (!email || !empresa_id) {
-      throw new Error("Email e empresa são obrigatórios");
+    const targetEmpresaId = deriveCompanyForCompanyAdmin({
+      callerEmpresaId: callerProfile?.empresa_id,
+      requestedEmpresaId: empresa_id,
+    });
+    const targetRole = validateCompanyManagedRole(perfil);
+
+    const { error: accessError } = await supabaseAdmin.rpc(
+      "assert_actor_company_operational_access",
+      {
+        _actor_id: caller.id,
+        _empresa_id: targetEmpresaId,
+        _feature_key: null,
+      },
+    );
+    if (accessError) {
+      throw new Error(
+        "A empresa não permite criar usuários no estado atual: " +
+          accessError.message,
+      );
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    let userId: string;
+    const displayName = full_name || normalizedEmail;
+    const redirectTo = getActivationRedirectUrl(Deno.env.get("APP_URL"));
+
+    let authUser = await findUserByEmail(supabaseAdmin, normalizedEmail);
     let isNewUser = false;
 
-    // Try to create user in Auth
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: normalizedEmail,
-      email_confirm: true,
-      user_metadata: {
-        full_name: full_name || normalizedEmail,
-        empresa_id,
-        role: perfil || "usuario",
-      },
-    });
-
-    if (createError) {
-      if (createError.message?.includes("already been registered")) {
-        const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-        if (listErr) throw new Error("Erro ao buscar usuários: " + listErr.message);
-        
-        const existingUser = listData.users.find((u: any) => u.email === normalizedEmail);
-        if (!existingUser) throw new Error("Usuário não encontrado no sistema de autenticação");
-        
-        userId = existingUser.id;
-        isNewUser = false;
-      } else {
-        throw new Error("Erro ao criar usuário: " + createError.message);
+    if (!authUser) {
+      const { data: inviteData, error: inviteError } =
+        await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
+          redirectTo,
+          data: {
+            full_name: displayName,
+            empresa_id: targetEmpresaId,
+            role: targetRole,
+            ...mergeActivationMetadata(null, "invite"),
+          },
+        });
+      if (inviteError) {
+        throw new Error("Erro ao enviar convite: " + inviteError.message);
       }
-    } else {
-      userId = newUser.user!.id;
+      authUser = inviteData.user;
       isNewUser = true;
     }
 
-    // Check if link already exists
-    const { data: existingLink } = await supabaseAdmin
-      .from("empresa_usuarios")
-      .select("id")
-      .eq("empresa_id", empresa_id)
-      .eq("user_id", userId)
-      .maybeSingle();
+    const { data: existingProfile, error: profileLookupError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("id, empresa_id, ativado")
+        .eq("user_id", authUser.id)
+        .maybeSingle();
+    if (profileLookupError) throw profileLookupError;
 
-    if (existingLink) {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          isNewUser: false,
-          message: "Usuário já vinculado a esta empresa",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    assertCanonicalCompanyAssignment(
+      existingProfile?.empresa_id,
+      targetEmpresaId,
+    );
 
-    // Link user to empresa
-    const { error: linkError } = await supabaseAdmin
-      .from("empresa_usuarios")
-      .insert({ empresa_id, user_id: userId, perfil: perfil || "usuario" });
-    if (linkError) throw new Error("Erro ao vincular usuário: " + linkError.message);
+    const { data: targetRoles, error: targetRolesError } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", authUser.id);
+    if (targetRolesError) throw targetRolesError;
+    assertCompanyManagedTargetIsNotMaster(
+      targetRoles?.map((item) => item.role) ?? [],
+    );
 
-    // Ensure user_roles entry exists
-    await supabaseAdmin
+    const { error: roleError } = await supabaseAdmin
       .from("user_roles")
       .upsert(
-        { user_id: userId, role: perfil || "usuario" },
-        { onConflict: "user_id,role" }
+        { user_id: authUser.id, role: targetRole },
+        { onConflict: "user_id,role" },
       );
+    if (roleError) throw new Error("Erro ao definir papel: " + roleError.message);
 
-    // Always ensure profile exists with name and email
-    // Wait a moment for the trigger to potentially create the profile
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const { data: existingProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (existingProfile) {
-      await supabaseAdmin
-        .from("profiles")
-        .update({ 
-          full_name: full_name || normalizedEmail, 
-          email: normalizedEmail,
-          empresa_id: empresa_id 
-        } as any)
-        .eq("user_id", userId);
-    } else {
-      await supabaseAdmin
-        .from("profiles")
-        .insert({ 
-          user_id: userId, 
-          full_name: full_name || normalizedEmail, 
-          email: normalizedEmail,
-          empresa_id 
-        } as any);
+    const profileValues = {
+      full_name: displayName,
+      email: normalizedEmail,
+      empresa_id: targetEmpresaId,
+    };
+    const profileResult = existingProfile
+      ? await supabaseAdmin
+          .from("profiles")
+          .update(profileValues)
+          .eq("user_id", authUser.id)
+      : await supabaseAdmin.from("profiles").insert({
+          user_id: authUser.id,
+          ...profileValues,
+        });
+    if (profileResult.error) {
+      throw new Error("Erro ao salvar perfil: " + profileResult.error.message);
     }
 
-    // Log
+    let activationEmailSent = isNewUser;
+    if (!isNewUser && !existingProfile?.ativado) {
+      const recoveryMetadata = mergeActivationMetadata(
+        {
+          ...(authUser.user_metadata ?? {}),
+          full_name: displayName,
+          empresa_id: targetEmpresaId,
+          role: targetRole,
+        },
+        "recovery",
+      );
+      const { error: metadataError } =
+        await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+          user_metadata: recoveryMetadata,
+        });
+      if (metadataError) throw metadataError;
+
+      const publicClient = createClient(
+        supabaseUrl,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+      );
+      const { error: recoveryError } =
+        await publicClient.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo,
+        });
+      if (recoveryError) {
+        throw new Error("Erro ao reenviar ativação: " + recoveryError.message);
+      }
+      activationEmailSent = true;
+    }
+
     await supabaseAdmin.from("system_logs").insert({
       tipo: "usuario",
-      acao: isNewUser ? "usuario_criado" : "usuario_vinculado",
+      acao: isNewUser ? "usuario_convidado" : "usuario_atualizado",
       descricao: isNewUser
-        ? `Novo usuário criado: ${normalizedEmail}`
-        : `Usuário existente vinculado à empresa: ${normalizedEmail}`,
+        ? `Convite enviado para novo usuário: ${normalizedEmail}`
+        : activationEmailSent
+          ? `Ativação reenviada para usuário: ${normalizedEmail}`
+          : `Usuário existente atualizado: ${normalizedEmail}`,
       user_id: caller.id,
       user_name: caller.email,
-      empresa_id,
+      empresa_id: targetEmpresaId,
     });
 
     return new Response(
       JSON.stringify({
         success: true,
         isNewUser,
-        message: isNewUser
-          ? "Usuário criado com sucesso"
-          : "Usuário já existia e foi vinculado à empresa",
+        activationEmailSent,
+        message: activationEmailSent
+          ? "Convite de uso único enviado por email"
+          : "Usuário já estava ativo e foi atualizado",
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (error: any) {
-    return new Response(
-      JSON.stringify({ success: false, error: error.message || "Erro desconhecido" }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

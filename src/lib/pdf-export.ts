@@ -1,11 +1,17 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import type { CellHookData } from "jspdf-autotable";
 import { format as formatDate, parseISO } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
-import { PdfBranding, addBrandingHeader } from "./pdf-branding";
-import { smartSavePDF, smartSavePNG, SmartPDFNameOptions } from "./pdf-save";
+import { addBrandingHeader, type PdfBranding } from "./pdf-branding";
+import { smartSavePDF, smartSavePNG, type SmartPDFNameOptions } from "./pdf-save";
 
 type Event = Tables<"events">;
+type EventDay = Tables<"event_days">;
+type FinancialEvent = Pick<Event, "name" | "artist" | "date" | "venue" | "city" | "status">;
+export type FinancialExportRow = Tables<"financials"> & {
+  events?: FinancialEvent | null;
+};
 
 type ExtraCost = { name: string; value: number };
 type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
@@ -27,36 +33,112 @@ type EmployeeExpense = {
   food: number;
 };
 
-function parseExtraCosts(raw: any): ExtraCost[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  try { return JSON.parse(raw); } catch { return []; }
+type AutoTableDocument = jsPDF & {
+  lastAutoTable?: { finalY: number };
+};
+
+function parseJsonValue(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function asNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function parseExtraCosts(raw: unknown): ExtraCost[] {
+  const parsed = parseJsonValue(raw);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((item) => {
+    const record = asRecord(item);
+    if (!record) return [];
+    return [{ name: asString(record.name), value: asNumber(record.value) }];
+  });
 }
 
 function sumExtraCosts(extras: ExtraCost[]): number {
   return extras.reduce((s, e) => s + (e.value || 0), 0);
 }
 
-function parseEmployeeExpenses(raw: any): EmployeeExpense[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    if (raw.length > 0 && 'nome' in raw[0] && !('employeeId' in raw[0])) {
-      return raw.map((f: any) => ({
-        employeeId: '', name: f.nome, funcao: '', cache: f.valor || 0, food: 0,
-      }));
+function parseEmployeeExpenses(raw: unknown): EmployeeExpense[] {
+  const parsed = parseJsonValue(raw);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((item) => {
+    const record = asRecord(item);
+    if (!record) return [];
+
+    if ("nome" in record && !("employeeId" in record)) {
+      return [{
+        employeeId: "",
+        name: asString(record.nome),
+        funcao: "",
+        cache: asNumber(record.valor),
+        food: 0,
+      }];
     }
-    return raw;
-  }
-  try { return JSON.parse(raw); } catch { return []; }
+
+    return [{
+      employeeId: asString(record.employeeId),
+      name: asString(record.name),
+      funcao: asString(record.funcao),
+      cache: asNumber(record.cache),
+      food: asNumber(record.food),
+    }];
+  });
 }
 
 function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
   return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
 }
 
-function getCachePago(f: any): number {
-  const detail = f.cache_detail as CacheDetail | null;
-  if (!detail) return f.cache || 0;
+function parseCacheDetail(raw: unknown): CacheDetail | null {
+  const record = asRecord(parseJsonValue(raw));
+  if (!record) return null;
+
+  const parcelas = Array.isArray(record.parcelas)
+    ? record.parcelas.flatMap((item) => {
+        const parcela = asRecord(item);
+        if (!parcela) return [];
+        return [{
+          numero: asNumber(parcela.numero),
+          valor: asNumber(parcela.valor),
+          vencimento: asString(parcela.vencimento),
+          pago: parcela.pago === true,
+        }];
+      })
+    : [];
+
+  return {
+    valorTotal: asNumber(record.valorTotal),
+    entrada: asNumber(record.entrada),
+    entradaPaga: record.entradaPaga === true,
+    parcelado: record.parcelado === true,
+    parcelas,
+    recebimentoEvento: record.recebimentoEvento === true,
+    dataRecebimento: asString(record.dataRecebimento),
+    recebimentoPago: record.recebimentoPago === true,
+  };
+}
+
+function getCachePago(financial: FinancialExportRow): number {
+  const detail = parseCacheDetail(financial.cache_detail);
+  if (!detail) return financial.cache || 0;
   let paid = 0;
   if (detail.entrada > 0 && detail.entradaPaga) paid += detail.entrada;
   if (detail.parcelado) {
@@ -67,11 +149,11 @@ function getCachePago(f: any): number {
   return paid;
 }
 
-function getCachePendente(f: any): number {
-  return (f.cache || 0) - getCachePago(f);
+function getCachePendente(financial: FinancialExportRow): number {
+  return (financial.cache || 0) - getCachePago(financial);
 }
 
-const fmtBRL = (n: number | null) =>
+const fmtBRL = (n: number | null | undefined) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
 
 export type ExportFormat = "pdf" | "png";
@@ -109,7 +191,7 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, f
   }
 }
 
-export async function exportEventPDF(event: Event, eventDays?: any[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[], fmt: ExportFormat = "pdf") {
+export async function exportEventPDF(event: Event, eventDays?: EventDay[], branding?: PdfBranding, teamMembers?: { nome: string; funcao: string }[], fmt: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const headerY = await addBrandingHeader(doc, b, "Backstage Pro");
@@ -137,7 +219,8 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
     styles: { fontSize: 10 },
   });
 
-  let lastY = (doc as any).lastAutoTable?.finalY + 10 || 100;
+  const eventTableFinalY = (doc as AutoTableDocument).lastAutoTable?.finalY;
+  let lastY = eventTableFinalY === undefined ? 100 : eventTableFinalY + 10;
 
   // Equipe Escalada
   if (teamMembers && teamMembers.length > 0) {
@@ -153,7 +236,8 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
       headStyles: { fillColor: [225, 29, 72] },
     });
 
-    lastY = (doc as any).lastAutoTable?.finalY + 10 || lastY + 20;
+    const tableFinalY = (doc as AutoTableDocument).lastAutoTable?.finalY;
+    lastY = tableFinalY ? tableFinalY + 10 : lastY + 20;
   }
 
   if (eventDays && eventDays.length > 0) {
@@ -184,7 +268,7 @@ export async function exportEventPDF(event: Event, eventDays?: any[], branding?:
   }
 }
 
-export async function exportFinancialPDF(financial: any, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
+export async function exportFinancialPDF(financial: FinancialExportRow, branding?: PdfBranding, fmt: ExportFormat = "pdf") {
   const doc = new jsPDF();
   const b = branding || {};
   const eventName = financial.events?.name || "Evento";
@@ -210,7 +294,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding,
   rows.push(["RECEITAS", ""]);
   rows.push(["Cachê Total", fmtBRL(financial.cache)]);
   
-  const detail = financial.cache_detail as CacheDetail | null;
+  const detail = parseCacheDetail(financial.cache_detail);
   if (detail) {
     if (detail.entrada > 0) {
       rows.push(["  Entrada", `${fmtBRL(detail.entrada)} — ${detail.entradaPaga ? "Pago" : "Pendente"}`]);
@@ -240,7 +324,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding,
   if (employees.length > 0) {
     rows.push(["Equipe Técnica", fmtBRL(employeesTotal)]);
     employees.forEach((emp) => {
-      const parts = [];
+      const parts: string[] = [];
       if (emp.cache > 0) parts.push(`Cachê: ${fmtBRL(emp.cache)}`);
       if (emp.food > 0) parts.push(`Alim: ${fmtBRL(emp.food)}`);
       rows.push([`  ${emp.name}${emp.funcao ? ` (${emp.funcao})` : ""}`, parts.join(" | ") || "—"]);
@@ -265,8 +349,9 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding,
     theme: "grid",
     columnStyles: { 0: { fontStyle: "bold", cellWidth: 80 } },
     styles: { fontSize: 10 },
-    didParseCell: (data: any) => {
-      const val = data.row.raw?.[0] || "";
+    didParseCell: (data: CellHookData) => {
+      const firstCell = Array.isArray(data.row.raw) ? data.row.raw[0] : undefined;
+      const val = typeof firstCell === "string" ? firstCell : "";
       if (val === "RECEITAS" || val === "CUSTOS") {
         data.cell.styles.fillColor = [240, 240, 240];
         data.cell.styles.fontStyle = "bold";
@@ -286,7 +371,7 @@ export async function exportFinancialPDF(financial: any, branding?: PdfBranding,
   }
 }
 
-export async function exportFinancialTotalPDF(financials: any[], periodTitle?: string, branding?: PdfBranding, fmt: ExportFormat = "pdf", nameOverride?: SmartPDFNameOptions) {
+export async function exportFinancialTotalPDF(financials: FinancialExportRow[], periodTitle?: string, branding?: PdfBranding, fmt: ExportFormat = "pdf", nameOverride?: SmartPDFNameOptions) {
   const doc = new jsPDF("landscape");
   const b = branding || {};
   const subtitle = periodTitle ? `Período: ${periodTitle}` : "Consolidado";
@@ -352,7 +437,7 @@ export async function exportFinancialTotalPDF(financials: any[], periodTitle?: s
     body,
     styles: { fontSize: 8 },
     headStyles: { fillColor: [225, 29, 72] },
-    didParseCell: (data: any) => {
+    didParseCell: (data: CellHookData) => {
       if (data.row.index === body.length - 1) {
         data.cell.styles.fontStyle = "bold";
       }

@@ -29,7 +29,13 @@ export default function ModulosDisponiveis() {
   const { empresaId } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { catalog, activeModules, allModules, isLoading } = useCompanyModules();
+  const {
+    catalog,
+    activeModules,
+    allModules,
+    isLifetime,
+    isLoading,
+  } = useCompanyModules();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showSummary, setShowSummary] = useState(false);
@@ -142,6 +148,7 @@ export default function ModulosDisponiveis() {
 
   // Determine module status for each catalog item
   const getModuleStatus = (mod: ModuleCatalogRow): "active" | "pending" | "available" => {
+    if (isLifetime) return "active";
     if (activeFeatureKeys.has(mod.feature_key) || allModuleIds.has(mod.id)) return "active";
     if (pendingRequestModuleIds.has(mod.id) || pendingBatchModuleIds.has(mod.id)) return "pending";
     return "available";
@@ -277,10 +284,27 @@ export default function ModulosDisponiveis() {
         <h1 className="text-2xl font-bold tracking-tight">Módulos</h1>
       </div>
 
+      {isLifetime && (
+        <Card className="border-primary/30 bg-primary/[0.03]">
+          <CardContent className="py-5 flex items-start gap-3">
+            <Star className="h-5 w-5 text-primary fill-primary/20 mt-0.5" />
+            <div>
+              <p className="font-semibold text-primary">Licença Vitalícia</p>
+              <p className="text-sm text-muted-foreground">
+                Todos os módulos atuais e futuros estão ativos, sem cobrança ou
+                vencimento.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="disponiveis">
         <TabsList>
           <TabsTrigger value="disponiveis">Disponíveis</TabsTrigger>
-          <TabsTrigger value="ativos">Meus Módulos ({activeModules.length})</TabsTrigger>
+          <TabsTrigger value="ativos">
+            Meus Módulos ({isLifetime ? "Todos" : activeModules.length})
+          </TabsTrigger>
           <TabsTrigger value="solicitacoes">Solicitações ({batchRequests.length + requests.length})</TabsTrigger>
         </TabsList>
 
@@ -416,7 +440,17 @@ export default function ModulosDisponiveis() {
 
         {/* Active modules */}
         <TabsContent value="ativos">
-          {activeModules.length === 0 ? (
+          {isLifetime ? (
+            <Card className="border-primary/30">
+              <CardContent className="py-8 text-center">
+                <CheckCircle className="h-7 w-7 text-primary mx-auto mb-2" />
+                <p className="font-medium">Todos os módulos estão ativos</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Não é necessário contratar ou atribuir módulos individualmente.
+                </p>
+              </CardContent>
+            </Card>
+          ) : activeModules.length === 0 ? (
             <p className="text-muted-foreground py-8 text-center">Nenhum módulo ativo.</p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

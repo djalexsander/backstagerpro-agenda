@@ -1,9 +1,36 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getActivationRedirectUrl,
+  mergeActivationMetadata,
+} from "../_shared/account-activation.ts";
+import {
+  assertCanonicalCompanyAssignment,
+  normalizeCompanyRole,
+} from "../_shared/company-tenancy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
+
+async function findUserByEmail(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  email: string,
+) {
+  const perPage = 500;
+
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+    if (error) throw error;
+
+    const user = data.users.find((candidate) => candidate.email === email);
+    if (user || data.users.length < perPage) return user ?? null;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,79 +38,130 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      supabaseUrl,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Verify caller is master_admin
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Não autorizado");
+
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
+    const {
+      data: { user: caller },
+    } = await supabaseAdmin.auth.getUser(token);
     if (!caller) throw new Error("Não autorizado");
 
-    const { data: roleCheck } = await supabaseAdmin
+    const { data: callerRoles, error: roleCheckError } = await supabaseAdmin
       .from("user_roles")
       .select("role")
-      .eq("user_id", caller.id)
-      .eq("role", "master_admin")
-      .single();
-    if (!roleCheck) throw new Error("Acesso negado: apenas master admin");
+      .eq("user_id", caller.id);
+    if (roleCheckError) throw roleCheckError;
+    if (!callerRoles?.some((item) => item.role === "master_admin")) {
+      throw new Error("Acesso negado: apenas master admin");
+    }
 
-    const { empresa_id, email, password, full_name, role } = await req.json();
-
+    const { empresa_id, email, full_name, role } = await req.json();
     if (!email || !empresa_id) {
       throw new Error("Email e empresa são obrigatórios");
     }
 
-    // Use provided password or generate a random one (user will set their own via first-access)
-    const finalPassword = password || crypto.randomUUID() + "Aa1!";
+    const normalizedEmail = email.trim().toLowerCase();
+    const displayName = full_name || normalizedEmail;
+    const targetRole = normalizeCompanyRole(role);
+    const redirectTo = getActivationRedirectUrl(Deno.env.get("APP_URL"));
+    let authUser = await findUserByEmail(supabaseAdmin, normalizedEmail);
+    let isNewUser = false;
 
-    // Try to create auth user; if already exists, link to empresa
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: finalPassword,
-      email_confirm: true,
-      user_metadata: {
-        full_name: full_name || email,
-        empresa_id,
-        role: role || "usuario",
-      },
-    });
-
-    if (createError) {
-      // If user already exists, find them and link to the new empresa
-      if (createError.message?.includes("already been registered")) {
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
-        if (listErr) throw listErr;
-        const existingUser = users.find((u: any) => u.email === email);
-        if (!existingUser) throw new Error("Usuário não encontrado");
-
-        // Update profile to link to new empresa
-        const { error: profileErr } = await supabaseAdmin
-          .from("profiles")
-          .update({ empresa_id, full_name: full_name || email })
-          .eq("user_id", existingUser.id);
-        if (profileErr) throw profileErr;
-
-        // Upsert role
-        const { error: roleErr } = await supabaseAdmin
-          .from("user_roles")
-          .upsert({ user_id: existingUser.id, role: role || "usuario" }, { onConflict: "user_id,role" });
-        if (roleErr) throw roleErr;
-
-        return new Response(JSON.stringify({ user: existingUser, linked: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!authUser) {
+      const { data: inviteData, error: inviteError } =
+        await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
+          redirectTo,
+          data: {
+            full_name: displayName,
+            empresa_id,
+            role: targetRole,
+            ...mergeActivationMetadata(null, "invite"),
+          },
         });
-      }
-      throw createError;
+      if (inviteError) throw inviteError;
+      authUser = inviteData.user;
+      isNewUser = true;
     }
 
-    return new Response(JSON.stringify({ user: newUser.user }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const { data: profile, error: profileLookupError } = await supabaseAdmin
+      .from("profiles")
+      .select("id, empresa_id, ativado")
+      .eq("user_id", authUser.id)
+      .maybeSingle();
+    if (profileLookupError) throw profileLookupError;
+
+    assertCanonicalCompanyAssignment(profile?.empresa_id, empresa_id);
+
+    const { error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .upsert(
+        { user_id: authUser.id, role: targetRole },
+        { onConflict: "user_id,role" },
+      );
+    if (roleError) throw roleError;
+
+    const profileValues = {
+      full_name: displayName,
+      email: normalizedEmail,
+      empresa_id,
+    };
+    const profileResult = profile
+      ? await supabaseAdmin
+          .from("profiles")
+          .update(profileValues)
+          .eq("user_id", authUser.id)
+      : await supabaseAdmin.from("profiles").insert({
+          user_id: authUser.id,
+          ...profileValues,
+        });
+    if (profileResult.error) throw profileResult.error;
+
+    let activationEmailSent = isNewUser;
+    if (!isNewUser && !profile?.ativado) {
+      const { error: metadataError } =
+        await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+          user_metadata: mergeActivationMetadata(
+            {
+              ...(authUser.user_metadata ?? {}),
+              full_name: displayName,
+              empresa_id,
+              role: targetRole,
+            },
+            "recovery",
+          ),
+        });
+      if (metadataError) throw metadataError;
+
+      const publicClient = createClient(
+        supabaseUrl,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+      );
+      const { error: recoveryError } =
+        await publicClient.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo,
+        });
+      if (recoveryError) throw recoveryError;
+      activationEmailSent = true;
+    }
+
+    return new Response(
+      JSON.stringify({
+        user: authUser,
+        linked: !isNewUser,
+        activationEmailSent,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    return new Response(JSON.stringify({ error: message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

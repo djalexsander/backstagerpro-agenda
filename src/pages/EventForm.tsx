@@ -17,6 +17,11 @@ import { Upload, Plus, Minus, Music, Trash2, FileText, Download, Users } from "l
 import { useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Database } from "@/integrations/supabase/types";
+import {
+  removeEventFile,
+  uploadEventFile,
+} from "@/lib/event-file-service";
+import { assertEventFileAdministrator } from "@/lib/event-file-security";
 
 type EventStatus = Database["public"]["Enums"]["event_status"];
 
@@ -46,7 +51,7 @@ export default function EventForm() {
   const { id } = useParams<{ id: string }>();
   const isEditing = id && id !== "novo";
   const navigate = useNavigate();
-  const { user, empresaId, isAdmin } = useAuth();
+  const { user, empresaId, isAdmin, role } = useAuth();
   const { canCreateEvent } = usePlanLimits();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -201,19 +206,16 @@ export default function EventForm() {
   };
 
   const uploadDayRider = async (file: File, eventId: string, eventDayId: string) => {
-    const path = `${eventId}/day_${eventDayId}_${Date.now()}_${file.name}`;
-    const { error: uploadError } = await supabase.storage.from("event-files").upload(path, file);
-    if (uploadError) throw uploadError;
-    await supabase.from("event_files").delete().eq("event_day_id", eventDayId);
-    const { error: insertError } = await supabase.from("event_files").insert({
-      event_id: eventId,
-      event_day_id: eventDayId,
-      file_type: "artist_rider" as any,
-      file_path: path,
-      file_name: file.name,
-      empresa_id: empresaId,
-    } as any);
-    if (insertError) throw insertError;
+    if (!empresaId) throw new Error("Empresa não identificada");
+    await uploadEventFile({
+      eventId,
+      eventDayId,
+      empresaId,
+      file,
+      fileType: "artist_rider",
+      kind: "day",
+      role,
+    });
   };
 
   // Material file handlers
@@ -296,6 +298,8 @@ export default function EventForm() {
     setSaving(true);
 
     try {
+      assertEventFileAdministrator(role);
+      if (!empresaId) throw new Error("Empresa não identificada");
       const firstDay = days[0];
       const payload = {
         name: form.name,
@@ -349,30 +353,29 @@ export default function EventForm() {
       for (const delId of deletedMaterialIds) {
         const fileToDelete = existingFiles.find((f) => f.id === delId);
         if (fileToDelete) {
-          await supabase.storage.from("event-files").remove([fileToDelete.file_path]);
-          await supabase.from("event_files").delete().eq("id", delId);
+          await removeEventFile({
+            eventId,
+            fileId: delId,
+            filePath: fileToDelete.file_path,
+            role,
+          });
         }
       }
 
       // Upload new material files
       for (const mat of materialFiles) {
         if (mat.file) {
-          // If replacing an existing one, delete the old storage file
-          if (mat.isExisting && mat.id && mat.path) {
-            await supabase.storage.from("event-files").remove([mat.path]);
-            await supabase.from("event_files").delete().eq("id", mat.id);
-          }
-          const path = `${eventId}/material_${Date.now()}_${mat.file.name}`;
-          const { error: upErr } = await supabase.storage.from("event-files").upload(path, mat.file);
-          if (upErr) throw upErr;
-          const { error: insErr } = await supabase.from("event_files").insert({
-            event_id: eventId,
-            file_type: "material_list" as any,
-            file_path: path,
-            file_name: mat.file.name,
-            empresa_id: empresaId,
-          } as any);
-          if (insErr) throw insErr;
+          await uploadEventFile({
+            eventId,
+            empresaId,
+            file: mat.file,
+            fileType: "material_list",
+            kind: "material",
+            role,
+            replacement: mat.id && mat.path
+              ? { id: mat.id, file_path: mat.path }
+              : undefined,
+          });
         }
       }
 
@@ -380,29 +383,29 @@ export default function EventForm() {
       for (const delId of deletedEventRiderIds) {
         const fileToDelete = existingFiles.find((f) => f.id === delId);
         if (fileToDelete) {
-          await supabase.storage.from("event-files").remove([fileToDelete.file_path]);
-          await supabase.from("event_files").delete().eq("id", delId);
+          await removeEventFile({
+            eventId,
+            fileId: delId,
+            filePath: fileToDelete.file_path,
+            role,
+          });
         }
       }
 
       // Upload new event rider files
       for (const rdr of eventRiderFiles) {
         if (rdr.file) {
-          if (rdr.isExisting && rdr.id && rdr.path) {
-            await supabase.storage.from("event-files").remove([rdr.path]);
-            await supabase.from("event_files").delete().eq("id", rdr.id);
-          }
-          const path = `${eventId}/rider_${Date.now()}_${rdr.file.name}`;
-          const { error: upErr } = await supabase.storage.from("event-files").upload(path, rdr.file);
-          if (upErr) throw upErr;
-          const { error: insErr } = await supabase.from("event_files").insert({
-            event_id: eventId,
-            file_type: "event_rider" as any,
-            file_path: path,
-            file_name: rdr.file.name,
-            empresa_id: empresaId,
-          } as any);
-          if (insErr) throw insErr;
+          await uploadEventFile({
+            eventId,
+            empresaId,
+            file: rdr.file,
+            fileType: "event_rider",
+            kind: "rider",
+            role,
+            replacement: rdr.id && rdr.path
+              ? { id: rdr.id, file_path: rdr.path }
+              : undefined,
+          });
         }
       }
 

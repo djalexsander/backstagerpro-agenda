@@ -1,4 +1,4 @@
-import jsPDF from "jspdf";
+import type jsPDF from "jspdf";
 
 export interface PdfBranding {
   empresaNome?: string | null;
@@ -41,7 +41,7 @@ export async function addBrandingHeader(
   fallbackTitle: string
 ): Promise<number> {
   const name = branding.empresaNome?.trim() || fallbackTitle;
-  let y = 14;
+  const y = 14;
 
   if (branding.empresaLogoUrl) {
     const logoData = await loadImageAsBase64(branding.empresaLogoUrl);

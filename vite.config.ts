@@ -2,14 +2,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import fs from "fs";
-import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 const pkg = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
 const isTauri = !!process.env.TAURI_ENV_PLATFORM;
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __IS_TAURI__: JSON.stringify(isTauri),
@@ -34,7 +33,6 @@ export default defineConfig(({ mode }) => ({
   clearScreen: false,
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
     // Only register PWA in web builds, not in Tauri
     !isTauri &&
       VitePWA({

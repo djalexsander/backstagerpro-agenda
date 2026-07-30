@@ -13,6 +13,7 @@
  * empresas         — Vínculo com plano via plano_id, vencimento, trial
  * module_catalog   — Catálogo de módulos disponíveis (feature_key, valor, capacidade)
  * empresa_modules  — Módulos contratados por empresa (status, trial_granted, origem)
+ * module_dependencies — Dependências reutilizáveis entre módulos
  * module_requests  — Solicitações de módulos pelas empresas
  * module_payments  — Pagamentos de módulos
  * pagamentos       — Pagamentos do plano base
@@ -40,6 +41,7 @@
  * check_event_limit  — Valida max_eventos (base + módulos de capacidade)
  * check_user_limit   — Valida max_usuarios (base + módulos de capacidade)
  * deactivate_trial_modules — Desativa módulos trial quando trial expira
+ * company_has_active_module — Valida entitlement, expiração e dependências
  *
  * ============================================================================
  * 5. FLUXOS
@@ -51,6 +53,8 @@
  * Pagamento de módulo → module_payments → aprovação → ativação
  * Ativação manual → empresa_modules com granted_by_admin + origem
  * Trial → módulos com trial_granted=true → desativados automaticamente
+ * Dependente ativo → exige todos os módulos-base ativos
+ * Desativação de módulo-base → bloqueada enquanto houver dependentes ativos
  *
  * ============================================================================
  */

@@ -28,20 +28,18 @@ import {
   getBackupSummary,
   type BackupPayload,
 } from "@/lib/backup-utils";
+import {
+  assertBackupAdministrator,
+  canManageBackups,
+  validateBackupImportFile,
+} from "@/lib/backup-security";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface BackupRow {
-  id: string;
-  empresa_id: string;
-  nome: string;
-  tipo: string;
-  periodo_inicio: string | null;
-  periodo_fim: string | null;
-  payload: any;
-  created_at: string;
-}
+type BackupRow = Tables<"backups">;
 
 export default function Backups() {
-  const { empresaId } = useAuth();
+  const { empresaId, role } = useAuth();
+  const canManage = canManageBackups(role);
   const queryClient = useQueryClient();
   const [periodOpen, setPeriodOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -63,7 +61,7 @@ export default function Backups() {
       if (error) throw error;
       return data as BackupRow[];
     },
-    enabled: !!empresaId,
+    enabled: !!empresaId && canManage,
   });
 
   // Stats
@@ -78,7 +76,8 @@ export default function Backups() {
   const createBackupMutation = useMutation({
     mutationFn: async (opts: { tipo: "auto" | "manual"; dateStart?: string; dateEnd?: string }) => {
       if (!empresaId) throw new Error("Empresa não encontrada");
-      await createBackup(empresaId, opts.tipo, opts.dateStart, opts.dateEnd);
+      assertBackupAdministrator(role);
+      await createBackup(empresaId, opts.tipo, role, opts.dateStart, opts.dateEnd);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["backups"] });
@@ -89,6 +88,7 @@ export default function Backups() {
 
   const deleteBackupMutation = useMutation({
     mutationFn: async (id: string) => {
+      assertBackupAdministrator(role);
       const { error } = await supabase.from("backups").delete().eq("id", id);
       if (error) throw error;
     },
@@ -100,9 +100,10 @@ export default function Backups() {
   });
 
   const restoreMutation = useMutation({
-    mutationFn: async (rawPayload: any) => {
+    mutationFn: async (rawPayload: unknown) => {
       if (!empresaId) throw new Error("Empresa não encontrada");
-      await restoreBackup(empresaId, rawPayload);
+      assertBackupAdministrator(role);
+      await restoreBackup(empresaId, rawPayload, role);
     },
     onSuccess: () => {
       queryClient.invalidateQueries();
@@ -116,6 +117,7 @@ export default function Backups() {
   });
 
   function handleExport(backup: BackupRow) {
+    assertBackupAdministrator(role);
     const normalized = normalizeBackup(backup.payload, backup.empresa_id);
     const json = JSON.stringify(normalized, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -131,6 +133,8 @@ export default function Backups() {
   async function handleImport() {
     if (!importFile) return;
     try {
+      assertBackupAdministrator(role);
+      validateBackupImportFile(importFile);
       const text = await importFile.text();
       const raw = JSON.parse(text);
       const normalized = normalizeBackup(raw, empresaId);

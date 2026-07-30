@@ -15,6 +15,7 @@ import { computeConsolidatedCapabilities } from "@/lib/plan-helpers";
 import type { SubscriptionSummary, PlanCapabilities } from "@/types/subscription";
 import { useMemo } from "react";
 import type { Tables } from "@/integrations/supabase/types";
+import { isLifetimePlan } from "@/lib/subscription-license";
 
 export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boolean } {
   const { empresaId } = useAuth();
@@ -55,10 +56,13 @@ export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boo
   const summary: SubscriptionSummary = useMemo(() => {
     const now = new Date();
     const hasPlano = !!empresa?.plano_id;
+    const isLifetime = isLifetimePlan(planoBase);
     const isOnTrial = !hasPlano && !!empresa?.trial_expires_at;
-    const isExpired = hasPlano
-      ? !!empresa?.vencimento && new Date(empresa.vencimento) < now
-      : !!empresa?.trial_expires_at && new Date(empresa.trial_expires_at) < now;
+    const isExpired = isLifetime
+      ? false
+      : hasPlano
+        ? !!empresa?.vencimento && new Date(empresa.vencimento) < now
+        : !!empresa?.trial_expires_at && new Date(empresa.trial_expires_at) < now;
     const isReadOnly =
       !!empresa?.plano_bloqueado || isExpired || empresa?.status === "inativo";
 
@@ -66,10 +70,12 @@ export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boo
     const capabilities = computeConsolidatedCapabilities(planoBase, activeModules);
 
     // Valores — apenas módulos cobráveis entram na mensalidade
-    const valorBase = planoBase ? Number(planoBase.valor) : 0;
-    const billableModules = activeModules.filter(
-      (m) => !m.trial_granted && Number(m.valor_cobrado) > 0,
-    );
+    const valorBase = isLifetime ? 0 : planoBase ? Number(planoBase.valor) : 0;
+    const billableModules = isLifetime
+      ? []
+      : activeModules.filter(
+          (m) => !m.trial_granted && Number(m.valor_cobrado) > 0,
+        );
     const valorModulos = billableModules.reduce(
       (sum, m) => sum + Number(m.valor_cobrado),
       0,
@@ -83,8 +89,9 @@ export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boo
       valorModulos,
       valorTotal: valorBase + valorModulos,
       capabilities,
-      vencimento: empresa?.vencimento ?? null,
+      vencimento: isLifetime ? null : empresa?.vencimento ?? null,
       isOnTrial,
+      isLifetime,
       isExpired,
       isReadOnly,
       needsPlanSelection: !!empresa?.precisa_escolher_plano,

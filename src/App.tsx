@@ -9,6 +9,8 @@ import { AppLayout } from "@/components/AppLayout";
 import { UpdateProvider, UpdateBanner } from "@/features/update";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { ModuleGate } from "@/components/ModuleGate";
+import { MODULE_KEYS } from "@/constants/module-keys";
 import Login from "@/pages/Login";
 import PrimeiroAcesso from "@/pages/PrimeiroAcesso";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -26,6 +28,8 @@ import Funcionarios from "@/pages/Funcionarios";
 import Relatorios from "@/pages/Relatorios";
 import PainelOperacional from "@/pages/PainelOperacional";
 import ChecklistCentral from "@/pages/ChecklistCentral";
+import Materiais from "@/pages/Materiais";
+import Estoque from "@/pages/Estoque";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -88,6 +92,28 @@ const App = () => (
                   <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />
                   <Route path="/painel-operacional" element={<ProtectedRoute adminOnly><PainelOperacional /></ProtectedRoute>} />
                   <Route path="/checklist" element={<ProtectedRoute adminOnly><ChecklistCentral /></ProtectedRoute>} />
+                  <Route
+                    path="/materiais"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.GESTAO_MATERIAIS}
+                        mode="lock"
+                      >
+                        <Materiais />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/estoque"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.CONTROLE_ESTOQUE}
+                        mode="lock"
+                      >
+                        <Estoque />
+                      </ModuleGate>
+                    }
+                  />
                   <Route path="/modulos" element={<Navigate to="/plano" replace />} />
                   
                   {/* Master Admin Routes */}

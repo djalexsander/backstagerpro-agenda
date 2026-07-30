@@ -14,29 +14,30 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Shield, Sparkles, Clock, Package, AlertTriangle, Info } from "lucide-react";
+import {
+  classifySubscriptionPlan,
+  isLifetimePlan,
+  type SubscriptionPlanCategory,
+} from "@/lib/subscription-license";
 
 interface Plano {
   id: string;
   nome: string;
   valor: number;
   descricao: string | null;
-  max_usuarios: number;
-  max_eventos: number;
+  max_usuarios: number | null;
+  max_eventos: number | null;
   trial_days: number;
   ativo: boolean;
   periodicidade: string;
   disponivel_novo_cadastro: boolean;
+  categoria: string;
 }
 
-type PlanoTipo = "trial" | "base" | "legado";
-
-function classificarPlano(p: Plano): PlanoTipo {
-  if (p.valor === 0 || (p.trial_days > 0 && p.valor === 0)) return "trial";
-  if (!p.ativo || !p.disponivel_novo_cadastro) return "legado";
-  return "base";
-}
+type PlanoTipo = SubscriptionPlanCategory;
 
 const PERIODICIDADE_LABELS: Record<string, string> = {
+  trial: "Trial",
   mensal: "Mensal",
   anual: "Anual",
   vitalicio: "Vitalício",
@@ -75,22 +76,27 @@ export default function Planos() {
     },
   });
 
-  const trialPlanos = planos.filter((p) => classificarPlano(p) === "trial");
-  const basePlanos = planos.filter((p) => classificarPlano(p) === "base");
-  const legadoPlanos = planos.filter((p) => classificarPlano(p) === "legado");
+  const trialPlanos = planos.filter((p) => classifySubscriptionPlan(p) === "trial");
+  const basePlanos = planos.filter((p) => classifySubscriptionPlan(p) === "base");
+  const legadoPlanos = planos.filter((p) => classifySubscriptionPlan(p) === "legado");
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const isLifetime = form.periodicidade === "vitalicio";
+      const isTrial = form.periodicidade === "trial";
       const payload = {
-        nome: form.nome,
-        valor: parseFloat(form.valor) || 0,
+        nome: isLifetime ? "Vitalícia" : form.nome,
+        valor: isLifetime || isTrial ? 0 : parseFloat(form.valor) || 0,
         descricao: form.descricao || null,
-        max_usuarios: parseInt(form.max_usuarios) || 5,
-        max_eventos: parseInt(form.max_eventos) || 50,
-        trial_days: parseInt(form.trial_days) || 0,
-        ativo: form.ativo,
+        max_usuarios: isLifetime ? null : parseInt(form.max_usuarios) || 5,
+        max_eventos: isLifetime ? null : parseInt(form.max_eventos) || 50,
+        trial_days: isLifetime ? 0 : parseInt(form.trial_days) || 0,
+        ativo: isLifetime ? true : form.ativo,
         periodicidade: form.periodicidade,
-        disponivel_novo_cadastro: form.disponivel_novo_cadastro,
+        disponivel_novo_cadastro: isLifetime
+          ? false
+          : form.disponivel_novo_cadastro,
+        categoria: isTrial ? "trial" : "plano_base",
       };
       if (editItem) {
         const { error } = await supabase.from("planos").update(payload as any).eq("id", editItem.id);
@@ -125,7 +131,8 @@ export default function Planos() {
     setEditItem(p);
     setForm({
       nome: p.nome, valor: String(p.valor), descricao: p.descricao || "",
-      max_usuarios: String(p.max_usuarios), max_eventos: String(p.max_eventos),
+      max_usuarios: p.max_usuarios == null ? "" : String(p.max_usuarios),
+      max_eventos: p.max_eventos == null ? "" : String(p.max_eventos),
       trial_days: String(p.trial_days), ativo: p.ativo, periodicidade: p.periodicidade || "mensal",
       disponivel_novo_cadastro: p.disponivel_novo_cadastro,
     });
@@ -143,6 +150,7 @@ export default function Planos() {
 
   const renderPlanoRow = (p: Plano, tipo: PlanoTipo) => {
     const count = empresasCount[p.id] || 0;
+    const isLifetime = isLifetimePlan(p);
     return (
       <TableRow key={p.id} className={tipo === "legado" ? "opacity-60" : ""}>
         <TableCell className="font-medium">
@@ -159,8 +167,8 @@ export default function Planos() {
         <TableCell className="font-semibold">
           {p.valor === 0 ? "Grátis" : formatCurrency(p.valor)}
         </TableCell>
-        <TableCell>{p.max_usuarios}</TableCell>
-        <TableCell>{p.max_eventos}</TableCell>
+        <TableCell>{isLifetime || p.max_usuarios == null ? "Ilimitado" : p.max_usuarios}</TableCell>
+        <TableCell>{isLifetime || p.max_eventos == null ? "Ilimitado" : p.max_eventos}</TableCell>
         <TableCell>
           {count > 0 ? (
             <Badge variant="secondary" className="text-xs">{count} empresa{count > 1 ? "s" : ""}</Badge>
@@ -175,7 +183,7 @@ export default function Planos() {
         </TableCell>
         <TableCell className="text-right">
           <Button variant="ghost" size="sm" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>
-          {count === 0 && (
+          {count === 0 && !isLifetime && tipo !== "trial" && (
             <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(p.id)}><Trash2 className="h-4 w-4" /></Button>
           )}
         </TableCell>
@@ -337,33 +345,39 @@ export default function Planos() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editItem ? "Editar Plano" : "Novo Plano"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
+            {editItem && isLifetimePlan(editItem) && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm text-muted-foreground">
+                A estrutura da licença Vitalícia é protegida. Somente a descrição pode ser ajustada; concessões são feitas pela gestão de empresas.
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Nome <span className="text-destructive">*</span></Label>
-              <Input value={form.nome} onChange={(e) => setForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Plano Base" />
+              <Input value={form.nome} disabled={!!editItem && isLifetimePlan(editItem)} onChange={(e) => setForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Plano Base" />
             </div>
             <div className="space-y-2">
               <Label>Periodicidade</Label>
               <Select value={form.periodicidade} onValueChange={(v) => setForm(p => ({ ...p, periodicidade: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger disabled={!!editItem && isLifetimePlan(editItem)}><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="trial" disabled={!editItem || editItem.periodicidade !== "trial"}>Trial</SelectItem>
                   <SelectItem value="mensal">Mensal</SelectItem>
                   <SelectItem value="anual">Anual</SelectItem>
-                  <SelectItem value="vitalicio">Vitalício</SelectItem>
+                  <SelectItem value="vitalicio" disabled={!editItem || !isLifetimePlan(editItem)}>Vitalício</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Preço (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.valor} onChange={(e) => setForm(p => ({ ...p, valor: e.target.value }))} placeholder="99.90" />
+              <Input type="number" step="0.01" min="0" disabled={!!editItem && isLifetimePlan(editItem)} value={form.valor} onChange={(e) => setForm(p => ({ ...p, valor: e.target.value }))} placeholder="99.90" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Máx. Usuários (base)</Label>
-                <Input type="number" min="1" value={form.max_usuarios} onChange={(e) => setForm(p => ({ ...p, max_usuarios: e.target.value }))} />
+                <Input type="number" min="1" disabled={!!editItem && isLifetimePlan(editItem)} value={form.max_usuarios} onChange={(e) => setForm(p => ({ ...p, max_usuarios: e.target.value }))} placeholder={editItem && isLifetimePlan(editItem) ? "Ilimitado" : undefined} />
               </div>
               <div className="space-y-2">
                 <Label>Máx. Eventos (base)</Label>
-                <Input type="number" min="1" value={form.max_eventos} onChange={(e) => setForm(p => ({ ...p, max_eventos: e.target.value }))} />
+                <Input type="number" min="1" disabled={!!editItem && isLifetimePlan(editItem)} value={form.max_eventos} onChange={(e) => setForm(p => ({ ...p, max_eventos: e.target.value }))} placeholder={editItem && isLifetimePlan(editItem) ? "Ilimitado" : undefined} />
               </div>
             </div>
             {form.periodicidade !== "vitalicio" && (
@@ -377,11 +391,11 @@ export default function Planos() {
               <Textarea value={form.descricao} onChange={(e) => setForm(p => ({ ...p, descricao: e.target.value }))} rows={2} placeholder="Descrição do plano" />
             </div>
             <div className="flex items-center gap-2">
-              <Switch checked={form.ativo} onCheckedChange={(v) => setForm(p => ({ ...p, ativo: v }))} />
+              <Switch checked={form.ativo} disabled={!!editItem && isLifetimePlan(editItem)} onCheckedChange={(v) => setForm(p => ({ ...p, ativo: v }))} />
               <Label>Ativo</Label>
             </div>
             <div className="flex items-center gap-2">
-              <Switch checked={form.disponivel_novo_cadastro} onCheckedChange={(v) => setForm(p => ({ ...p, disponivel_novo_cadastro: v }))} />
+              <Switch checked={form.disponivel_novo_cadastro} disabled={!!editItem && isLifetimePlan(editItem)} onCheckedChange={(v) => setForm(p => ({ ...p, disponivel_novo_cadastro: v }))} />
               <Label>Disponível para novos cadastros</Label>
             </div>
           </div>

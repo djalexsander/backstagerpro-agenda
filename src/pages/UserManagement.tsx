@@ -13,11 +13,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, User, Plus, Pencil, Trash2 } from "lucide-react";
+import { normalizeAppRole, selectHighestPriorityRole } from "@/lib/user-role";
 
 export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { empresaId, isMasterAdmin, user } = useAuth();
+  const { empresaId, user } = useAuth();
   const { canCreateUser, maxUsuarios, currentUsuarios } = usePlanLimits();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
@@ -30,52 +31,49 @@ export default function UserManagement() {
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<string>("usuario");
 
-  // Fetch users linked to this empresa via empresa_usuarios
+  // empresa_usuarios is the membership set; profiles keeps the active tenant.
   const { data: users = [] } = useQuery({
     queryKey: ["users-management", empresaId],
     queryFn: async () => {
       if (!empresaId) return [];
 
-      // Get users linked to this empresa
-      const { data: links, error: linkErr } = await supabase
+      const { data: memberships, error: membershipError } = await supabase
         .from("empresa_usuarios")
-        .select("*")
+        .select("user_id, perfil")
         .eq("empresa_id", empresaId);
-      if (linkErr) throw linkErr;
-      if (!links || links.length === 0) return [];
+      if (membershipError) throw membershipError;
+      if (!memberships || memberships.length === 0) return [];
 
-      const userIds = links.map((l: any) => l.user_id);
-
-      // Get profiles (including email)
-      const { data: profiles, error: pErr } = await supabase
+      const userIds = memberships.map((membership) => membership.user_id);
+      const { data: profiles, error: profileError } = await supabase
         .from("profiles")
         .select("*")
         .in("user_id", userIds);
-      if (pErr) throw pErr;
+      if (profileError) throw profileError;
+      if (!profiles || profiles.length === 0) return [];
 
-      // Get roles
       const { data: roles, error: rErr } = await supabase
         .from("user_roles")
         .select("*")
         .in("user_id", userIds);
       if (rErr) throw rErr;
 
-      return links
-        .map((link: any) => {
-          const profile = profiles?.find((p: any) => p.user_id === link.user_id);
-          const role = roles?.find((r: any) => r.user_id === link.user_id);
+      return profiles
+        .map((profile) => {
+          const userRoles = roles?.filter((item) => item.user_id === profile.user_id) ?? [];
+          const selectedRole = selectHighestPriorityRole(userRoles) || "usuario";
+          const selectedRoleRecord = userRoles.find(
+            (item) => normalizeAppRole(item.role) === selectedRole,
+          );
           return {
             ...profile,
-            user_id: link.user_id,
-            full_name: profile?.full_name || link.user_id,
-            email: (profile as any)?.email || "",
-            perfil: link.perfil,
-            role: role?.role || link.perfil || "usuario",
-            roleId: role?.id,
-            linkId: link.id,
+            full_name: profile.full_name || profile.user_id,
+            email: profile.email || "",
+            role: selectedRole,
+            roleId: selectedRoleRecord?.id,
           };
         })
-        .filter((u: any) => u.role !== "master_admin");
+        .filter((listedUser) => listedUser.role !== "master_admin");
     },
     enabled: !!empresaId,
   });
@@ -94,15 +92,7 @@ export default function UserManagement() {
       // Update profile
       const profileRes = await supabase.from("profiles").update({ full_name: newName } as any).eq("user_id", userId);
       if (profileRes.error) throw profileRes.error;
-      // Also update empresa_usuarios perfil
-      if (empresaId) {
-        const euRes = await supabase
-          .from("empresa_usuarios")
-          .update({ perfil: newRole } as any)
-          .eq("empresa_id", empresaId)
-          .eq("user_id", userId);
-        if (euRes.error) throw euRes.error;
-      }
+      // empresa_usuarios.perfil is synchronized by a database trigger.
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
@@ -116,7 +106,6 @@ export default function UserManagement() {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("create-user", {
         body: {
-          empresa_id: empresaId,
           email: newEmail,
           full_name: newName,
           perfil: newRole,
@@ -129,7 +118,9 @@ export default function UserManagement() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
       toast({
-        title: data?.isNewUser ? "Usuário criado com sucesso!" : "Usuário vinculado à empresa!",
+        title: data?.activationEmailSent
+          ? "Convite de ativação enviado!"
+          : "Usuário atualizado!",
         description: data?.message,
       });
       setAddOpen(false);
@@ -142,15 +133,21 @@ export default function UserManagement() {
 
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
+      if (!empresaId) throw new Error("Empresa não identificada");
       const { data, error } = await supabase.functions.invoke("delete-user", {
-        body: { user_id: userId },
+        body: { user_id: userId, empresa_id: empresaId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
-      toast({ title: "Usuário excluído com sucesso!" });
+      toast({
+        title: data?.auth_user_deleted
+          ? "Usuário removido e acesso encerrado"
+          : "Vínculo com a empresa removido",
+      });
       setDeleteUser(null);
     },
     onError: (err: any) => toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" }),
@@ -256,7 +253,9 @@ export default function UserManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir usuário</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir <strong>{deleteUser?.full_name}</strong>? Esta ação não pode ser desfeita.
+              O vínculo de <strong>{deleteUser?.full_name}</strong> com esta
+              empresa será removido. A conta de acesso só será excluída se não
+              houver vínculo com outra empresa.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -266,7 +265,7 @@ export default function UserManagement() {
               onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.user_id)}
               disabled={deleteUserMutation.isPending}
             >
-              {deleteUserMutation.isPending ? "Excluindo..." : "Excluir"}
+              {deleteUserMutation.isPending ? "Removendo..." : "Remover vínculo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -284,7 +283,7 @@ export default function UserManagement() {
           </TableHeader>
           <TableBody>
             {users.map((u: any) => (
-              <TableRow key={u.linkId || u.id}>
+              <TableRow key={u.id}>
                 <TableCell><p className="font-medium">{u.full_name}</p></TableCell>
                 <TableCell><p className="text-muted-foreground text-sm">{u.email || "—"}</p></TableCell>
                 <TableCell>

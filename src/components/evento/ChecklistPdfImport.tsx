@@ -12,6 +12,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  extractChecklistLinesFromSpreadsheet,
+  isLegacyXlsFile,
+  isXlsxFile,
+} from "@/lib/spreadsheet-import";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -81,27 +86,6 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
     return [...new Set(lines)];
   }, []);
 
-  const extractTextFromExcel = useCallback(async (file: File): Promise<string[]> => {
-    const XLSX = await import("xlsx");
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: "array" });
-    const lines: string[] = [];
-
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-      for (const row of rows) {
-        const text = row
-          .map((cell: any) => String(cell ?? "").trim())
-          .filter((c: string) => c.length > 0)
-          .join(" — ");
-        if (text.length > 2) lines.push(text);
-      }
-    }
-
-    return [...new Set(lines)];
-  }, []);
-
   const extractTextFromWord = useCallback(async (file: File): Promise<string[]> => {
     const mammoth = await import("mammoth");
     const arrayBuffer = await file.arrayBuffer();
@@ -113,10 +97,6 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
     return [...new Set(lines)];
   }, []);
 
-  const isExcel = (file: File) =>
-    file.name.endsWith(".xlsx") || file.name.endsWith(".xls") ||
-    file.type.includes("spreadsheet") || file.type.includes("excel");
-
   const isWord = (file: File) =>
     file.name.endsWith(".docx") || file.name.endsWith(".doc") ||
     file.type.includes("wordprocessing") || file.type === "application/msword";
@@ -126,11 +106,20 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
     if (!file) return;
 
     const isPdf = file.type === "application/pdf";
-    const isXls = isExcel(file);
+    const isSpreadsheet = isXlsxFile(file);
     const isDoc = isWord(file);
 
-    if (!isPdf && !isXls && !isDoc) {
-      toast({ title: "Selecione um arquivo PDF, Excel ou Word", variant: "destructive" });
+    if (isLegacyXlsFile(file)) {
+      toast({
+        title: "Formato .xls não suportado",
+        description: "Abra o arquivo no Excel ou LibreOffice e salve como .xlsx.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isPdf && !isSpreadsheet && !isDoc) {
+      toast({ title: "Selecione um arquivo PDF, Excel (.xlsx) ou Word", variant: "destructive" });
       return;
     }
 
@@ -138,8 +127,8 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
     try {
       const lines = isPdf
         ? await extractTextFromPdf(file)
-        : isXls
-          ? await extractTextFromExcel(file)
+        : isSpreadsheet
+          ? await extractChecklistLinesFromSpreadsheet(file)
           : await extractTextFromWord(file);
 
       if (lines.length === 0) {
@@ -167,7 +156,7 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
       if (insErr) throw insErr;
 
       queryClient.invalidateQueries({ queryKey: ["checklist-pdfs", eventId] });
-      const fileLabel = isPdf ? "PDF" : isXls ? "Excel" : "Word";
+      const fileLabel = isPdf ? "PDF" : isSpreadsheet ? "Excel" : "Word";
       toast({ title: `${fileLabel} anexado ao evento` });
     } catch (err: any) {
       toast({ title: "Erro ao processar arquivo", description: err.message, variant: "destructive" });
@@ -271,12 +260,12 @@ export function ChecklistPdfImport({ eventId, empresaId, onImportItems }: Props)
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.xlsx,.xls,.docx,.doc"
+              accept=".pdf,.xlsx,.docx,.doc"
               className="hidden"
               onChange={handleFileSelect}
             />
             <span className="text-xs text-muted-foreground">
-              PDF, Excel ou Word — será anexado e o conteúdo extraído para importação
+              PDF, Excel (.xlsx) ou Word — será anexado e o conteúdo extraído para importação
             </span>
           </div>
 
