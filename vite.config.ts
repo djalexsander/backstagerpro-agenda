@@ -13,6 +13,7 @@ export default defineConfig(() => ({
     __APP_VERSION__: JSON.stringify(pkg.version),
     __IS_TAURI__: JSON.stringify(isTauri),
   },
+
   server: {
     host: "::",
     port: 8080,
@@ -22,63 +23,79 @@ export default defineConfig(() => ({
     // Tauri expects a fixed port
     strictPort: isTauri,
   },
+
   // Tauri CLI expects the build output in ../dist
   ...(isTauri && {
     build: {
-      // Tauri v2 uses system webview; target modern browsers
+      // Tauri v2 uses the system WebView
       target: ["es2021", "chrome100", "safari14"] as any,
     },
   }),
+
   // Prevent Vite from obscuring Rust errors in Tauri dev
   clearScreen: false,
+
   plugins: [
     react(),
-    // Only register PWA in web builds, not in Tauri
-    !isTauri &&
-      VitePWA({
-        registerType: "prompt",
-        includeAssets: ["favicon-256.png", "icon-192.png", "icon-512.png", "apple-touch-icon.png"],
-        workbox: {
-          navigateFallbackDenylist: [/^\/~oauth/],
-          globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        },
-        manifest: {
-          name: "Backstage Pro — Gestão de Eventos",
-          short_name: "Backstage Pro",
-          description: "Sistema de gestão de Agenda e Financeiro",
-          theme_color: "#0a0f1e",
-          background_color: "#0a0f1e",
-          display: "standalone",
-          orientation: "portrait",
-          scope: "/",
-          start_url: "/",
-          icons: [
-            {
-              src: "/icon-192.png",
-              sizes: "192x192",
-              type: "image/png",
-            },
-            {
-              src: "/icon-512.png",
-              sizes: "512x512",
-              type: "image/png",
-            },
-            {
-              src: "/icon-512.png",
-              sizes: "512x512",
-              type: "image/png",
-              purpose: "maskable",
-            },
-          ],
-        },
-      }),
-  ].filter(Boolean),
+
+    // Keep the plugin loaded so "virtual:pwa-register" can be resolved.
+    // Disable service worker generation when running inside Tauri.
+    VitePWA({
+      disable: isTauri,
+      registerType: "prompt",
+
+      includeAssets: [
+        "favicon-256.png",
+        "icon-192.png",
+        "icon-512.png",
+        "apple-touch-icon.png",
+      ],
+
+      workbox: {
+        navigateFallbackDenylist: [/^\/~oauth/],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
+
+      manifest: {
+        name: "Backstage Pro — Gestão de Eventos",
+        short_name: "Backstage Pro",
+        description: "Sistema de gestão de Agenda e Financeiro",
+        theme_color: "#0a0f1e",
+        background_color: "#0a0f1e",
+        display: "standalone",
+        orientation: "portrait",
+        scope: "/",
+        start_url: "/",
+
+        icons: [
+          {
+            src: "/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
+            src: "/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      },
+    }),
+  ],
+
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+
   // Environment variables prefixed with VITE_ or TAURI_ are exposed
   envPrefix: ["VITE_", "TAURI_ENV_"],
 }));
