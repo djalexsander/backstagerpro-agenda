@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
@@ -63,6 +64,13 @@ import { MaterialPhotoImage } from "@/components/materials/MaterialPhotoImage";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getMaterialPermissions } from "@/lib/material-permissions";
+import { getStockPermissions } from "@/lib/stock-permissions";
+import { listStockCompaniesForMaster } from "@/lib/stock-service";
+import {
+  getCompanyAccessState,
+  hasCompanyOperationalAccess,
+} from "@/lib/access-control";
+import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 
 const PAGE_SIZE = 10;
 
@@ -70,7 +78,6 @@ const initialFilters: MaterialFilters = {
   search: "",
   categoryId: "todos",
   status: "todos",
-  location: "",
   active: "ativos",
   sortField: "nome",
   sortDirection: "asc",
@@ -87,13 +94,63 @@ function statusBadgeClass(status: MaterialOperationalStatus) {
 
 export default function Materiais() {
   const { toast } = useToast();
-  const { role, empresaReadOnly, isMasterAdmin } = useAuth();
-  const { hasModule } = useCompanyModules();
+  const {
+    role,
+    empresaId: authenticatedCompanyId,
+    empresaReadOnly,
+    isMasterAdmin,
+  } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const masterCompanyId = isMasterAdmin
+    ? searchParams.get("empresa") ?? ""
+    : "";
+  const { data: masterCompanies = [], isLoading: loadingMasterCompanies } =
+    useQuery({
+      queryKey: ["stock-master-companies"],
+      queryFn: listStockCompaniesForMaster,
+      enabled: isMasterAdmin,
+    });
+  const selectedMasterCompany = masterCompanies.find(
+    (company) => company.id === masterCompanyId,
+  );
+  const empresaId = isMasterAdmin
+    ? selectedMasterCompany?.id ?? null
+    : authenticatedCompanyId;
+  const selectedPlan = selectedMasterCompany?.planos as
+    | { periodicidade: string | null; ativo: boolean }
+    | null
+    | undefined;
+  const effectiveCompanyReadOnly = isMasterAdmin
+    ? selectedMasterCompany
+      ? getCompanyAccessState({
+          ...selectedMasterCompany,
+          plan_periodicity: selectedPlan?.periodicidade ?? null,
+        }).blocked
+      : true
+    : empresaReadOnly;
+  const stockCompanyReadOnly = isMasterAdmin
+    ? selectedMasterCompany
+      ? !hasCompanyOperationalAccess({
+          ...selectedMasterCompany,
+          plan_periodicity: selectedPlan?.periodicidade ?? null,
+          plan_active: selectedPlan?.ativo ?? null,
+        })
+      : true
+    : empresaReadOnly;
+  const { hasModule } = useCompanyModules(empresaId);
   const permissions = getMaterialPermissions({
     role,
     moduleEnabled:
       isMasterAdmin || hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
-    companyReadOnly: empresaReadOnly,
+    companyReadOnly: effectiveCompanyReadOnly,
+  });
+  const stockPermissions = getStockPermissions({
+    role,
+    moduleEnabled:
+      hasModule(MODULE_KEYS.GESTAO_MATERIAIS) &&
+      hasModule(MODULE_KEYS.CONTROLE_ESTOQUE),
+    companyReadOnly: stockCompanyReadOnly,
+    companySelected: !!empresaId,
   });
   const canManage =
     permissions.criar ||
@@ -104,14 +161,13 @@ export default function Materiais() {
     permissions.alterarStatus ||
     permissions.gerarIdentificadores;
   const {
-    empresaId,
     categories,
     materials,
     isLoading,
     error,
     invalidateMaterials,
     invalidateCategories,
-  } = useMaterials();
+  } = useMaterials(empresaId);
   const [filters, setFilters] = useState(initialFilters);
   const [page, setPage] = useState(1);
   const [categoryOpen, setCategoryOpen] = useState(false);
@@ -184,13 +240,16 @@ export default function Materiais() {
     setFormOpen(true);
   };
 
-  const locations = [
-    ...new Set(
-      materials
-        .map((material) => material.localizacao)
-        .filter((value): value is string => !!value),
-    ),
-  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const selectMasterCompany = (companyId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("empresa", companyId);
+    setSearchParams(next, { replace: true });
+    setCategoryOpen(false);
+    setFormOpen(false);
+    setEditId(null);
+    setDetailId(null);
+    setActiveTarget(null);
+  };
 
   const renderActions = (material: MaterialWithRelations) => (
     <div className="flex justify-end gap-1">
@@ -231,11 +290,28 @@ export default function Materiais() {
 
   if (!empresaId && !isLoading) {
     return (
-      <Card>
-        <CardContent className="p-6 text-center text-muted-foreground">
-          Nenhuma empresa ativa foi identificada para este usuário.
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold">Materiais</h1>
+          <p className="text-muted-foreground">
+            {isMasterAdmin
+              ? "Selecione explicitamente a empresa para operar em contexto Master."
+              : "Nenhuma empresa ativa foi identificada para este usuário."}
+          </p>
+        </div>
+        {isMasterAdmin && (
+          <Card>
+            <CardContent className="max-w-xl p-6">
+              <CompanyContextSelector
+                companies={masterCompanies}
+                value={masterCompanyId}
+                onValueChange={selectMasterCompany}
+                disabled={loadingMasterCompanies}
+              />
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
@@ -270,6 +346,19 @@ export default function Materiais() {
           </div>
         )}
       </div>
+
+      {isMasterAdmin && (
+        <Card>
+          <CardContent className="max-w-xl p-4">
+            <CompanyContextSelector
+              companies={masterCompanies}
+              value={masterCompanyId}
+              onValueChange={selectMasterCompany}
+              disabled={loadingMasterCompanies}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
@@ -341,24 +430,6 @@ export default function Materiais() {
             </SelectContent>
           </Select>
           <Select
-            value={filters.location || "todas"}
-            onValueChange={(value) =>
-              updateFilter("location", value === "todas" ? "" : value)
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Localização" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todas as localizações</SelectItem>
-              {locations.map((location) => (
-                <SelectItem key={location} value={location}>
-                  {location}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
             value={filters.active}
             onValueChange={(value) =>
               updateFilter("active", value as MaterialFilters["active"])
@@ -394,9 +465,6 @@ export default function Materiais() {
                   Ordenar por quantidade
                 </SelectItem>
                 <SelectItem value="status">Ordenar por status</SelectItem>
-                <SelectItem value="localizacao">
-                  Ordenar por localização
-                </SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -460,7 +528,6 @@ export default function Materiais() {
                   <TableHead>Categoria</TableHead>
                   <TableHead>Marca / Modelo</TableHead>
                   <TableHead>Qtd.</TableHead>
-                  <TableHead>Localização</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -495,7 +562,6 @@ export default function Materiais() {
                       <TableCell>
                         {material.quantidade} {material.unidade_medida}
                       </TableCell>
-                      <TableCell>{material.localizacao || "—"}</TableCell>
                       <TableCell>
                         <Badge
                           className={statusBadgeClass(
@@ -631,6 +697,9 @@ export default function Materiais() {
         open={!!detailId}
         onOpenChange={(open) => !open && setDetailId(null)}
         canGenerateIdentification={permissions.gerarIdentificadores}
+        companyId={empresaId}
+        canViewStock={stockPermissions.visualizar}
+        canManageStock={stockPermissions.movimentar}
         onChanged={invalidateMaterials}
       />
 

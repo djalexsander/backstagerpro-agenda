@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getCompanyAccessState,
+  hasCompanyOperationalAccess,
   getSubscriptionRedirect,
   getWaitingPaymentRedirect,
   type CompanyAccessRecord,
@@ -22,6 +23,49 @@ function company(overrides: Partial<CompanyAccessRecord> = {}): CompanyAccessRec
 }
 
 describe("company access and redirects", () => {
+  it("mirrors backend operational access for paid, trial and lifetime companies", () => {
+    expect(hasCompanyOperationalAccess(company(), NOW)).toBe(true);
+    expect(
+      hasCompanyOperationalAccess(
+        company({
+          plano_id: null,
+          trial_expires_at: "2026-08-01T12:00:00.000Z",
+          status_pagamento: null,
+          vencimento: null,
+        }),
+        NOW,
+      ),
+    ).toBe(true);
+    expect(
+      hasCompanyOperationalAccess(
+        company({
+          plan_periodicity: "vitalicio",
+          status_pagamento: "isento",
+          vencimento: null,
+        }),
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps master stock read-only when the selected company is not operational", () => {
+    expect(
+      hasCompanyOperationalAccess(
+        company({ status_pagamento: "pendente" }),
+        NOW,
+      ),
+    ).toBe(false);
+    expect(
+      hasCompanyOperationalAccess(
+        company({ precisa_escolher_plano: true }),
+        NOW,
+      ),
+    ).toBe(false);
+    expect(
+      hasCompanyOperationalAccess(company({ status: "inativo" }), NOW),
+    ).toBe(false);
+  });
+
   it("keeps an active, paid company on the requested route", () => {
     const state = getCompanyAccessState(company(), NOW);
 

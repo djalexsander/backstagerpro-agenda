@@ -38,8 +38,14 @@ interface UseCompanyModulesReturn {
   isLoading: boolean;
 }
 
-export function useCompanyModules(): UseCompanyModulesReturn {
-  const { empresaId } = useAuth();
+export function useCompanyModules(
+  requestedCompanyId?: string | null,
+): UseCompanyModulesReturn {
+  const { empresaId: authenticatedCompanyId } = useAuth();
+  const empresaId =
+    requestedCompanyId === undefined
+      ? authenticatedCompanyId
+      : requestedCompanyId;
 
   const { data: isLifetime = false, isLoading: loadingLicense } = useQuery({
     queryKey: ["company-lifetime-license", empresaId],

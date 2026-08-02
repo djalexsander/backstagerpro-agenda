@@ -2,9 +2,9 @@
 
 ## Objetivo e ambiente
 
-Executar este roteiro somente em ambiente local ou de homologação, depois de a
-migration da Etapa 2 ter sido validada em uma transação com `ROLLBACK` e
-aplicada ao ambiente com autorização explícita.
+Executar este roteiro somente em ambiente local ou de homologação. A migration
+da Etapa 2 já está aplicada no remoto; testes que criem massa, concorrência ou
+movimentações não devem ser executados em produção.
 
 Registrar para cada cenário:
 

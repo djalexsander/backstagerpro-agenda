@@ -21,6 +21,7 @@ export function useStock({
   filters,
   historyPage,
   historyFilters,
+  accessEnabled = true,
 }: {
   companyId?: string | null;
   page: number;
@@ -28,11 +29,12 @@ export function useStock({
   filters: StockFilters;
   historyPage: number;
   historyFilters: StockMovementFilters;
+  accessEnabled?: boolean;
 }) {
   const { empresaId: authenticatedCompanyId } = useAuth();
   const empresaId = requestedCompanyId ?? authenticatedCompanyId;
   const queryClient = useQueryClient();
-  const enabled = !!empresaId;
+  const enabled = !!empresaId && accessEnabled;
   const locationsQuery = useQuery({
     queryKey: ["stock-locations", empresaId],
     queryFn: () => listStockLocations(empresaId!, true),

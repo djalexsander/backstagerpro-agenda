@@ -2,12 +2,15 @@
 
 ## Estado da entrega
 
-O código da Etapa 2 está implementado e pronto para revisão. A migration
-permanece pendente e não foi aplicada local ou remotamente. A aprovação de banco
-depende de disponibilizar PostgreSQL local, executar a migration e os testes em
-transação com `ROLLBACK`, rodar o ensaio concorrente e revisar os resultados.
+O código da Etapa 2 está implementado e a migration
+`20260730080000_stock_control_stage_two.sql` está aplicada no projeto remoto.
+Esse estado foi confirmado em 02/08/2026 com `supabase migration list --linked`.
+Os testes frontend foram reexecutados na estabilização 2.5. Os testes pgTAP e o
+ensaio concorrente ainda dependem de um cliente PostgreSQL/Docker disponível.
 
-Não foram executados commit, push, tag, release ou `supabase db push --linked`.
+Não foram executados commit, push de Git, tag ou release. O comando
+`supabase db push --linked --yes` foi executado em 02/08/2026 exclusivamente
+para aplicar a migration incremental autorizada da Etapa 2.5.
 
 ## Resumo da implementação
 
@@ -450,9 +453,10 @@ Novas suítes cobrem:
 Resultado executado:
 
 - `npm run typecheck`: aprovado;
-- `npm test -- --reporter=verbose`: 34 arquivos, 237 testes aprovados;
+- `npm test -- --reporter=verbose`: reexecutado na Etapa 2.5, 34 arquivos e
+  240 testes aprovados;
 - ESLint direcionado: aprovado;
-- `npm run build`: aprovado, 4.242 módulos transformados.
+- `npm run build`: aprovado, 4.243 módulos transformados.
 
 Avisos não bloqueantes do build:
 
@@ -471,11 +475,13 @@ Arquivos preparados:
 Total preparado: 154 asserções SQL, todas encapsuladas em
 `BEGIN ... ROLLBACK`.
 
-Resultado: **não executado**, porque não existe PostgreSQL local disponível.
+Resultado na estabilização 2.5: o CLI conectou ao remoto, mas `supabase test db
+--linked` ainda exige Docker para executar o cliente pgTAP e encerrou com
+`LegacyDockerRunError`. Nenhuma suíte SQL foi reportada como aprovada.
 
 ## `db lint`
 
-Comando tentado:
+Comando executado originalmente:
 
 `supabase db lint --local`
 
@@ -485,6 +491,9 @@ Resultado:
 - `LegacyDbConnectError`;
 - `PgClient: Failed to connect`;
 - nenhuma conexão linked foi usada.
+
+Na Etapa 2.5, `supabase db lint --linked --schema public --level warning
+--fail-on error` foi aprovado com `No schema errors found`.
 
 ## Dry-run
 
@@ -499,28 +508,20 @@ Resultado:
 - nenhuma migration foi aplicada;
 - nenhum `--linked` foi usado.
 
-## Migration pendente
+## Estado remoto da migration
 
-`20260730080000_stock_control_stage_two.sql` permanece pendente. Antes de
-qualquer publicação:
-
-1. disponibilizar Docker/Podman ou PostgreSQL/`psql` local;
-2. aplicar todas as migrations em banco descartável;
-3. executar pgTAP dentro da mesma transação;
-4. executar `ROLLBACK`;
-5. executar `db lint`;
-6. executar dry-run local;
-7. executar o teste concorrente de duas sessões;
-8. revisar resultados;
-9. somente depois solicitar autorização separada para `db push --linked`.
+`20260730080000_stock_control_stage_two.sql` consta no histórico remoto com o
+timestamp `2026-07-30 08:00:00`. A estabilização 2.5 não reaplica nem altera
+essa migration histórica. A migration incremental
+`20260802090000_stage_2_5_stock_stabilization.sql` também consta no histórico
+remoto, com timestamp `2026-08-02 09:00:00`.
 
 ## Riscos e limitações
 
-- a migration ainda não foi interpretada por um PostgreSQL real;
+- a migration da Etapa 2 está aplicada no PostgreSQL remoto;
 - pgTAP e concorrência real ainda não têm resultado;
 - o roteiro manual ainda não foi executado;
-- tipos Supabase foram atualizados manualmente e devem ser regenerados após uma
-  aplicação validada para comparação;
+- tipos Supabase foram regenerados do schema remoto real em 02/08/2026;
 - o valor legado é preservado, mas exige reconciliação manual;
 - nomes de localização são únicos em toda a empresa, não apenas entre irmãos;
 - quantidades fracionárias não são suportadas;

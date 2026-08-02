@@ -19,9 +19,6 @@ import { formatBrazilianCurrency } from "@/lib/material-domain";
 import { MaterialPhotoGallery } from "./MaterialPhotoGallery";
 import { MaterialPhotoImage } from "./MaterialPhotoImage";
 import { MaterialIdentificationCard } from "./MaterialIdentificationCard";
-import { useAuth } from "@/contexts/AuthContext";
-import { useCompanyModules } from "@/hooks/useCompanyModules";
-import { MODULE_KEYS } from "@/constants/module-keys";
 import { getMaterialStockSnapshot } from "@/lib/stock-service";
 import { STOCK_MOVEMENT_LABELS } from "@/lib/stock-domain";
 
@@ -48,15 +45,21 @@ function formatDate(value?: string | null, withTime = false) {
   }).format(new Date(withTime ? value : `${value}T12:00:00`));
 }
 
-function MaterialStockSection({ material }: { material: MaterialWithRelations }) {
-  const { empresaId, isMasterAdmin, isAdmin, empresaReadOnly } = useAuth();
-  const { hasModule } = useCompanyModules();
-  const enabled =
-    !!empresaId &&
-    (isMasterAdmin || hasModule(MODULE_KEYS.CONTROLE_ESTOQUE));
+function MaterialStockSection({
+  material,
+  companyId,
+  canViewStock,
+  canManageStock,
+}: {
+  material: MaterialWithRelations;
+  companyId: string | null;
+  canViewStock: boolean;
+  canManageStock: boolean;
+}) {
+  const enabled = !!companyId && canViewStock;
   const { data, isLoading } = useQuery({
-    queryKey: ["material-stock-snapshot", empresaId, material.id],
-    queryFn: () => getMaterialStockSnapshot(empresaId!, material.id),
+    queryKey: ["material-stock-snapshot", companyId, material.id],
+    queryFn: () => getMaterialStockSnapshot(companyId!, material.id),
     enabled,
   });
   if (!enabled) return null;
@@ -131,13 +134,15 @@ function MaterialStockSection({ material }: { material: MaterialWithRelations })
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline">
-              <Link to={`/estoque?material=${material.id}&tab=historico`}>
+              <Link
+                to={`/estoque?empresa=${companyId}&material=${material.id}&tab=historico`}
+              >
                 Abrir histórico
               </Link>
             </Button>
-            {isAdmin && !empresaReadOnly && (
+            {canManageStock && (
               <Button asChild size="sm">
-                <Link to={`/estoque?material=${material.id}`}>
+                <Link to={`/estoque?empresa=${companyId}&material=${material.id}`}>
                   Movimentar estoque
                 </Link>
               </Button>
@@ -154,12 +159,18 @@ export function MaterialDetailsDialog({
   open,
   onOpenChange,
   canGenerateIdentification = false,
+  companyId,
+  canViewStock = false,
+  canManageStock = false,
   onChanged,
 }: {
   material: MaterialWithRelations | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canGenerateIdentification?: boolean;
+  companyId: string | null;
+  canViewStock?: boolean;
+  canManageStock?: boolean;
   onChanged: () => Promise<void>;
 }) {
   if (!material) return null;
@@ -259,7 +270,12 @@ export function MaterialDetailsDialog({
           onChanged={onChanged}
         />
 
-        <MaterialStockSection material={material} />
+        <MaterialStockSection
+          material={material}
+          companyId={companyId}
+          canViewStock={canViewStock}
+          canManageStock={canManageStock}
+        />
 
         {(material.descricao || material.observacoes) && (
           <>

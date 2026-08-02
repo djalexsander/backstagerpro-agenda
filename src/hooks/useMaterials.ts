@@ -5,8 +5,12 @@ import {
   listMaterials,
 } from "@/lib/material-service";
 
-export function useMaterials() {
-  const { empresaId } = useAuth();
+export function useMaterials(requestedCompanyId?: string | null) {
+  const { empresaId: authenticatedCompanyId } = useAuth();
+  const empresaId =
+    requestedCompanyId === undefined
+      ? authenticatedCompanyId
+      : requestedCompanyId;
   const queryClient = useQueryClient();
 
   const categoriesQuery = useQuery({
@@ -46,4 +50,3 @@ export function useMaterials() {
     invalidateCategories,
   };
 }
-

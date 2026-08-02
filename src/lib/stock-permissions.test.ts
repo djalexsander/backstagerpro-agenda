@@ -66,10 +66,21 @@ describe("stock permissions", () => {
     expect(permissions.movimentar).toBe(false);
   });
 
-  it("allows master operations after canonical company selection", () => {
+  it("requires the selected company entitlement for master operations", () => {
     const permissions = getStockPermissions({
       role: "master_admin",
       moduleEnabled: false,
+      companyReadOnly: false,
+      companySelected: true,
+    });
+    expect(permissions.visualizar).toBe(false);
+    expect(permissions.movimentar).toBe(false);
+  });
+
+  it("allows master operations for an entitled operational company", () => {
+    const permissions = getStockPermissions({
+      role: "master_admin",
+      moduleEnabled: true,
       companyReadOnly: false,
       companySelected: true,
     });

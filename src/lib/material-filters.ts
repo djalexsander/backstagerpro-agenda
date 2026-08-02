@@ -9,14 +9,12 @@ export type MaterialSortField =
   | "codigo"
   | "categoria"
   | "quantidade"
-  | "status"
-  | "localizacao";
+  | "status";
 
 export interface MaterialFilters {
   search: string;
   categoryId: string;
   status: MaterialOperationalStatus | "todos";
-  location: string;
   active: MaterialActiveFilter;
   sortField: MaterialSortField;
   sortDirection: "asc" | "desc";
@@ -45,7 +43,6 @@ function sortValue(
   if (field === "categoria") return material.categoria?.nome ?? "";
   if (field === "quantidade") return material.quantidade;
   if (field === "status") return material.status_operacional;
-  if (field === "localizacao") return material.localizacao ?? "";
   return material.nome;
 }
 
@@ -54,8 +51,6 @@ export function filterAndSortMaterials(
   filters: MaterialFilters,
 ): MaterialWithRelations[] {
   const search = filters.search.trim().toLocaleLowerCase("pt-BR");
-  const location = filters.location.trim().toLocaleLowerCase("pt-BR");
-
   return materials
     .filter((material) => {
       if (search && !searchableText(material).includes(search)) return false;
@@ -68,14 +63,6 @@ export function filterAndSortMaterials(
       if (
         filters.status !== "todos" &&
         material.status_operacional !== filters.status
-      ) {
-        return false;
-      }
-      if (
-        location &&
-        !(material.localizacao ?? "")
-          .toLocaleLowerCase("pt-BR")
-          .includes(location)
       ) {
         return false;
       }

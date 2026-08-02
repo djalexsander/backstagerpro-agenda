@@ -7,12 +7,42 @@ export const PENDING_PAYMENT_STATUSES = [
 export interface CompanyAccessRecord {
   plano_id: string | null;
   plan_periodicity?: string | null;
+  plan_active?: boolean | null;
   plano_bloqueado: boolean;
   trial_expires_at: string | null;
   status: string | null;
   status_pagamento: string | null;
   vencimento: string | null;
   precisa_escolher_plano: boolean;
+}
+
+export function hasCompanyOperationalAccess(
+  company: CompanyAccessRecord,
+  now = new Date(),
+): boolean {
+  if (
+    company.status !== "ativo" ||
+    company.plano_bloqueado ||
+    company.precisa_escolher_plano
+  ) {
+    return false;
+  }
+
+  if (!company.plano_id) {
+    return (
+      company.trial_expires_at !== null &&
+      !isDateExpired(company.trial_expires_at, now)
+    );
+  }
+
+  if (company.plan_active === false) return false;
+  if (company.plan_periodicity === "vitalicio") return true;
+
+  return (
+    company.status_pagamento === "pago" &&
+    company.vencimento !== null &&
+    !isDateExpired(company.vencimento, now)
+  );
 }
 
 export interface CompanyAccessState {

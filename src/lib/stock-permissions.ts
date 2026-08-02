@@ -20,7 +20,8 @@ export function getStockPermissions({
   const master = role === "master_admin";
   const admin = role === "admin_empresa";
   const user = role === "usuario";
-  const canRead = companySelected && (master || (moduleEnabled && (admin || user)));
+  const canRead =
+    companySelected && moduleEnabled && (master || admin || user);
   const canWrite =
     canRead && (master || admin) && !companyReadOnly;
   return {

@@ -4,6 +4,8 @@ Documentos complementares:
 
 - [Relatório de entrega](./stock-control-stage-two-delivery-report.md)
 - [Roteiro de validação manual](./stock-control-stage-two-manual-test.md)
+- [Reconciliação legada da Etapa 2.5](./stage-2-5-legacy-reconciliation.md)
+- [Validação concorrente da Etapa 2.5](./stage-2-5-concurrency-validation.md)
 
 ## Decisões canônicas
 
@@ -110,6 +112,7 @@ RPCs desta etapa autorizam somente `manual` e `controle_estoque`.
 
 ## Publicação
 
-A migration `20260730080000_stock_control_stage_two.sql` é incremental. Antes
-de qualquer `supabase db push --linked`, aplicar e executar os testes pgTAP em
-uma transação descartável, finalizar com `ROLLBACK` e revisar o resultado.
+A migration `20260730080000_stock_control_stage_two.sql` está aplicada no
+projeto remoto, conforme `supabase migration list --linked` executado em
+02/08/2026. Correções posteriores usam migrations incrementais e não alteram o
+arquivo histórico.

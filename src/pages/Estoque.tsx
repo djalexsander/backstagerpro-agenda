@@ -50,6 +50,11 @@ import type {
   StockMovementView,
 } from "@/lib/stock-types";
 import { listStockCompaniesForMaster } from "@/lib/stock-service";
+import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { MODULE_KEYS } from "@/constants/module-keys";
+import { getStockPermissions } from "@/lib/stock-permissions";
+import { hasCompanyOperationalAccess } from "@/lib/access-control";
 
 const PAGE_SIZE = 10;
 
@@ -102,22 +107,51 @@ function Pagination({
 export default function Estoque() {
   const {
     empresaId: authenticatedCompanyId,
-    isAdmin,
+    role,
     isMasterAdmin,
     empresaReadOnly,
   } = useAuth();
-  const [masterCompanyId, setMasterCompanyId] = useState("");
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const masterCompanyId = isMasterAdmin
+    ? searchParams.get("empresa") ?? ""
+    : "";
   const requestedMaterialId = searchParams.get("material") || undefined;
   const requestedTab =
     searchParams.get("tab") === "historico" ? "historico" : "saldos";
-  const empresaId = isMasterAdmin ? masterCompanyId || null : authenticatedCompanyId;
-  const { data: masterCompanies = [] } = useQuery({
+  const { data: masterCompanies = [], isLoading: loadingMasterCompanies } = useQuery({
     queryKey: ["stock-master-companies"],
     queryFn: listStockCompaniesForMaster,
     enabled: isMasterAdmin,
   });
-  const canWrite = isAdmin && !empresaReadOnly;
+  const selectedMasterCompany = masterCompanies.find(
+    (company) => company.id === masterCompanyId,
+  );
+  const empresaId = isMasterAdmin
+    ? selectedMasterCompany?.id ?? null
+    : authenticatedCompanyId;
+  const selectedPlan = selectedMasterCompany?.planos as
+    | { periodicidade: string | null; ativo: boolean }
+    | null
+    | undefined;
+  const effectiveCompanyReadOnly = isMasterAdmin
+    ? selectedMasterCompany
+      ? !hasCompanyOperationalAccess({
+          ...selectedMasterCompany,
+          plan_periodicity: selectedPlan?.periodicidade ?? null,
+          plan_active: selectedPlan?.ativo ?? null,
+        })
+      : true
+    : empresaReadOnly;
+  const { hasModule, isLoading: loadingModules } = useCompanyModules(empresaId);
+  const permissions = getStockPermissions({
+    role,
+    moduleEnabled:
+      hasModule(MODULE_KEYS.CONTROLE_ESTOQUE) &&
+      hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
+    companyReadOnly: effectiveCompanyReadOnly,
+    companySelected: !!empresaId,
+  });
+  const canWrite = permissions.movimentar;
   const [page, setPage] = useState(1);
   const [historyPageNumber, setHistoryPageNumber] = useState(1);
   const [filters, setFilters] = useState<StockFilters>({
@@ -157,10 +191,21 @@ export default function Estoque() {
     filters,
     historyPage: historyPageNumber,
     historyFilters,
+    accessEnabled: permissions.visualizar,
   });
 
   useEffect(() => setPage(1), [filters]);
   useEffect(() => setHistoryPageNumber(1), [historyFilters]);
+
+  const selectMasterCompany = (companyId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("empresa", companyId);
+    setSearchParams(next, { replace: true });
+    setMovementOpen(false);
+    setLocationsOpen(false);
+    setReversal(null);
+    setSelectedMaterial(null);
+  };
 
   const openOperation = (
     material: StockMaterial,
@@ -182,17 +227,43 @@ export default function Estoque() {
         </div>
         <Card>
           <CardContent className="max-w-xl space-y-2 p-6">
-            <label className="text-sm font-medium">Empresa</label>
-            <Select value={masterCompanyId} onValueChange={setMasterCompanyId}>
-              <SelectTrigger><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
-              <SelectContent>
-                {masterCompanies.map((company) => (
-                  <SelectItem key={company.id} value={company.id}>
-                    {company.nome_empresa}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CompanyContextSelector
+              companies={masterCompanies}
+              value={masterCompanyId}
+              onValueChange={selectMasterCompany}
+              disabled={loadingMasterCompanies}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!loadingModules && !permissions.visualizar) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold">Controle de Estoque</h1>
+          <p className="text-muted-foreground">
+            A empresa selecionada não possui acesso ao módulo.
+          </p>
+        </div>
+        {isMasterAdmin && (
+          <Card>
+            <CardContent className="max-w-xl p-6">
+              <CompanyContextSelector
+                companies={masterCompanies}
+                value={masterCompanyId}
+                onValueChange={selectMasterCompany}
+                disabled={loadingMasterCompanies}
+              />
+            </CardContent>
+          </Card>
+        )}
+        <Card className="border-amber-500/50">
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            Verifique os módulos Gestão de Materiais e Controle de Estoque da
+            empresa. Nenhuma consulta ou ação de estoque foi habilitada.
           </CardContent>
         </Card>
       </div>
@@ -208,11 +279,26 @@ export default function Estoque() {
             Saldos oficiais por localização e histórico auditável.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setLocationsOpen(true)}>
-          <MapPinned className="mr-2 h-4 w-4" />
-          Localizações
-        </Button>
+        {permissions.gerenciarLocalizacoes && (
+          <Button variant="outline" onClick={() => setLocationsOpen(true)}>
+            <MapPinned className="mr-2 h-4 w-4" />
+            Localizações
+          </Button>
+        )}
       </div>
+
+      {isMasterAdmin && (
+        <Card>
+          <CardContent className="max-w-xl p-4">
+            <CompanyContextSelector
+              companies={masterCompanies}
+              value={masterCompanyId}
+              onValueChange={selectMasterCompany}
+              disabled={loadingMasterCompanies}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {[

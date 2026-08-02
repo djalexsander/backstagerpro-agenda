@@ -65,7 +65,6 @@ const filters: MaterialFilters = {
   search: "",
   categoryId: "todos",
   status: "todos",
-  location: "",
   active: "todos",
   sortField: "nome",
   sortDirection: "asc",
@@ -110,13 +109,12 @@ describe("material list filters", () => {
     }
   });
 
-  it("combines category, status, location and active filters", () => {
+  it("combines category, status and active filters", () => {
     expect(
       filterAndSortMaterials(rows, {
         ...filters,
         categoryId: "mixers",
         status: "avariado",
-        location: "estúdio",
         active: "inativos",
       }).map((row) => row.id),
     ).toEqual(["1"]);
