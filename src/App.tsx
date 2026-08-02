@@ -30,6 +30,7 @@ import PainelOperacional from "@/pages/PainelOperacional";
 import ChecklistCentral from "@/pages/ChecklistCentral";
 import Materiais from "@/pages/Materiais";
 import Estoque from "@/pages/Estoque";
+import CheckinCheckout from "@/pages/CheckinCheckout";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -114,8 +115,19 @@ const App = () => (
                       </ModuleGate>
                     }
                   />
+                  <Route
+                    path="/checkin-checkout"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.CHECKIN_CHECKOUT}
+                        mode="lock"
+                      >
+                        <CheckinCheckout />
+                      </ModuleGate>
+                    }
+                  />
                   <Route path="/modulos" element={<Navigate to="/plano" replace />} />
-                  
+
                   {/* Master Admin Routes */}
                   <Route path="/master" element={<ProtectedRoute masterOnly><PainelMaster /></ProtectedRoute>} />
                   <Route path="/master/empresas" element={<ProtectedRoute masterOnly><Empresas /></ProtectedRoute>} />

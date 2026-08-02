@@ -41,7 +41,7 @@ export const MODULE_KEYS = {
   GESTAO_MATERIAIS: "gestao_materiais",
   /** Movimentações e saldos de estoque por localização */
   CONTROLE_ESTOQUE: "controle_estoque",
-  /** Retirada e devolução de materiais (planejado) */
+  /** Retirada, devolução e custódia física de materiais */
   CHECKIN_CHECKOUT: "checkin_checkout",
   /** Locação e disponibilidade de materiais (planejado) */
   LOCACAO_MATERIAIS: "locacao_materiais",
