@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -12,6 +12,7 @@ import { MODULE_KEYS } from "@/constants/module-keys";
 import { canShowMaterialsNavigation } from "@/lib/material-permissions";
 import { canShowStockNavigation } from "@/lib/stock-permissions";
 import { canShowCustodyNavigation } from "@/lib/checkin-checkout-permissions";
+import { canShowRentalNavigation } from "@/lib/material-rental-permissions";
 import appVersion from "../../package.json";
 
 const APP_VERSION = appVersion.version;
@@ -39,6 +40,10 @@ export function AppSidebar() {
   const hasCustodyAccess = canShowCustodyNavigation({
     isMasterAdmin,
     moduleEnabled: hasModule(MODULE_KEYS.CHECKIN_CHECKOUT),
+  });
+  const hasRentalAccess = canShowRentalNavigation({
+    isMasterAdmin,
+    moduleEnabled: hasModule(MODULE_KEYS.LOCACAO_MATERIAIS),
   });
 
   // Items that require specific modules (only shown when module is active or user is master)
@@ -75,6 +80,9 @@ export function AppSidebar() {
         ...(hasCustodyAccess
           ? [{ title: "Check-in / Check-out", url: "/checkin-checkout", icon: ScanLine }]
           : []),
+        ...(hasRentalAccess
+          ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }]
+          : []),
         ...(empresaReadOnly ? [{ title: "Assinatura e Módulos", url: "/plano", icon: CreditCard }] : []),
       ]
     : [
@@ -88,6 +96,9 @@ export function AppSidebar() {
           : []),
         ...(hasCustodyAccess
           ? [{ title: "Check-in / Check-out", url: "/checkin-checkout", icon: ScanLine }]
+          : []),
+        ...(hasRentalAccess
+          ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }]
           : []),
         ...moduleGatedItems,
         { title: "Assinatura e Módulos", url: "/plano", icon: CreditCard },

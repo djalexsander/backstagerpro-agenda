@@ -31,6 +31,7 @@ import ChecklistCentral from "@/pages/ChecklistCentral";
 import Materiais from "@/pages/Materiais";
 import Estoque from "@/pages/Estoque";
 import CheckinCheckout from "@/pages/CheckinCheckout";
+import Locacoes from "@/pages/Locacoes";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -123,6 +124,17 @@ const App = () => (
                         mode="lock"
                       >
                         <CheckinCheckout />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/locacoes"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.LOCACAO_MATERIAIS}
+                        mode="lock"
+                      >
+                        <Locacoes />
                       </ModuleGate>
                     }
                   />

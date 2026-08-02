@@ -43,7 +43,7 @@ export const MODULE_KEYS = {
   CONTROLE_ESTOQUE: "controle_estoque",
   /** Retirada, devolução e custódia física de materiais */
   CHECKIN_CHECKOUT: "checkin_checkout",
-  /** Locação e disponibilidade de materiais (planejado) */
+  /** Locação, reservas por período e integração com custódia */
   LOCACAO_MATERIAIS: "locacao_materiais",
   /** Manutenção preventiva e corretiva (planejado) */
   MANUTENCAO_EQUIPAMENTOS: "manutencao_equipamentos",
