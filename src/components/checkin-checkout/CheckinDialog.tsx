@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ToastAction } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +35,8 @@ import type {
   CustodyOperationView,
 } from "@/lib/checkin-checkout-types";
 import type { StockLocation } from "@/lib/stock-types";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { MODULE_KEYS } from "@/constants/module-keys";
 
 const CONDITIONS = Object.keys(CUSTODY_CONDITION_LABELS) as CustodyCondition[];
 
@@ -52,6 +56,8 @@ export function CheckinDialog({
   onSaved: () => Promise<void>;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { hasModule } = useCompanyModules(companyId);
   const [quantity, setQuantity] = useState("1");
   const [destinationId, setDestinationId] = useState("");
   const [condition, setCondition] = useState<CustodyCondition>("bom");
@@ -99,7 +105,14 @@ export function CheckinDialog({
     onSuccess: async () => {
       await onSaved();
       onOpenChange(false);
-      toast({ title: "Check-in registrado" });
+      const suggestsMaintenance = ["com_avaria", "danificado", "manutencao_necessaria"].includes(condition);
+      toast({
+        title: "Check-in registrado",
+        description: suggestsMaintenance ? "A condição informada permite abrir uma ordem de manutenção." : undefined,
+        action: suggestsMaintenance && hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS) && operation
+          ? <ToastAction altText="Abrir ordem de manutenção" onClick={() => navigate(`/manutencoes?nova=1&custodia=${operation.id}`)}>Abrir manutenção</ToastAction>
+          : undefined,
+      });
     },
     onError: (error: Error) =>
       toast({ title: "Não foi possível registrar o check-in", description: error.message, variant: "destructive" }),

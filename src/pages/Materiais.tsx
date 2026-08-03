@@ -700,6 +700,7 @@ export default function Materiais() {
         companyId={empresaId}
         canViewStock={stockPermissions.visualizar}
         canManageStock={stockPermissions.movimentar}
+        canViewMaintenance={isMasterAdmin || hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS)}
         onChanged={invalidateMaterials}
       />
 

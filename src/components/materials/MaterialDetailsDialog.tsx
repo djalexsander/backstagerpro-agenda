@@ -21,6 +21,7 @@ import { MaterialPhotoImage } from "./MaterialPhotoImage";
 import { MaterialIdentificationCard } from "./MaterialIdentificationCard";
 import { getMaterialStockSnapshot } from "@/lib/stock-service";
 import { STOCK_MOVEMENT_LABELS } from "@/lib/stock-domain";
+import { getMaterialMaintenanceSummary } from "@/lib/equipment-maintenance-service";
 
 function Detail({
   label,
@@ -154,6 +155,16 @@ function MaterialStockSection({
   );
 }
 
+function MaterialMaintenanceSection({ material, companyId, enabled }: { material: MaterialWithRelations; companyId: string | null; enabled: boolean }) {
+  const summary = useQuery({ queryKey: ["material-maintenance-summary", companyId, material.id],
+    queryFn: () => getMaterialMaintenanceSummary(companyId!, material.id), enabled: Boolean(companyId && enabled) });
+  if (!enabled) return null;
+  return <><Separator /><Card><CardHeader className="pb-2"><CardTitle className="text-base">Manutenção</CardTitle></CardHeader><CardContent className="space-y-3">
+    <div className="grid gap-3 sm:grid-cols-4"><Detail label="Manutenção ativa" value={summary.data?.manutencoes_ativas ? `${summary.data.quantidade_indisponivel} indisponível(is)` : "Não"} /><Detail label="Histórico" value={`${summary.data?.historico_total ?? 0} ordem(ns)`} /><Detail label="Próxima preventiva" value={formatDate(summary.data?.proxima_preventiva_em)} /><Detail label="Custo acumulado" value={formatBrazilianCurrency(summary.data?.custo_acumulado ?? 0)} /></div>
+    <Button asChild size="sm" variant="outline"><Link to={`/manutencoes?material=${material.id}`}>Ver manutenções</Link></Button>
+  </CardContent></Card></>;
+}
+
 export function MaterialDetailsDialog({
   material,
   open,
@@ -162,6 +173,7 @@ export function MaterialDetailsDialog({
   companyId,
   canViewStock = false,
   canManageStock = false,
+  canViewMaintenance = false,
   onChanged,
 }: {
   material: MaterialWithRelations | null;
@@ -171,6 +183,7 @@ export function MaterialDetailsDialog({
   companyId: string | null;
   canViewStock?: boolean;
   canManageStock?: boolean;
+  canViewMaintenance?: boolean;
   onChanged: () => Promise<void>;
 }) {
   if (!material) return null;
@@ -276,6 +289,7 @@ export function MaterialDetailsDialog({
           canViewStock={canViewStock}
           canManageStock={canManageStock}
         />
+        <MaterialMaintenanceSection material={material} companyId={companyId} enabled={canViewMaintenance} />
 
         {(material.descricao || material.observacoes) && (
           <>

@@ -32,6 +32,7 @@ import Materiais from "@/pages/Materiais";
 import Estoque from "@/pages/Estoque";
 import CheckinCheckout from "@/pages/CheckinCheckout";
 import Locacoes from "@/pages/Locacoes";
+import Manutencoes from "@/pages/Manutencoes";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -135,6 +136,17 @@ const App = () => (
                         mode="lock"
                       >
                         <Locacoes />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/manutencoes"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS}
+                        mode="lock"
+                      >
+                        <Manutencoes />
                       </ModuleGate>
                     }
                   />
