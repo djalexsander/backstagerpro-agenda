@@ -33,6 +33,7 @@ import Estoque from "@/pages/Estoque";
 import CheckinCheckout from "@/pages/CheckinCheckout";
 import Locacoes from "@/pages/Locacoes";
 import Manutencoes from "@/pages/Manutencoes";
+import Etiquetas from "@/pages/Etiquetas";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -147,6 +148,17 @@ const App = () => (
                         mode="lock"
                       >
                         <Manutencoes />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/etiquetas"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.ETIQUETAS_MATERIAIS}
+                        mode="lock"
+                      >
+                        <Etiquetas />
                       </ModuleGate>
                     }
                   />

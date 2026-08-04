@@ -701,6 +701,7 @@ export default function Materiais() {
         canViewStock={stockPermissions.visualizar}
         canManageStock={stockPermissions.movimentar}
         canViewMaintenance={isMasterAdmin || hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS)}
+        canPrintLabels={isMasterAdmin || hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS)}
         onChanged={invalidateMaterials}
       />
 

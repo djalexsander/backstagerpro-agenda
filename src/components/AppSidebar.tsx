@@ -1,4 +1,4 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench } from "lucide-react";
+import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -14,6 +14,7 @@ import { canShowStockNavigation } from "@/lib/stock-permissions";
 import { canShowCustodyNavigation } from "@/lib/checkin-checkout-permissions";
 import { canShowRentalNavigation } from "@/lib/material-rental-permissions";
 import { canShowMaintenanceNavigation } from "@/lib/equipment-maintenance-permissions";
+import { canShowMaterialLabelsNavigation } from "@/lib/material-label-permissions";
 import appVersion from "../../package.json";
 
 const APP_VERSION = appVersion.version;
@@ -49,6 +50,10 @@ export function AppSidebar() {
   const hasMaintenanceAccess = canShowMaintenanceNavigation({
     isMasterAdmin,
     moduleEnabled: hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS),
+  });
+  const hasLabelsAccess = canShowMaterialLabelsNavigation({
+    isMasterAdmin,
+    moduleEnabled: hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS),
   });
 
   // Items that require specific modules (only shown when module is active or user is master)
@@ -91,6 +96,9 @@ export function AppSidebar() {
         ...(hasMaintenanceAccess
           ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }]
           : []),
+        ...(hasLabelsAccess
+          ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }]
+          : []),
         ...(empresaReadOnly ? [{ title: "Assinatura e Módulos", url: "/plano", icon: CreditCard }] : []),
       ]
     : [
@@ -110,6 +118,9 @@ export function AppSidebar() {
           : []),
         ...(hasMaintenanceAccess
           ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }]
+          : []),
+        ...(hasLabelsAccess
+          ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }]
           : []),
         ...moduleGatedItems,
         { title: "Assinatura e Módulos", url: "/plano", icon: CreditCard },

@@ -174,6 +174,7 @@ export function MaterialDetailsDialog({
   canViewStock = false,
   canManageStock = false,
   canViewMaintenance = false,
+  canPrintLabels = false,
   onChanged,
 }: {
   material: MaterialWithRelations | null;
@@ -184,6 +185,7 @@ export function MaterialDetailsDialog({
   canViewStock?: boolean;
   canManageStock?: boolean;
   canViewMaintenance?: boolean;
+  canPrintLabels?: boolean;
   onChanged: () => Promise<void>;
 }) {
   if (!material) return null;
@@ -290,6 +292,7 @@ export function MaterialDetailsDialog({
           canManageStock={canManageStock}
         />
         <MaterialMaintenanceSection material={material} companyId={companyId} enabled={canViewMaintenance} />
+        {canPrintLabels && <><Separator /><Button asChild size="sm" variant="outline"><Link to={`/etiquetas?material=${material.id}`}>Criar etiqueta</Link></Button></>}
 
         {(material.descricao || material.observacoes) && (
           <>
