@@ -5,3 +5,12 @@ project_id = "zupcxxtnaglcappazciu"
 # that dedicated secret without storing a Supabase service-role credential.
 [functions.check-vencimentos]
 verify_jwt = false
+
+[functions.self-register]
+verify_jwt = false
+
+[functions.request-account-activation]
+verify_jwt = false
+
+[functions.activate-account]
+verify_jwt = false
