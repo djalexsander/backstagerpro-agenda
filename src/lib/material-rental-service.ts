@@ -211,13 +211,13 @@ async function simpleRentalAction(
   if (error) throwRentalError(error, action);
 }
 
-export const confirmMaterialRental = (companyId: string, rentalId: string, clientUuid = crypto.randomUUID()) =>
+export const confirmMaterialRental = (companyId: string, rentalId: string, clientUuid: string = crypto.randomUUID()) =>
   simpleRentalAction("confirmar_reserva_locacao_material", companyId, rentalId, { _client_uuid: clientUuid });
-export const markMaterialRentalReady = (companyId: string, rentalId: string, clientUuid = crypto.randomUUID()) =>
+export const markMaterialRentalReady = (companyId: string, rentalId: string, clientUuid: string = crypto.randomUUID()) =>
   simpleRentalAction("marcar_locacao_pronta_retirada", companyId, rentalId, { _client_uuid: clientUuid });
-export const concludeMaterialRental = (companyId: string, rentalId: string, clientUuid = crypto.randomUUID()) =>
+export const concludeMaterialRental = (companyId: string, rentalId: string, clientUuid: string = crypto.randomUUID()) =>
   simpleRentalAction("concluir_locacao_material", companyId, rentalId, { _client_uuid: clientUuid });
-export const cancelMaterialRental = (companyId: string, rentalId: string, justification: string, clientUuid = crypto.randomUUID()) =>
+export const cancelMaterialRental = (companyId: string, rentalId: string, justification: string, clientUuid: string = crypto.randomUUID()) =>
   simpleRentalAction("cancelar_locacao_material", companyId, rentalId, {
     _justificativa: justification,
     _client_uuid: clientUuid,
