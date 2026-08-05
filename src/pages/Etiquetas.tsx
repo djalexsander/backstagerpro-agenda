@@ -52,10 +52,10 @@ export default function Etiquetas() {
   useEffect(() => { const available = models.data ?? []; if (!available.some((model) => model.id === selectedModelId)) setSelectedModelId(available.find((model) => model.padrao)?.id ?? available[0]?.id ?? ""); }, [models.data, selectedModelId]);
   useEffect(() => { setBatchItems([]); setHistoryPage(1); }, [companyId]);
   const selectedModel = (models.data ?? []).find((model) => model.id === selectedModelId) ?? null;
-  const invalidate = async () => Promise.all([
+  const invalidate = async () => { await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["label-models", companyId] }), queryClient.invalidateQueries({ queryKey: ["label-materials", companyId] }),
     queryClient.invalidateQueries({ queryKey: ["label-history", companyId] }), queryClient.invalidateQueries({ queryKey: ["label-indicators", companyId] }),
-  ]);
+  ]); };
   const archiveMutation = useMutation({ mutationFn: (model: LabelModel) => archiveLabelModel(companyId!, model), onSuccess: async () => { await invalidate(); toast({ title: "Modelo inativado" }); }, onError: (error: Error) => toast({ title: "Não foi possível inativar", description: error.message, variant: "destructive" }) });
   const selector = isMasterAdmin ? <Card><CardContent className="max-w-xl p-4"><CompanyContextSelector companies={companies.data ?? []} value={masterCompanyId} onValueChange={setMasterCompanyId} disabled={companies.isLoading} /></CardContent></Card> : null;
   if (!companyId && !companies.isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><p className="text-muted-foreground">Selecione explicitamente a empresa no contexto Master.</p>{selector}</div>;
