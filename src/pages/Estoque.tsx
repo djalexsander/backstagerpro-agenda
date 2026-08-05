@@ -14,6 +14,7 @@ import {
   Settings2,
   TriangleAlert,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -301,14 +302,14 @@ export default function Estoque() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {[
+        {([
           ["Materiais cadastrados", indicators.materiais, Boxes],
           ["Unidades em estoque", indicators.unidades, PackageCheck],
           ["Sem saldo", indicators.semSaldo, PackageX],
           ["Abaixo do mínimo", indicators.abaixoMinimo, TriangleAlert],
           ["Localizações ativas", indicators.localizacoesAtivas, MapPinned],
           ["Movimentos em 7 dias", indicators.movimentacoesRecentes, History],
-        ].map(([label, value, Icon]) => (
+        ] as [string, number, LucideIcon][]).map(([label, value, Icon]) => (
           <Card key={String(label)}>
             <CardContent className="flex items-center justify-between p-5">
               <div>
