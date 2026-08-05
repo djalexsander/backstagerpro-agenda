@@ -45,10 +45,11 @@ export default defineConfig(() => ({
       registerType: "prompt",
 
       includeAssets: [
-        "favicon-256.png",
-        "icon-192.png",
-        "icon-512.png",
-        "apple-touch-icon.png",
+        "favicon-32x32-v2.png",
+        "favicon-256-v2.png",
+        "icon-192-v2.png",
+        "icon-512-v2.png",
+        "apple-touch-icon-v2.png",
       ],
 
       workbox: {
