@@ -12,6 +12,7 @@ import {
   ScanLine,
   ShieldAlert,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -322,12 +323,12 @@ export default function CheckinCheckout() {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {[
+        {([
           ["Itens atualmente fora", indicators.itens_fora, PackageCheck],
           ["Previstos para hoje", indicators.previstos_hoje, CalendarClock],
           ["Atrasados", indicators.atrasados, AlertTriangle],
           ["Ocorrências / avarias", indicators.ocorrencias, ShieldAlert],
-        ].map(([label, value, Icon]) => (
+        ] as [string, number, LucideIcon][]).map(([label, value, Icon]) => (
           <Card key={String(label)}><CardContent className="flex items-center justify-between p-4"><div><p className="text-sm text-muted-foreground">{String(label)}</p><p className="text-2xl font-bold">{Number(value)}</p></div><Icon className="h-6 w-6 text-muted-foreground" /></CardContent></Card>
         ))}
       </div>
