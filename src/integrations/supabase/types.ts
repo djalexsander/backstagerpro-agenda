@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       asaas_payments: {
@@ -4416,6 +4391,10 @@ export type Database = {
         }
         Returns: Json
       }
+      provision_company_module_entitlements: {
+        Args: { _empresa_id: string }
+        Returns: undefined
+      }
       recalculate_material_rental_totals: {
         Args: { _company_id: string; _rental_id: string }
         Returns: undefined
@@ -5184,9 +5163,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["admin", "user", "master_admin", "admin_empresa", "usuario"],
