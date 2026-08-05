@@ -30,6 +30,8 @@ function material(
     numero_patrimonio: null,
     tipo_controle: "quantidade",
     quantidade: 1,
+    estoque_minimo: 0,
+    quantidade_legada_etapa1: 0,
     unidade_medida: "unidade",
     localizacao: "Galpão A",
     valor_aquisicao: null,

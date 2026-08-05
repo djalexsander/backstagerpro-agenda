@@ -8,7 +8,8 @@ import { smartSavePDF, smartSavePNG, type SmartPDFNameOptions } from "./pdf-save
 
 type Event = Tables<"events">;
 type EventDay = Tables<"event_days">;
-type FinancialEvent = Pick<Event, "name" | "artist" | "date" | "venue" | "city" | "status">;
+type FinancialEvent = Pick<Event, "name" | "artist" | "date"> &
+  Partial<Pick<Event, "venue" | "city" | "status">>;
 export type FinancialExportRow = Tables<"financials"> & {
   events?: FinancialEvent | null;
 };

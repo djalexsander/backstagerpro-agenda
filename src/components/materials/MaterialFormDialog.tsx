@@ -210,7 +210,7 @@ export function MaterialFormDialog({
         materialId: material.id,
         photoId: photo.id,
       });
-      await onSaved();
+      await onSaved(material.id);
     } catch (error) {
       toast({
         title: "Não foi possível definir a foto principal",
@@ -232,7 +232,7 @@ export function MaterialFormDialog({
         photoId: photo.id,
         storagePath: photo.storage_path,
       });
-      await onSaved();
+      await onSaved(material.id);
       toast({ title: "Foto removida" });
     } catch (error) {
       toast({
