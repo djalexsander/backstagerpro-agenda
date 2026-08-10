@@ -12,7 +12,10 @@ SELECT has_table('public', 'material_locacao_eventos', 'append-only rental histo
 SELECT has_type('public', 'customer_person_type', 'PF/PJ customer enum exists');
 SELECT has_type('public', 'material_rental_status', 'rental state enum exists');
 SELECT has_type('public', 'material_rental_billing_mode', 'billing mode enum exists');
-SELECT has_function('public', 'confirmar_reserva_locacao_material', ARRAY['uuid','uuid','uuid'], 'transactional reservation facade exists');
+-- Signature grew in 20260806090000 (payment condition parameters, defined
+-- in the same flow that confirms the reservation) - the 3-arg overload was
+-- explicitly DROPped there, so this now asserts the canonical 6-arg facade.
+SELECT has_function('public', 'confirmar_reserva_locacao_material', ARRAY['uuid','uuid','uuid','text','date','jsonb'], 'transactional reservation facade exists');
 SELECT has_function('public', 'registrar_retirada_locacao_material', ARRAY['uuid','uuid','integer','uuid','text','uuid','text','uuid','timestamp with time zone','text','uuid'], 'rental checkout facade exists');
 SELECT has_function('public', 'registrar_devolucao_locacao_material', ARRAY['uuid','uuid','integer','uuid','text','uuid','text','text','timestamp with time zone','uuid'], 'rental checkin facade exists');
 SELECT ok((SELECT ativo FROM public.module_catalog WHERE feature_key = 'locacao_materiais'), 'rental module is released');
@@ -26,10 +29,10 @@ SELECT ok(NOT has_table_privilege('authenticated','public.material_locacoes','IN
 SELECT ok(NOT has_table_privilege('authenticated','public.material_locacao_eventos','INSERT') AND NOT has_table_privilege('authenticated','public.material_locacao_eventos','UPDATE') AND NOT has_table_privilege('authenticated','public.material_locacao_eventos','DELETE'), 'authenticated cannot mutate rental history directly');
 SELECT is((SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name IN ('material_locacoes','material_locacao_itens') AND column_name IN ('saldo','quantidade_disponivel','quantidade_em_estoque')), 0::bigint, 'rentals do not persist a parallel stock balance');
 SELECT ok(pg_get_functiondef('public.material_rental_availability(uuid,uuid,timestamp with time zone,timestamp with time zone,uuid)'::regprocedure) ILIKE '%estoque_saldos%' AND pg_get_functiondef('public.material_rental_availability(uuid,uuid,timestamp with time zone,timestamp with time zone,uuid)'::regprocedure) ILIKE '%tstzrange%' AND pg_get_functiondef('public.material_rental_availability(uuid,uuid,timestamp with time zone,timestamp with time zone,uuid)'::regprocedure) ILIKE '%[)%', 'availability derives physical balance and half-open overlapping reservations');
-SELECT ok(pg_get_functiondef('public.confirmar_reserva_locacao_material(uuid,uuid,uuid)'::regprocedure) ILIKE '%pg_advisory_xact_lock%' AND pg_get_functiondef('public.confirmar_reserva_locacao_material(uuid,uuid,uuid)'::regprocedure) ILIKE '%ORDER BY material_id%', 'confirmation serializes materials in stable order');
+SELECT ok(pg_get_functiondef('public.confirmar_reserva_locacao_material(uuid,uuid,uuid,text,date,jsonb)'::regprocedure) ILIKE '%pg_advisory_xact_lock%' AND pg_get_functiondef('public.confirmar_reserva_locacao_material(uuid,uuid,uuid,text,date,jsonb)'::regprocedure) ILIKE '%ORDER BY material_id%', 'confirmation serializes materials in stable order');
 SELECT ok(pg_get_functiondef('public.registrar_retirada_locacao_material(uuid,uuid,integer,uuid,text,uuid,text,uuid,timestamp with time zone,text,uuid)'::regprocedure) ILIKE '%registrar_checkout_material%' AND pg_get_functiondef('public.registrar_devolucao_locacao_material(uuid,uuid,integer,uuid,text,uuid,text,text,timestamp with time zone,uuid)'::regprocedure) ILIKE '%registrar_checkin_material%', 'physical operations delegate to Stage 3 custody facades');
 SELECT is((SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('resolve_material_rental_company','protect_material_rental_history','next_material_rental_number','material_rental_item_operational_totals','material_rental_availability','recalculate_material_rental_totals') AND has_function_privilege('authenticated',p.oid,'EXECUTE')), 0::bigint, 'internal rental helpers are not executable by authenticated');
-SELECT ok(has_function_privilege('authenticated','public.confirmar_reserva_locacao_material(uuid,uuid,uuid)','EXECUTE') AND has_function_privilege('authenticated','public.obter_locacao_material(uuid,uuid)','EXECUTE'), 'authenticated executes only the public rental facade');
+SELECT ok(has_function_privilege('authenticated','public.confirmar_reserva_locacao_material(uuid,uuid,uuid,text,date,jsonb)','EXECUTE') AND has_function_privilege('authenticated','public.obter_locacao_material(uuid,uuid)','EXECUTE'), 'authenticated executes only the public rental facade');
 
 -- Multi-company fixtures, entirely rolled back.
 INSERT INTO public.planos (id,nome,valor,max_usuarios,max_eventos,ativo,periodicidade,categoria)
@@ -204,12 +207,14 @@ SELECT lives_ok($test$SELECT public.criar_locacao_material('88000000-0000-4000-8
 
 RESET ROLE;
 
--- Master requires explicit tenant context and can read the selected company.
+-- Master without a linked company has zero operational rental access,
+-- whether or not it names another tenant explicitly (tenant isolation is
+-- mandatory for master_admin too - see 20260808100000).
 SELECT set_config('request.jwt.claim.sub','83000000-0000-4000-8000-000000000007',true);
 SET LOCAL ROLE authenticated;
 SET LOCAL search_path=public,extensions;
-SELECT lives_ok($test$SELECT count(*) FROM public.listar_locacoes_materiais(1,20,NULL,NULL,NULL,NULL,NULL,false,NULL,'82000000-0000-4000-8000-000000000001')$test$,'Master reads an explicitly selected tenant');
-SELECT throws_ok($test$SELECT count(*) FROM public.listar_locacoes_materiais()$test$,'LR011','Selecione a empresa para operar locações.','Master cannot infer a rental tenant');
+SELECT throws_ok($test$SELECT count(*) FROM public.listar_locacoes_materiais(1,20,NULL,NULL,NULL,NULL,NULL,false,NULL,'82000000-0000-4000-8000-000000000001')$test$,'42501','Empresa inválida.','Master cannot read another company by naming it explicitly');
+SELECT throws_ok($test$SELECT count(*) FROM public.listar_locacoes_materiais()$test$,'42501','Empresa inválida.','Master without a linked company cannot infer a rental tenant');
 RESET ROLE;
 
 -- Removing entitlement and deactivating a company both fail closed.

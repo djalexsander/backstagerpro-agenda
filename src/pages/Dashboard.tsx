@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Calendar, Clock, MapPin, Music, CheckCircle, AlertCircle, DollarSign, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import { Boxes, Calendar, Clock, MapPin, Music, CheckCircle, AlertCircle, DollarSign, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   format, isAfter, startOfToday, endOfWeek, startOfWeek, parseISO,
@@ -13,6 +13,10 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { MODULE_KEYS } from "@/constants/module-keys";
+import { getFinancialLedgerPermissions } from "@/lib/financial-ledger-permissions";
+import { getRentalsFinancialSummary } from "@/lib/financial-ledger-service";
 
 const statusColors: Record<string, string> = {
   confirmado: "bg-accent text-accent-foreground",
@@ -35,7 +39,19 @@ const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Se
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { empresaId } = useAuth();
+  const { empresaId, role } = useAuth();
+  const { hasModule } = useCompanyModules(empresaId);
+  const rentalsPermissions = getFinancialLedgerPermissions({
+    role,
+    moduleEnabled: hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO),
+    companyReadOnly: false,
+    companySelected: Boolean(empresaId),
+  });
+  const { data: rentalsSummary } = useQuery({
+    queryKey: ["rentals-financial-summary", empresaId],
+    queryFn: () => getRentalsFinancialSummary(empresaId!),
+    enabled: Boolean(empresaId) && rentalsPermissions.visualizar,
+  });
 
   const { data: events = [] } = useQuery({
     queryKey: ["events", empresaId],
@@ -257,6 +273,53 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Locações - fonte separada (obter_resumo_financeiro_locacoes), nunca
+          somada aos cards de evento acima para não misturar as duas origens */}
+      {rentalsPermissions.visualizar && rentalsSummary && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Locações</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><Boxes className="h-4 w-4 text-primary" /></div>
+                  <div><p className="text-lg font-bold">{fmt(rentalsSummary.valorContratado)}</p><p className="text-xs text-muted-foreground">Contratado</p></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center"><DollarSign className="h-4 w-4 text-accent" /></div>
+                  <div><p className="text-lg font-bold text-accent">{fmt(rentalsSummary.valorRecebido)}</p><p className="text-xs text-muted-foreground">Recebido</p></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-[hsl(var(--warning))]/10 flex items-center justify-center"><Clock className="h-4 w-4 text-[hsl(var(--warning))]" /></div>
+                  <div><p className="text-lg font-bold text-[hsl(var(--warning))]">{fmt(rentalsSummary.valorAReceber)}</p><p className="text-xs text-muted-foreground">A receber</p></div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center"><AlertCircle className="h-4 w-4 text-destructive" /></div>
+                  <div><p className="text-lg font-bold text-destructive">{fmt(rentalsSummary.valorVencido)}</p><p className="text-xs text-muted-foreground">Vencido</p></div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          {rentalsSummary.valorPendenteRegularizacao > 0 && (
+            <p className="mt-2 text-xs text-destructive">
+              {fmt(rentalsSummary.valorPendenteRegularizacao)} recebidos em locações canceladas aguardando estorno/regularização.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

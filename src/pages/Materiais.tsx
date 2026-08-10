@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
@@ -65,12 +64,6 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getMaterialPermissions } from "@/lib/material-permissions";
 import { getStockPermissions } from "@/lib/stock-permissions";
-import { listStockCompaniesForMaster } from "@/lib/stock-service";
-import {
-  getCompanyAccessState,
-  hasCompanyOperationalAccess,
-} from "@/lib/access-control";
-import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 
 const PAGE_SIZE = 10;
 
@@ -96,60 +89,23 @@ export default function Materiais() {
   const { toast } = useToast();
   const {
     role,
-    empresaId: authenticatedCompanyId,
+    empresaId,
     empresaReadOnly,
     isMasterAdmin,
   } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const masterCompanyId = isMasterAdmin
-    ? searchParams.get("empresa") ?? ""
-    : "";
-  const { data: masterCompanies = [], isLoading: loadingMasterCompanies } =
-    useQuery({
-      queryKey: ["stock-master-companies"],
-      queryFn: listStockCompaniesForMaster,
-      enabled: isMasterAdmin,
-    });
-  const selectedMasterCompany = masterCompanies.find(
-    (company) => company.id === masterCompanyId,
-  );
-  const empresaId = isMasterAdmin
-    ? selectedMasterCompany?.id ?? null
-    : authenticatedCompanyId;
-  const selectedPlan = selectedMasterCompany?.planos as
-    | { periodicidade: string | null; ativo: boolean }
-    | null
-    | undefined;
-  const effectiveCompanyReadOnly = isMasterAdmin
-    ? selectedMasterCompany
-      ? getCompanyAccessState({
-          ...selectedMasterCompany,
-          plan_periodicity: selectedPlan?.periodicidade ?? null,
-        }).blocked
-      : true
-    : empresaReadOnly;
-  const stockCompanyReadOnly = isMasterAdmin
-    ? selectedMasterCompany
-      ? !hasCompanyOperationalAccess({
-          ...selectedMasterCompany,
-          plan_periodicity: selectedPlan?.periodicidade ?? null,
-          plan_active: selectedPlan?.ativo ?? null,
-        })
-      : true
-    : empresaReadOnly;
   const { hasModule } = useCompanyModules(empresaId);
   const permissions = getMaterialPermissions({
     role,
     moduleEnabled:
       isMasterAdmin || hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
-    companyReadOnly: effectiveCompanyReadOnly,
+    companyReadOnly: empresaReadOnly,
   });
   const stockPermissions = getStockPermissions({
     role,
     moduleEnabled:
       hasModule(MODULE_KEYS.GESTAO_MATERIAIS) &&
       hasModule(MODULE_KEYS.CONTROLE_ESTOQUE),
-    companyReadOnly: stockCompanyReadOnly,
+    companyReadOnly: empresaReadOnly,
     companySelected: !!empresaId,
   });
   const canManage =
@@ -240,17 +196,6 @@ export default function Materiais() {
     setFormOpen(true);
   };
 
-  const selectMasterCompany = (companyId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("empresa", companyId);
-    setSearchParams(next, { replace: true });
-    setCategoryOpen(false);
-    setFormOpen(false);
-    setEditId(null);
-    setDetailId(null);
-    setActiveTarget(null);
-  };
-
   const renderActions = (material: MaterialWithRelations) => (
     <div className="flex justify-end gap-1">
       <Button
@@ -295,22 +240,10 @@ export default function Materiais() {
           <h1 className="text-2xl font-bold">Materiais</h1>
           <p className="text-muted-foreground">
             {isMasterAdmin
-              ? "Selecione explicitamente a empresa para operar em contexto Master."
+              ? "Sua conta master não está vinculada a uma empresa operacional."
               : "Nenhuma empresa ativa foi identificada para este usuário."}
           </p>
         </div>
-        {isMasterAdmin && (
-          <Card>
-            <CardContent className="max-w-xl p-6">
-              <CompanyContextSelector
-                companies={masterCompanies}
-                value={masterCompanyId}
-                onValueChange={selectMasterCompany}
-                disabled={loadingMasterCompanies}
-              />
-            </CardContent>
-          </Card>
-        )}
       </div>
     );
   }
@@ -346,19 +279,6 @@ export default function Materiais() {
           </div>
         )}
       </div>
-
-      {isMasterAdmin && (
-        <Card>
-          <CardContent className="max-w-xl p-4">
-            <CompanyContextSelector
-              companies={masterCompanies}
-              value={masterCompanyId}
-              onValueChange={selectMasterCompany}
-              disabled={loadingMasterCompanies}
-            />
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

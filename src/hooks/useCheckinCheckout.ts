@@ -89,7 +89,20 @@ export function useCheckinCheckout({
       }),
       queryClient.invalidateQueries({ queryKey: ["stock-materials", companyId] }),
       queryClient.invalidateQueries({ queryKey: ["stock-movements", companyId] }),
+      queryClient.invalidateQueries({ queryKey: ["stock-indicators", companyId] }),
       queryClient.invalidateQueries({ queryKey: ["materials", companyId] }),
+      // A custody checked in/out here can belong to a Locações rental
+      // (referencia_tipo = 'locacao_item'). Without these, confirming a
+      // check-in/check-out on this screen left the Locações list, its
+      // per-rental detail (quantidade_devolvida/com_cliente, status badge)
+      // and its indicators showing stale data until a manual reload -
+      // the backend already recomputes them correctly, this screen's own
+      // cache just never knew to refetch.
+      queryClient.invalidateQueries({ queryKey: ["material-rentals", companyId] }),
+      queryClient.invalidateQueries({
+        queryKey: ["material-rental-indicators", companyId],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["material-rental-detail", companyId] }),
     ]);
   };
 

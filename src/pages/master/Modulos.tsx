@@ -21,6 +21,7 @@ import {
 import {
   MODULE_CATEGORIES, MODULE_BADGES, getCategoryLabel, getCategoryColor, getBadgeInfo,
 } from "@/constants/module-categories";
+import { fetchMasterModuleCatalog } from "@/lib/master-module-catalog";
 
 interface ModuleCatalog {
   id: string;
@@ -81,14 +82,8 @@ export default function Modulos() {
 
   const { data: modulos = [] } = useQuery({
     queryKey: ["master-modulos"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("module_catalog")
-        .select("*")
-        .order("ordem", { ascending: true });
-      if (error) throw error;
-      return data as ModuleCatalog[];
-    },
+    queryFn: async () => fetchMasterModuleCatalog(supabase),
+    refetchOnMount: "always",
   });
 
   const stats = useMemo(() => {

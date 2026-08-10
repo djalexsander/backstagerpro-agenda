@@ -94,6 +94,9 @@ export default function UsuariosGlobais() {
       empresaId: string | null;
     }) => {
       const { data, error } = await supabase.functions.invoke("delete-user", {
+        headers: {
+          Authorization: `Bearer ${await supabase.auth.getSession().then(({ data }) => data.session?.access_token ?? "")}`,
+        },
         body: { user_id: userId, empresa_id: empresaId },
       });
       if (error) throw error;

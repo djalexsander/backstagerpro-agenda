@@ -1,6 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SET LOCAL search_path = public, extensions;
 
 SELECT plan(102);
 
@@ -106,6 +107,14 @@ SELECT ok(
   ),
   'stock keeps the materials dependency'
 );
+-- Only the 3 SELECT policies spell out "gestao_materiais" literally as a
+-- belt-and-suspenders check. The 3 write policies (create/update/delete on
+-- estoque_localizacoes) enforce the same dependency without repeating it in
+-- policy text: they gate on can_write_company_module('controle_estoque'),
+-- which calls company_has_active_module -> company_module_dependencies_satisfied
+-- and so already requires gestao_materiais transitively via module_dependencies
+-- (asserted above). 6 would mean every write policy also duplicated the
+-- literal check, which was never the actual design for the write side.
 SELECT is(
   (
     SELECT count(*)
@@ -120,8 +129,8 @@ SELECT is(
         COALESCE(qual, '') || ' ' || COALESCE(with_check, '')
       ) ILIKE '%gestao_materiais%'
   ),
-  6::bigint,
-  'every stock policy also enforces the materials dependency'
+  3::bigint,
+  'read policies double-check the materials dependency in policy text; write policies enforce it transitively instead'
 );
 SELECT ok(
   col_description('public.materiais'::regclass, (

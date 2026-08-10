@@ -45,9 +45,9 @@ Deno.serve(async (req) => {
     );
 
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Não autorizado");
+    if (!authHeader?.startsWith("Bearer ")) throw new Error("Não autorizado");
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace("Bearer ", "").trim();
     const {
       data: { user: caller },
     } = await supabaseAdmin.auth.getUser(token);

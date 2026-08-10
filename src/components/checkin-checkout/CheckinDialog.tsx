@@ -37,6 +37,7 @@ import type {
 import type { StockLocation } from "@/lib/stock-types";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
+import { nowAsDatetimeLocalValue } from "@/lib/datetime";
 
 const CONDITIONS = Object.keys(CUSTODY_CONDITION_LABELS) as CustodyCondition[];
 
@@ -74,7 +75,7 @@ export function CheckinDialog({
     setCondition("bom");
     setOccurrence("");
     setNote("");
-    setEffectiveAt("");
+    setEffectiveAt(nowAsDatetimeLocalValue());
     setClientUuid(crypto.randomUUID());
     setErrors({});
   }, [open, operation]);
@@ -164,8 +165,8 @@ export function CheckinDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Data/hora do retorno</Label>
-            <Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
+            <Label htmlFor="checkin-effective-at">Data/hora do retorno</Label>
+            <Input id="checkin-effective-at" type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Ocorrência</Label>

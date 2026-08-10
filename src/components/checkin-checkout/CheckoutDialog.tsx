@@ -35,6 +35,7 @@ import type {
   CustodyResponsibleOption,
   CheckoutInput,
 } from "@/lib/checkin-checkout-types";
+import { nowAsDatetimeLocalValue } from "@/lib/datetime";
 
 const PURPOSES = Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[];
 const CONDITIONS = Object.keys(CUSTODY_CONDITION_LABELS) as CustodyCondition[];
@@ -79,7 +80,7 @@ export function CheckoutDialog({
     setPurpose("uso_interno");
     setCondition("bom");
     setExpectedReturn("");
-    setEffectiveAt("");
+    setEffectiveAt(nowAsDatetimeLocalValue());
     setNote("");
     setClientUuid(crypto.randomUUID());
     setErrors({});
@@ -222,12 +223,12 @@ export function CheckoutDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Data/hora da retirada</Label>
-            <Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
+            <Label htmlFor="checkout-effective-at">Data/hora da retirada</Label>
+            <Input id="checkout-effective-at" type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Previsão de retorno</Label>
-            <Input type="datetime-local" value={expectedReturn} onChange={(event) => setExpectedReturn(event.target.value)} />
+            <Label htmlFor="checkout-expected-return">Previsão de retorno</Label>
+            <Input id="checkout-expected-return" type="datetime-local" value={expectedReturn} onChange={(event) => setExpectedReturn(event.target.value)} />
             {errors.expectedReturn && <p className="text-xs text-destructive">{errors.expectedReturn}</p>}
           </div>
           <div className="space-y-2 sm:col-span-2">

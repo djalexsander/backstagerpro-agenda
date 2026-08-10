@@ -156,9 +156,12 @@ SELECT throws_ok($test$SELECT public.criar_ordem_manutencao('95000000-0000-4000-
 SELECT set_config('request.jwt.claim.sub','93000000-0000-4000-8000-000000000006',true);
 SELECT lives_ok($test$SELECT public.criar_ordem_manutencao('95000000-0000-4000-8000-000000000007','preventiva','normal','preventiva','Lifetime','98000000-0000-4000-8000-000000000022',1,NULL,NULL,NULL,NULL,NULL,'interna',NULL,180,NULL,'92000000-0000-4000-8000-000000000005')$test$,'Lifetime company writes without parallel entitlement');
 RESET ROLE;
+-- Master without a linked company has zero operational maintenance access,
+-- whether or not it names another tenant explicitly (tenant isolation is
+-- mandatory for master_admin too - see 20260808100000).
 SELECT set_config('request.jwt.claim.sub','93000000-0000-4000-8000-000000000007',true); SET LOCAL ROLE authenticated; SET LOCAL search_path=public,extensions;
-SELECT lives_ok($test$SELECT count(*) FROM public.listar_ordens_manutencao(1,20,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'92000000-0000-4000-8000-000000000001')$test$,'Master reads selected tenant');
-SELECT throws_ok($test$SELECT count(*) FROM public.listar_ordens_manutencao()$test$,'MT011','Selecione a empresa para operar manutenções.','Master must select a tenant');
+SELECT throws_ok($test$SELECT count(*) FROM public.listar_ordens_manutencao(1,20,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'92000000-0000-4000-8000-000000000001')$test$,'42501','Empresa inválida.','Master cannot read another company by naming it explicitly');
+SELECT throws_ok($test$SELECT count(*) FROM public.listar_ordens_manutencao()$test$,'42501','Empresa inválida.','Master without a linked company cannot infer a maintenance tenant');
 
 RESET ROLE;
 DELETE FROM public.empresa_modules WHERE empresa_id='92000000-0000-4000-8000-000000000002'

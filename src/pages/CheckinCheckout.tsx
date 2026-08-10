@@ -1,6 +1,4 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarClock,
@@ -27,7 +25,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 import { MaterialPhotoImage } from "@/components/materials/MaterialPhotoImage";
 import { CheckoutDialog } from "@/components/checkin-checkout/CheckoutDialog";
 import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
@@ -37,8 +34,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useCheckinCheckout } from "@/hooks/useCheckinCheckout";
 import { MODULE_KEYS } from "@/constants/module-keys";
-import { listStockCompaniesForMaster } from "@/lib/stock-service";
-import { hasCompanyOperationalAccess } from "@/lib/access-control";
 import { getCustodyPermissions } from "@/lib/checkin-checkout-permissions";
 import {
   CUSTODY_PURPOSE_LABELS,
@@ -92,32 +87,10 @@ function dueBadge(operation: CustodyOperationView) {
 export default function CheckinCheckout() {
   const {
     role,
-    empresaId: authenticatedCompanyId,
+    empresaId: companyId,
     empresaReadOnly,
     isMasterAdmin,
   } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const masterCompanyId = isMasterAdmin ? searchParams.get("empresa") ?? "" : "";
-  const { data: masterCompanies = [], isLoading: loadingMasterCompanies } = useQuery({
-    queryKey: ["stock-master-companies"],
-    queryFn: listStockCompaniesForMaster,
-    enabled: isMasterAdmin,
-  });
-  const selectedMasterCompany = masterCompanies.find((company) => company.id === masterCompanyId);
-  const companyId = isMasterAdmin ? selectedMasterCompany?.id ?? null : authenticatedCompanyId;
-  const selectedPlan = selectedMasterCompany?.planos as
-    | { periodicidade: string | null; ativo: boolean }
-    | null
-    | undefined;
-  const effectiveReadOnly = isMasterAdmin
-    ? selectedMasterCompany
-      ? !hasCompanyOperationalAccess({
-          ...selectedMasterCompany,
-          plan_periodicity: selectedPlan?.periodicidade ?? null,
-          plan_active: selectedPlan?.ativo ?? null,
-        })
-      : true
-    : empresaReadOnly;
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled =
     hasModule(MODULE_KEYS.CHECKIN_CHECKOUT) &&
@@ -126,7 +99,7 @@ export default function CheckinCheckout() {
   const permissions = getCustodyPermissions({
     role,
     moduleEnabled,
-    companyReadOnly: effectiveReadOnly,
+    companyReadOnly: empresaReadOnly,
     companySelected: Boolean(companyId),
   });
 
@@ -162,18 +135,6 @@ export default function CheckinCheckout() {
   });
 
   useEffect(() => setHistoryPage(1), [historyFilters]);
-
-  const selectMasterCompany = (nextCompanyId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("empresa", nextCompanyId);
-    setSearchParams(next, { replace: true });
-    setSearchResults([]);
-    setScannerValue("");
-    setCheckoutMaterial(null);
-    setCheckinOperation(null);
-    setCancelOperation(null);
-    setHistoryOperation(null);
-  };
 
   const executeSearch = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -225,24 +186,17 @@ export default function CheckinCheckout() {
     }
   };
 
-  const companySelector = isMasterAdmin ? (
-    <Card>
-      <CardContent className="max-w-xl p-4">
-        <CompanyContextSelector
-          companies={masterCompanies}
-          value={masterCompanyId}
-          onValueChange={selectMasterCompany}
-          disabled={loadingMasterCompanies}
-        />
-      </CardContent>
-    </Card>
-  ) : null;
-
-  if (!companyId && !loadingMasterCompanies) {
+  if (!companyId) {
     return (
       <div className="space-y-4">
-        <div><h1 className="text-2xl font-bold">Check-in / Check-out</h1><p className="text-muted-foreground">Selecione explicitamente a empresa para operar em contexto Master.</p></div>
-        {companySelector}
+        <div>
+          <h1 className="text-2xl font-bold">Check-in / Check-out</h1>
+          <p className="text-muted-foreground">
+            {isMasterAdmin
+              ? "Sua conta master não está vinculada a uma empresa operacional."
+              : "Nenhuma empresa vinculada à sua conta."}
+          </p>
+        </div>
       </div>
     );
   }
@@ -250,8 +204,7 @@ export default function CheckinCheckout() {
   if (!loadingModules && !permissions.visualizar) {
     return (
       <div className="space-y-4">
-        <div><h1 className="text-2xl font-bold">Check-in / Check-out</h1><p className="text-muted-foreground">A empresa selecionada não possui acesso ao módulo e suas dependências.</p></div>
-        {companySelector}
+        <div><h1 className="text-2xl font-bold">Check-in / Check-out</h1><p className="text-muted-foreground">Sua empresa não possui acesso ao módulo e suas dependências.</p></div>
         <Card className="border-amber-500/50"><CardContent className="p-4 text-sm text-muted-foreground">Check-in / Check-out requer Gestão de Materiais e Controle de Estoque ativos. Nenhuma consulta operacional foi habilitada.</CardContent></Card>
       </div>
     );
@@ -269,7 +222,6 @@ export default function CheckinCheckout() {
         <h1 className="text-2xl font-bold">Check-in / Check-out</h1>
         <p className="text-muted-foreground">Custódia física integrada ao saldo e ao ledger oficial.</p>
       </div>
-      {companySelector}
 
       <Card className="border-primary/30">
         <CardHeader><CardTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5" /> Escanear ou buscar material</CardTitle></CardHeader>

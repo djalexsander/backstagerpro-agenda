@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { MODULE_KEYS } from "@/constants/module-keys";
+import { getFinancialLedgerPermissions } from "@/lib/financial-ledger-permissions";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -35,7 +38,19 @@ interface Props {
 }
 
 export function ReportExportModal({ open, onOpenChange, reportType, exportFormat }: Props) {
-  const { empresaId, empresaNome, empresaLogoUrl } = useAuth();
+  const { empresaId, empresaNome, empresaLogoUrl, role, empresaReadOnly } = useAuth();
+  const { hasModule } = useCompanyModules(empresaId);
+  // Same gate as the on-screen Locações panel (LocacoesReceivablesPanel) -
+  // the exported report must never show a section the user couldn't already
+  // see live: role + módulo financeiro_avancado, mirrored here instead of
+  // re-derived inside report-export-service so permission logic stays in
+  // exactly one place.
+  const rentalsPermissions = getFinancialLedgerPermissions({
+    role,
+    moduleEnabled: hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO),
+    companyReadOnly: empresaReadOnly,
+    companySelected: Boolean(empresaId),
+  });
   const [filters, setFilters] = useState<ExportFilters>({
     mode: "periodo",
     startDate: startOfMonth(new Date()),
@@ -98,6 +113,7 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
         exportFormat,
         filters,
         branding: { empresaNome, empresaLogoUrl },
+        includeRentals: rentalsPermissions.visualizar,
       });
 
       onOpenChange(false);

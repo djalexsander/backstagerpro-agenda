@@ -32,8 +32,10 @@ import Materiais from "@/pages/Materiais";
 import Estoque from "@/pages/Estoque";
 import CheckinCheckout from "@/pages/CheckinCheckout";
 import Locacoes from "@/pages/Locacoes";
+import Clientes from "@/pages/Clientes";
 import Manutencoes from "@/pages/Manutencoes";
 import Etiquetas from "@/pages/Etiquetas";
+import ConfiguracoesImpressoras from "@/pages/ConfiguracoesImpressoras";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -91,6 +93,7 @@ const App = () => (
                   <Route path="/usuarios" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
                   <Route path="/plano" element={<PlanoAssinatura />} />
                   <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
+                  <Route path="/configuracoes/impressoras" element={<ProtectedRoute><ConfiguracoesImpressoras /></ProtectedRoute>} />
                   <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
                   <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
                   <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />
@@ -137,6 +140,17 @@ const App = () => (
                         mode="lock"
                       >
                         <Locacoes />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/clientes"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.LOCACAO_MATERIAIS}
+                        mode="lock"
+                      >
+                        <Clientes />
                       </ModuleGate>
                     }
                   />

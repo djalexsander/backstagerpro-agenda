@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,22 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, User, Plus, Pencil, Trash2 } from "lucide-react";
 import { normalizeAppRole, selectHighestPriorityRole } from "@/lib/user-role";
+import { UserModulePermissionsFields } from "@/components/users/UserModulePermissionsFields";
+import {
+  buildEmptyPermissionRows,
+  fetchUserModulePermissions,
+  filterConfigurableModules,
+  resolveCreatedUserId,
+  saveUserModulePermissions,
+  type ModulePermissionEntry,
+} from "@/lib/user-module-permissions-service";
 
 export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { empresaId, user } = useAuth();
   const { canCreateUser, maxUsuarios, currentUsuarios } = usePlanLimits();
+  const { activeModules, catalog } = useCompanyModules();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [deleteUser, setDeleteUser] = useState<any>(null);
@@ -27,9 +38,27 @@ export default function UserManagement() {
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState<string>("usuario");
+  const [newPermissions, setNewPermissions] = useState<ModulePermissionEntry[]>([]);
 
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<string>("usuario");
+  const [editPermissions, setEditPermissions] = useState<ModulePermissionEntry[]>([]);
+
+  // Só busca quando o papel selecionado no formulário é "usuario" - Admin
+  // Empresa tem acesso total e não é regido por esta tabela (Fase 1).
+  const editPermissionsQuery = useQuery({
+    queryKey: ["user-module-permissions", empresaId, editUser?.user_id],
+    queryFn: () => fetchUserModulePermissions(empresaId!, editUser.user_id),
+    enabled: !!empresaId && !!editUser?.user_id && editRole === "usuario",
+  });
+
+  useEffect(() => {
+    if (editPermissionsQuery.data) {
+      // Carrega exatamente o que está salvo no banco (RPC list_user_module_permissions);
+      // só descarta módulos de capacidade, que não são uma tela/ação configurável.
+      setEditPermissions(filterConfigurableModules(editPermissionsQuery.data, catalog));
+    }
+  }, [editPermissionsQuery.data, catalog]);
 
   // empresa_usuarios is the membership set; profiles keeps the active tenant.
   const { data: users = [] } = useQuery({
@@ -79,7 +108,13 @@ export default function UserManagement() {
   });
 
   const updateRole = useMutation({
-    mutationFn: async ({ roleId, newRole, userId, newName }: { roleId?: string; newRole: string; userId: string; newName: string }) => {
+    mutationFn: async ({
+      roleId,
+      newRole,
+      userId,
+      newName,
+      permissions,
+    }: { roleId?: string; newRole: string; userId: string; newName: string; permissions: ModulePermissionEntry[] }) => {
       // Update role
       if (roleId) {
         const roleRes = await supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId);
@@ -93,9 +128,21 @@ export default function UserManagement() {
       const profileRes = await supabase.from("profiles").update({ full_name: newName } as any).eq("user_id", userId);
       if (profileRes.error) throw profileRes.error;
       // empresa_usuarios.perfil is synchronized by a database trigger.
+
+      // Role must already be "usuario" in the DB before set_user_module_permissions
+      // accepts the target (Fase 1 rejects admin_empresa/master_admin targets) -
+      // that's why this runs after the role/profile writes above, never before.
+      // admin_empresa keeps unrestricted access with no ACL row needed, so
+      // switching *away* from usuario intentionally leaves old grants
+      // untouched rather than clearing them (harmless: nothing reads them for
+      // a non-"usuario" role yet, and Fase 3 gating starts module by module).
+      if (newRole === "usuario" && empresaId) {
+        await saveUserModulePermissions(empresaId, userId, permissions);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
+      queryClient.invalidateQueries({ queryKey: ["user-module-permissions"] });
       toast({ title: "Usuário atualizado!" });
       setEditUser(null);
     },
@@ -113,7 +160,24 @@ export default function UserManagement() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      return data;
+
+      // create-user doesn't return the created/reused user_id, so the new
+      // member is located by email within this company (profiles.email is
+      // written by that same Edge Function call, synchronously).
+      let permissionsWarning: string | null = null;
+      if (newRole === "usuario" && empresaId) {
+        const createdUserId = await resolveCreatedUserId(empresaId, newEmail.trim().toLowerCase());
+        if (createdUserId) {
+          try {
+            await saveUserModulePermissions(empresaId, createdUserId, newPermissions);
+          } catch (permError) {
+            permissionsWarning = permError instanceof Error ? permError.message : "Falha ao salvar permissões.";
+          }
+        } else {
+          permissionsWarning = "Não foi possível localizar o novo usuário para salvar as permissões agora.";
+        }
+      }
+      return { ...data, permissionsWarning };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["users-management"] });
@@ -123,10 +187,18 @@ export default function UserManagement() {
           : "Usuário atualizado!",
         description: data?.message,
       });
+      if (data?.permissionsWarning) {
+        toast({
+          title: "Permissões não salvas",
+          description: `${data.permissionsWarning} Edite o usuário para configurar.`,
+          variant: "destructive",
+        });
+      }
       setAddOpen(false);
       setNewEmail("");
       setNewName("");
       setNewRole("usuario");
+      setNewPermissions([]);
     },
     onError: (err: any) => toast({ title: "Erro ao criar usuário", description: err.message, variant: "destructive" }),
   });
@@ -135,6 +207,9 @@ export default function UserManagement() {
     mutationFn: async (userId: string) => {
       if (!empresaId) throw new Error("Empresa não identificada");
       const { data, error } = await supabase.functions.invoke("delete-user", {
+        headers: {
+          Authorization: `Bearer ${await supabase.auth.getSession().then(({ data }) => data.session?.access_token ?? "")}`,
+        },
         body: { user_id: userId, empresa_id: empresaId },
       });
       if (error) throw error;
@@ -157,6 +232,7 @@ export default function UserManagement() {
     setEditUser(u);
     setEditName(u.full_name);
     setEditRole(u.role);
+    setEditPermissions([]); // evita mostrar por um instante as permissões do usuário editado anteriormente
   };
 
   const roleLabel = (r: string) => {
@@ -172,13 +248,20 @@ export default function UserManagement() {
         {!canCreateUser && (
           <p className="text-sm text-destructive">Limite atingido: {currentUsuarios}/{maxUsuarios} usuários. Faça upgrade do plano.</p>
         )}
-        <Dialog open={addOpen} onOpenChange={(open) => { if (!canCreateUser && open) return; setAddOpen(open); }}>
+        <Dialog
+          open={addOpen}
+          onOpenChange={(open) => {
+            if (!canCreateUser && open) return;
+            if (open) setNewPermissions(buildEmptyPermissionRows(activeModules));
+            setAddOpen(open);
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm" disabled={!canCreateUser}><Plus className="h-4 w-4 mr-1" /> Novo Usuário</Button>
           </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Adicionar Usuário</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-2">
+          <DialogContent className="flex max-h-[85vh] flex-col">
+            <DialogHeader className="shrink-0"><DialogTitle>Adicionar Usuário</DialogTitle></DialogHeader>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-2 pr-1">
               <div className="space-y-2">
                 <Label>Nome completo</Label>
                 <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome do usuário" />
@@ -200,8 +283,11 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {newRole === "usuario" && (
+                <UserModulePermissionsFields rows={newPermissions} onChange={setNewPermissions} />
+              )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
               <Button onClick={() => addUser.mutate()} disabled={addUser.isPending || !newEmail || !newName}>
                 {addUser.isPending ? "Criando..." : "Criar"}
@@ -212,10 +298,10 @@ export default function UserManagement() {
       </div>
 
       <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Usuário</DialogTitle></DialogHeader>
+        <DialogContent className="flex max-h-[85vh] flex-col">
+          <DialogHeader className="shrink-0"><DialogTitle>Editar Usuário</DialogTitle></DialogHeader>
           {editUser && (
-            <div className="space-y-4 py-2">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-2 pr-1">
               <div className="space-y-2">
                 <Label>Nome completo</Label>
                 <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
@@ -234,12 +320,28 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {editRole === "usuario" && (
+                <UserModulePermissionsFields
+                  rows={editPermissions}
+                  onChange={setEditPermissions}
+                  isLoading={editPermissionsQuery.isLoading}
+                />
+              )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
             <Button
-              onClick={() => editUser && updateRole.mutate({ roleId: editUser.roleId, newRole: editRole, userId: editUser.user_id, newName: editName })}
+              onClick={() =>
+                editUser &&
+                updateRole.mutate({
+                  roleId: editUser.roleId,
+                  newRole: editRole,
+                  userId: editUser.user_id,
+                  newName: editName,
+                  permissions: editPermissions,
+                })
+              }
               disabled={updateRole.isPending}
             >
               {updateRole.isPending ? "Salvando..." : "Salvar"}

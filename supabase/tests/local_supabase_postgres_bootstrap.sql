@@ -119,3 +119,38 @@ GRANT EXECUTE ON FUNCTION storage.foldername(text)
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA extensions
   TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA auth, storage TO service_role;
+-- auth.* stays service_role-only above (auth.users must never be broadly
+-- readable) - but storage.objects/storage.buckets are a real exception: on
+-- an actual Supabase project the Storage extension grants these to
+-- anon/authenticated as its own platform default, with RLS (see the
+-- "TO authenticated" policies this repo defines on storage.objects, e.g.
+-- 20260730023000_secure_event_file_storage.sql) as the real gate - exactly
+-- the same shape as the public-schema default below. Without this, every
+-- storage.objects query as authenticated/anon fails with "permission denied
+-- for table objects" before RLS is even evaluated, regardless of policy.
+GRANT ALL ON ALL TABLES IN SCHEMA storage TO anon, authenticated;
+
+-- Real Supabase projects grant these to anon/authenticated/service_role as a
+-- platform default whenever a table is created in the public schema - it is
+-- not something any migration in this repository sets explicitly (see
+-- 20260807090000's own comment: no ALTER DEFAULT PRIVILEGES anywhere in the
+-- repo). Tables from the original schema (events, financials, funcionarios,
+-- event_days, event_funcionarios, event_checklist_items, document_templates,
+-- generated_documents, backups...) rely entirely on this platform default
+-- and never REVOKE/GRANT themselves at the table level. Later-stage tables
+-- (clientes, material_custodias, estoque_localizacoes...) additionally issue
+-- their own explicit REVOKE/GRANT on top of this baseline. Replaying
+-- migrations on a disposable, plain PostgreSQL instance needs this baseline
+-- reproduced by hand, or every original-schema table raises "permission
+-- denied for table X" for anon/authenticated regardless of RLS or of any
+-- app-level fix - this is test-harness fidelity, not an app privilege
+-- change, and mirrors exactly what Supabase already does automatically on a
+-- real project. Functions are deliberately not included here: Postgres
+-- already grants EXECUTE to PUBLIC by default on CREATE FUNCTION with no
+-- help needed - that default is the actual bug class fixed by
+-- 20260808110000_harden_insecure_security_definer_functions.sql, and this
+-- bootstrap must not paper over it.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;

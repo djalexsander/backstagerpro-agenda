@@ -1,14 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildCorsHeaders, jsonCorsResponse } from "../_shared/cors.ts";
 import {
   getActivationRedirectUrl,
   mergeActivationMetadata,
 } from "../_shared/account-activation.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = buildCorsHeaders();
 const genericMessage =
   "Se a conta estiver pendente, um link de ativação será enviado para o email informado.";
 
@@ -48,9 +45,7 @@ Deno.serve(async (req) => {
 
     // Keep the public response identical to prevent account enumeration.
     if (!normalizedEmail) {
-      return new Response(JSON.stringify({ success: true, message: genericMessage }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonCorsResponse({ success: true, message: genericMessage });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

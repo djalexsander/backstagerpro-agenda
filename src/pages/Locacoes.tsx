@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CalendarCheck, CalendarClock, Loader2, PackageOpen, Plus, Search } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,37 +8,24 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 import { NewRentalDialog } from "@/components/material-rentals/NewRentalDialog";
 import { RentalDetailDialog } from "@/components/material-rentals/RentalDetailDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useMaterialRentals } from "@/hooks/useMaterialRentals";
 import { MODULE_KEYS } from "@/constants/module-keys";
-import { hasCompanyOperationalAccess } from "@/lib/access-control";
 import { listCustodyResponsibles } from "@/lib/checkin-checkout-service";
 import { RENTAL_STATUS_LABELS } from "@/lib/material-rental-domain";
 import { getRentalPermissions } from "@/lib/material-rental-permissions";
 import type { RentalFilters, RentalStatus } from "@/lib/material-rental-types";
-import { listStockCompaniesForMaster, listStockLocations } from "@/lib/stock-service";
+import { listStockLocations } from "@/lib/stock-service";
 
 const PAGE_SIZE = 12;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const initialFilters: RentalFilters = { search: "", status: "todos", customerId: "", dateFrom: "", dateTo: "", overdueOnly: false, responsible: "" };
 
 export default function Locacoes() {
-  const { role, empresaId, empresaReadOnly, isMasterAdmin } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const masterCompanyId = isMasterAdmin ? searchParams.get("empresa") ?? "" : "";
-  const companiesQuery = useQuery({ queryKey: ["stock-master-companies"], queryFn: listStockCompaniesForMaster, enabled: isMasterAdmin });
-  const selectedMasterCompany = (companiesQuery.data ?? []).find((company) => company.id === masterCompanyId);
-  const companyId = isMasterAdmin ? selectedMasterCompany?.id ?? null : empresaId;
-  const selectedPlan = selectedMasterCompany?.planos as { periodicidade: string | null; ativo: boolean } | null | undefined;
-  const readOnly = isMasterAdmin
-    ? selectedMasterCompany
-      ? !hasCompanyOperationalAccess({ ...selectedMasterCompany, plan_periodicity: selectedPlan?.periodicidade ?? null, plan_active: selectedPlan?.ativo ?? null })
-      : true
-    : empresaReadOnly;
+  const { role, empresaId: companyId, empresaReadOnly: readOnly, isMasterAdmin } = useAuth();
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.LOCACAO_MATERIAIS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS) && hasModule(MODULE_KEYS.CONTROLE_ESTOQUE) && hasModule(MODULE_KEYS.CHECKIN_CHECKOUT);
   const permissions = getRentalPermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
@@ -54,17 +40,8 @@ export default function Locacoes() {
   const responsiblesQuery = useQuery({ queryKey: ["rental-responsibles", companyId], queryFn: () => listCustodyResponsibles(companyId!), enabled: Boolean(companyId && permissions.visualizar) });
   const pages = Math.max(1, Math.ceil(rentalsState.rentals.total / PAGE_SIZE));
 
-  const selectCompany = (nextId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("empresa", nextId);
-    setSearchParams(next, { replace: true });
-    setDetailId(null);
-    setFilters(initialFilters);
-  };
-  const companySelector = isMasterAdmin ? <Card><CardContent className="max-w-xl p-4"><CompanyContextSelector companies={companiesQuery.data ?? []} value={masterCompanyId} onValueChange={selectCompany} disabled={companiesQuery.isLoading} /></CardContent></Card> : null;
-
-  if (!companyId && !companiesQuery.isLoading) return <div className="space-y-4"><div><h1 className="text-2xl font-bold">Locação de Materiais</h1><p className="text-muted-foreground">Selecione explicitamente a empresa para operar no contexto Master.</p></div>{companySelector}</div>;
-  if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><div><h1 className="text-2xl font-bold">Locação de Materiais</h1><p className="text-muted-foreground">O módulo ou uma de suas dependências não está disponível.</p></div>{companySelector}<Card className="border-amber-500/50"><CardContent className="p-4 text-sm">Locações requer Gestão de Materiais, Controle de Estoque e Check-in / Check-out ativos.</CardContent></Card></div>;
+  if (!companyId) return <div className="space-y-4"><div><h1 className="text-2xl font-bold">Locação de Materiais</h1><p className="text-muted-foreground">{isMasterAdmin ? "Sua conta master não está vinculada a uma empresa operacional." : "Nenhuma empresa vinculada à sua conta."}</p></div></div>;
+  if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><div><h1 className="text-2xl font-bold">Locação de Materiais</h1><p className="text-muted-foreground">O módulo ou uma de suas dependências não está disponível.</p></div><Card className="border-amber-500/50"><CardContent className="p-4 text-sm">Locações requer Gestão de Materiais, Controle de Estoque e Check-in / Check-out ativos.</CardContent></Card></div>;
 
   const indicators = [
     { label: "Em andamento", value: rentalsState.indicators.em_andamento, icon: PackageOpen },
@@ -75,7 +52,6 @@ export default function Locacoes() {
 
   return <div className="space-y-5">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-bold">Locação de Materiais</h1><p className="text-muted-foreground">Reserva comercial integrada ao estoque e à custódia oficiais.</p></div>{permissions.criar && <Button onClick={() => setNewOpen(true)}><Plus className="mr-2 h-4 w-4" />Nova locação</Button>}</div>
-    {companySelector}
     {readOnly && <Card className="border-amber-500/50"><CardContent className="p-3 text-sm">Empresa em modo somente leitura. Consultas permanecem disponíveis; ações comerciais e físicas estão bloqueadas.</CardContent></Card>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{indicators.map((indicator) => <Card key={indicator.label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs text-muted-foreground">{indicator.label}</p><p className="text-2xl font-bold">{indicator.value}</p></div><indicator.icon className="h-6 w-6 text-muted-foreground" /></CardContent></Card>)}</div>
     <Card><CardHeader><CardTitle>Locações</CardTitle></CardHeader><CardContent className="space-y-4">

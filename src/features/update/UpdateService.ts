@@ -1,11 +1,19 @@
 import { registerSW } from "virtual:pwa-register";
+import { isTauri as isTauriRuntime } from "@tauri-apps/api/core";
 
 export type UpdateCallback = (available: boolean) => void;
 
 let updateSWFn: ((reloadPage?: boolean) => Promise<void>) | null = null;
 
+// Delegates to the official SDK instead of reading window.__TAURI__: that
+// global only exists when app.withGlobalTauri is enabled in
+// tauri.conf.json (it isn't, here), so it was always undefined in the real
+// packaged app and every desktop-only code path below silently fell back
+// to its web behavior. @tauri-apps/api/core's isTauri() checks
+// globalThis.isTauri instead, which Tauri's IPC bootstrap sets
+// unconditionally in every webview.
 export const isTauri = (): boolean => {
-  return Boolean((window as any).__TAURI__);
+  return isTauriRuntime();
 };
 
 export const registerPWAUpdate = (callback: UpdateCallback) => {

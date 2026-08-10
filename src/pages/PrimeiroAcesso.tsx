@@ -22,8 +22,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  runAccountActivation,
+  type ActivationFlow,
+} from "@/lib/account-activation-flow";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 
-type ActivationFlow = "invite" | "recovery";
 type PageMode = "checking" | "request" | "sent" | "activate" | "success";
 
 function getErrorMessage(error: unknown) {
@@ -32,6 +36,62 @@ function getErrorMessage(error: unknown) {
 
 function normalizeFlow(value: unknown): ActivationFlow | null {
   return value === "invite" || value === "recovery" ? value : null;
+}
+
+export function getAuthParamsFromLocation(location: Location) {
+  const hashParams = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const searchParams = new URLSearchParams(location.search);
+
+  const accessToken = hashParams.get("access_token") || searchParams.get("access_token");
+  const refreshToken = hashParams.get("refresh_token") || searchParams.get("refresh_token");
+  const code = hashParams.get("code") || searchParams.get("code");
+  const flowId = hashParams.get("flow_id") || searchParams.get("flow_id");
+  const type = hashParams.get("type") || searchParams.get("type");
+
+  return {
+    accessToken,
+    refreshToken,
+    code,
+    flowId,
+    type,
+    hasRecoveryTokens:
+      Boolean(accessToken && refreshToken) || Boolean(code) || type === "recovery",
+  };
+}
+
+export function clearRecoveredAuthParams(location: Location) {
+  const url = new URL(location.href);
+  const paramsToRemove = [
+    "access_token",
+    "refresh_token",
+    "expires_in",
+    "expires_at",
+    "token_type",
+    "type",
+    "code",
+    "flow_id",
+    "state",
+    "error",
+    "error_description",
+    "error_code",
+  ];
+
+  paramsToRemove.forEach((param) => {
+    url.searchParams.delete(param);
+  });
+
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+  paramsToRemove.forEach((param) => {
+    hashParams.delete(param);
+  });
+
+  url.hash = hashParams.toString() ? `#${hashParams.toString()}` : "";
+
+  try {
+    window.history.replaceState(window.history.state, "", url.toString());
+  } catch (error) {
+    console.warn("Não foi possível limpar os parâmetros de auth da URL.", error);
+  }
 }
 
 export default function PrimeiroAcesso() {
@@ -51,6 +111,30 @@ export default function PrimeiroAcesso() {
     let active = true;
 
     const resolveActivationSession = async () => {
+      const authParams = getAuthParamsFromLocation(window.location);
+
+      try {
+        if (authParams.code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(
+            authParams.code,
+            authParams.flowId ? { flowId: authParams.flowId } : undefined,
+          );
+          if (error) throw error;
+        } else if (authParams.accessToken && authParams.refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: authParams.accessToken,
+            refresh_token: authParams.refreshToken,
+          });
+          if (error) throw error;
+        }
+      } catch (error) {
+        console.warn("Não foi possível consumir a sessão de ativação do link.", error);
+      }
+
+      if (authParams.hasRecoveryTokens) {
+        clearRecoveredAuthParams(window.location);
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -71,13 +155,15 @@ export default function PrimeiroAcesso() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
+      if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY" || event === "TOKEN_REFRESHED") {
         void resolveActivationSession();
       }
     });
 
     void resolveActivationSession();
-    const timeout = window.setTimeout(resolveActivationSession, 1_500);
+    const timeout = window.setTimeout(() => {
+      void resolveActivationSession();
+    }, 1_500);
 
     return () => {
       active = false;
@@ -116,40 +202,44 @@ export default function PrimeiroAcesso() {
       setMode("request");
       return;
     }
-    if (password !== confirmPassword) {
-      toast({
-        title: "Erro",
-        description: "As senhas não coincidem.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (password.length < 8) {
-      toast({
-        title: "Erro",
-        description: "A senha deve ter pelo menos 8 caracteres.",
-        variant: "destructive",
-      });
-      return;
-    }
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "activate-account",
-        { body: { password, flow_type: flow } },
+      const result = await runAccountActivation(
+        {
+          getAccessToken: async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            return session?.access_token ?? null;
+          },
+          invokeActivateAccount: async ({ accessToken, password: pwd, flow: activationFlow }) => {
+            const { data, error } = await supabase.functions.invoke(
+              "activate-account",
+              {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body: { password: pwd, flow_type: activationFlow },
+              },
+            );
+            if (error) {
+              return { error: await getEdgeFunctionErrorMessage(error) };
+            }
+            if (data?.error) return { error: data.error as string };
+            return { error: null };
+          },
+          signOut: () => supabase.auth.signOut(),
+        },
+        { password, confirmPassword, flow },
       );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
-      await supabase.auth.signOut();
+      if (!result.success) {
+        toast({
+          title: "Erro ao ativar conta",
+          description: result.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setMode("success");
-    } catch (error) {
-      toast({
-        title: "Erro ao ativar conta",
-        description: getErrorMessage(error),
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }

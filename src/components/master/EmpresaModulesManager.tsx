@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Power, PowerOff, Gift, Zap, HardDrive, Clock, Pencil, Trash2, CheckCircle, Star, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { buildCompanyModuleEntitlementPayload, validateModuleDependenciesForActivation } from "@/lib/company-module-entitlements";
 
 interface Props {
   empresaId: string;
@@ -60,7 +61,12 @@ export function EmpresaModulesManager({
   const [isTrialGrant, setIsTrialGrant] = useState(false);
   const [editValor, setEditValor] = useState("0");
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["empresa-modules-admin", empresaId] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["empresa-modules-admin", empresaId] });
+    queryClient.invalidateQueries({ queryKey: ["empresa-modules"] });
+    queryClient.invalidateQueries({ queryKey: ["company-lifetime-license"] });
+    queryClient.invalidateQueries({ queryKey: ["master-empresas-module-counts"] });
+  };
 
   // Catálogo completo (inclui inativos para lookup)
   const { data: catalog = [] } = useQuery({
@@ -76,6 +82,26 @@ export function EmpresaModulesManager({
   });
 
   const activeCatalog = catalog.filter((c) => c.ativo);
+  const catalogMap = new Map(catalog.map((c) => [c.id, c]));
+
+  const { data: moduleDependencies = [] } = useQuery({
+    queryKey: ["module-dependencies-admin"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("module_dependencies").select("module_id, required_module_id");
+      if (error) throw error;
+      return data as Array<{ module_id: string; required_module_id: string }>;
+    },
+  });
+
+  const dependencyMap = new Map<string, Array<{ featureKey: string; name: string }>>();
+  for (const dependency of moduleDependencies) {
+    const module = catalogMap.get(dependency.module_id);
+    const requiredModule = catalogMap.get(dependency.required_module_id);
+    if (!module || !requiredModule) continue;
+    const existing = dependencyMap.get(module.feature_key) ?? [];
+    existing.push({ featureKey: requiredModule.feature_key, name: requiredModule.nome });
+    dependencyMap.set(module.feature_key, existing);
+  }
 
   // Módulos da empresa
   const { data: empresaModules = [], isLoading } = useQuery({
@@ -92,7 +118,6 @@ export function EmpresaModulesManager({
     enabled: !!empresaId,
   });
 
-  const catalogMap = new Map(catalog.map((c) => [c.id, c]));
   const enriched = empresaModules.map((em) => ({
     ...em,
     catalog: catalogMap.get(em.module_id),
@@ -101,7 +126,24 @@ export function EmpresaModulesManager({
   const activeModuleIds = new Set(
     empresaModules.filter((m) => m.status === "active" || m.status === "pending").map((m) => m.module_id)
   );
+  const activeCatalogFeatureKeys = new Set(
+    empresaModules
+      .filter((m) => m.status === "active")
+      .map((m) => catalogMap.get(m.module_id)?.feature_key)
+      .filter(Boolean) as string[]
+  );
   const availableModules = activeCatalog.filter((c) => !activeModuleIds.has(c.id));
+  const catalogRows = activeCatalog.map((module) => {
+    const existing = empresaModules.find((em) => em.module_id === module.id);
+    const status = existing?.status === "active"
+      ? "active"
+      : existing?.status === "pending"
+        ? "pending"
+        : existing?.status === "inactive"
+          ? "inactive"
+          : "unassigned";
+    return { module, existing, status };
+  });
 
   // Stats
   const activeCount = enriched.filter((m) => m.status === "active").length;
@@ -113,19 +155,46 @@ export function EmpresaModulesManager({
     mutationFn: async () => {
       if (!selectedModuleId) throw new Error("Selecione um módulo");
       const mod = catalog.find((c) => c.id === selectedModuleId);
-      const valor = isCortesia ? 0 : parseFloat(valorCobrado) || 0;
+      if (!mod) throw new Error("Módulo não encontrado");
 
-      const { error } = await supabase.from("empresa_modules").insert({
-        empresa_id: empresaId,
-        module_id: selectedModuleId,
-        status: "active",
-        activated_at: new Date().toISOString(),
-        granted_by_admin: true,
-        valor_cobrado: valor,
+      const requiredDependencies = (dependencyMap.get(mod.feature_key) ?? []).map((dependency) => ({
+        requiredModuleFeatureKey: dependency.featureKey,
+      }));
+      const validation = validateModuleDependenciesForActivation({
+        moduleDependencies: requiredDependencies,
+        activeModuleFeatureKeys: activeCatalogFeatureKeys,
+      });
+
+      if (!validation.isAllowed) {
+        throw new Error(`Dependências pendentes: ${validation.missingDependencies.join(", ")}`);
+      }
+
+      const valor = isCortesia ? 0 : parseFloat(valorCobrado) || 0;
+      const existingRow = empresaModules.find((m) => m.module_id === selectedModuleId);
+      const payload = buildCompanyModuleEntitlementPayload({
+        requestedStatus: "active",
+        grantedByAdmin: true,
+        valorCobrado: valor,
         origem: isCortesia ? "cortesia_admin" : "manual_admin",
-        trial_granted: isTrialGrant,
-      } as any);
-      if (error) throw error;
+        trialGranted: isTrialGrant,
+        currentStatus: existingRow?.status as any,
+        existingActivatedAt: existingRow?.activated_at ?? null,
+      });
+
+      if (existingRow) {
+        const { error } = await supabase
+          .from("empresa_modules")
+          .update(payload as any)
+          .eq("id", existingRow.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("empresa_modules").insert({
+          empresa_id: empresaId,
+          module_id: selectedModuleId,
+          ...payload,
+        } as any);
+        if (error) throw error;
+      }
 
       await supabase.from("system_logs").insert({
         tipo: "modulo",
@@ -147,9 +216,18 @@ export function EmpresaModulesManager({
 
   const approvePendingMutation = useMutation({
     mutationFn: async (moduleRow: any) => {
+      const payload = buildCompanyModuleEntitlementPayload({
+        requestedStatus: "active",
+        grantedByAdmin: true,
+        valorCobrado: Number(moduleRow?.valor_cobrado ?? 0),
+        origem: moduleRow?.origem ?? "manual_admin",
+        trialGranted: Boolean(moduleRow?.trial_granted),
+        currentStatus: moduleRow?.status,
+        existingActivatedAt: moduleRow?.activated_at ?? null,
+      });
       const { error } = await supabase
         .from("empresa_modules")
-        .update({ status: "active", activated_at: new Date().toISOString(), granted_by_admin: true } as any)
+        .update(payload as any)
         .eq("id", moduleRow.id);
       if (error) throw error;
 
@@ -169,9 +247,18 @@ export function EmpresaModulesManager({
 
   const deactivateMutation = useMutation({
     mutationFn: async (moduleRow: any) => {
+      const payload = buildCompanyModuleEntitlementPayload({
+        requestedStatus: "inactive",
+        grantedByAdmin: Boolean(moduleRow?.granted_by_admin),
+        valorCobrado: Number(moduleRow?.valor_cobrado ?? 0),
+        origem: moduleRow?.origem ?? "manual_admin",
+        trialGranted: Boolean(moduleRow?.trial_granted),
+        currentStatus: moduleRow?.status,
+        existingActivatedAt: moduleRow?.activated_at ?? null,
+      });
       const { error } = await supabase
         .from("empresa_modules")
-        .update({ status: "inactive" } as any)
+        .update(payload as any)
         .eq("id", moduleRow.id);
       if (error) throw error;
 
@@ -191,9 +278,18 @@ export function EmpresaModulesManager({
 
   const reactivateMutation = useMutation({
     mutationFn: async (moduleRow: any) => {
+      const payload = buildCompanyModuleEntitlementPayload({
+        requestedStatus: "active",
+        grantedByAdmin: Boolean(moduleRow?.granted_by_admin),
+        valorCobrado: Number(moduleRow?.valor_cobrado ?? 0),
+        origem: moduleRow?.origem ?? "manual_admin",
+        trialGranted: Boolean(moduleRow?.trial_granted),
+        currentStatus: moduleRow?.status,
+        existingActivatedAt: moduleRow?.activated_at ?? null,
+      });
       const { error } = await supabase
         .from("empresa_modules")
-        .update({ status: "active", activated_at: new Date().toISOString() } as any)
+        .update(payload as any)
         .eq("id", moduleRow.id);
       if (error) throw error;
 
@@ -333,23 +429,97 @@ export function EmpresaModulesManager({
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
-      ) : enriched.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum módulo atribuído a esta empresa.</p>
       ) : (
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Módulo</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {enriched.map((em: any) => {
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-card">
+            <div className="px-3 py-2 border-b bg-muted/40">
+              <p className="text-sm font-semibold">Catálogo comercial</p>
+              <p className="text-xs text-muted-foreground">Status de cada módulo comercializável para esta empresa.</p>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Módulo</TableHead>
+                  <TableHead>Dependências</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {catalogRows.map(({ module, existing, status }) => {
+                  const dependencyList = dependencyMap.get(module.feature_key) ?? [];
+                  const statusLabel = status === "active" ? "Liberado" : status === "pending" ? "Pendente" : status === "inactive" ? "Desativado" : "Não liberado";
+                  const badgeClassName = status === "active"
+                    ? "bg-accent text-accent-foreground"
+                    : status === "pending"
+                      ? "bg-[hsl(var(--warning))] text-[hsl(var(--warning-foreground))]"
+                      : "bg-muted text-muted-foreground";
+                  return (
+                    <TableRow key={module.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{module.nome}</p>
+                          <p className="text-[10px] text-muted-foreground">{module.feature_key}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {dependencyList.length > 0 ? (
+                          <div className="space-y-1">
+                            {dependencyList.map((dependency) => (
+                              <Badge key={`${module.id}-${dependency.featureKey}`} variant="outline" className="text-[10px]">
+                                {dependency.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">R$ {Number(module.valor).toFixed(2)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={badgeClassName}>{statusLabel}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {status === "active" ? (
+                          <Button size="sm" variant="outline" className="text-destructive border-destructive" onClick={() => existing && deactivateMutation.mutate(existing)}>
+                            Desativar
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={() => {
+                            setSelectedModuleId(module.id);
+                            setValorCobrado(String(module.valor));
+                            setIsCortesia(false);
+                            setIsTrialGrant(false);
+                            setAddOpen(true);
+                          }}>
+                            Ativar
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Módulo</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {enriched.map((em: any) => {
                 const cat = em.catalog;
                 const badge = STATUS_BADGE[em.status] || STATUS_BADGE.inactive;
                 const isPending = em.status === "pending";
@@ -383,6 +553,11 @@ export function EmpresaModulesManager({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
+                        {dependencyMap.get(cat?.feature_key || "")?.length ? (
+                          <Badge variant="outline" className="text-[10px] border-muted-foreground/40 text-muted-foreground">
+                            {dependencyMap.get(cat?.feature_key || "")?.length} dependência{dependencyMap.get(cat?.feature_key || "")?.length !== 1 ? "s" : ""}
+                          </Badge>
+                        ) : null}
                         {em.trial_granted && (
                           <Badge variant="outline" className="text-[10px] gap-0.5 border-[hsl(var(--warning))] text-[hsl(var(--warning))]">
                             <Clock className="h-2.5 w-2.5" /> Trial
@@ -470,7 +645,8 @@ export function EmpresaModulesManager({
                 );
               })}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </div>
       )}
 
@@ -600,6 +776,16 @@ export function EmpresaModulesManager({
                   <CardContent className="py-3 text-xs space-y-1">
                     <p><strong>{mod.nome}</strong></p>
                     {mod.descricao && <p className="text-muted-foreground">{mod.descricao}</p>}
+                    {dependencyMap.get(mod.feature_key)?.length ? (
+                      <div className="pt-1">
+                        <p className="font-medium">Dependências:</p>
+                        <ul className="list-disc pl-4 text-muted-foreground">
+                          {(dependencyMap.get(mod.feature_key) ?? []).map((dependency) => (
+                            <li key={`${mod.id}-${dependency.featureKey}`}>{dependency.name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     {mod.is_capacity_module && (
                       <div className="flex gap-3 pt-1">
                         {mod.capacidade_extra_usuarios > 0 && <span>+{mod.capacidade_extra_usuarios} usuários</span>}

@@ -1,21 +1,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildCorsHeaders, jsonCorsResponse } from "../_shared/cors.ts";
 import {
-  accessTokenHasActivationMethod,
+  accessTokenHasOtpAuthenticationMethod,
   normalizeActivationFlow,
   validateActivationPassword,
 } from "../_shared/account-activation.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = buildCorsHeaders();
 
 function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return jsonCorsResponse(body, status, {});
 }
 
 Deno.serve(async (req) => {
@@ -58,7 +52,7 @@ Deno.serve(async (req) => {
       !flow ||
       !expectedFlow ||
       flow !== expectedFlow ||
-      !accessTokenHasActivationMethod(accessToken, flow)
+      !accessTokenHasOtpAuthenticationMethod(accessToken)
     ) {
       return jsonResponse({ error: "Convite ou recuperação inválidos" }, 401);
     }

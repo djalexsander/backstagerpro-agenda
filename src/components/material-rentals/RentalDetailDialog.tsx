@@ -1,11 +1,11 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Loader2, PackageCheck, RotateCcw, ScanLine, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Loader2, PackageCheck, Printer, RotateCcw, ScanLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,8 +28,41 @@ import {
 } from "@/lib/material-rental-service";
 import type { RentalCustodyView, RentalItemView, RentalMaterialOption } from "@/lib/material-rental-types";
 import type { StockLocation } from "@/lib/stock-types";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { MODULE_KEYS } from "@/constants/module-keys";
+import { getFinancialLedgerPermissions } from "@/lib/financial-ledger-permissions";
+import { getRentalFinancialSummary, registerRentalReceipt, reverseRentalReceipt } from "@/lib/financial-ledger-service";
+import type { FinancialLedgerStatus, PaymentCondition } from "@/lib/financial-ledger-types";
+import { splitInstallments } from "@/lib/installment-split";
+import { openPrintWindow } from "@/lib/printer-service";
+import { buildRentalReceiptHtml, type RentalReceiptKind } from "@/lib/rental-receipt-print";
+
+const FINANCIAL_STATUS_LABELS: Record<FinancialLedgerStatus, string> = {
+  pendente: "Pendente",
+  parcial: "Parcialmente pago",
+  recebido: "Pago",
+  cancelado: "Cancelado",
+  cancelado_pendente_regularizacao: "Cancelado · pendente de regularização",
+  estornado: "Estornado",
+};
+
+const FINANCIAL_STATUS_BADGE: Record<FinancialLedgerStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  pendente: "outline",
+  parcial: "outline",
+  recebido: "default",
+  cancelado: "secondary",
+  cancelado_pendente_regularizacao: "destructive",
+  estornado: "secondary",
+};
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function addDays(base: Date, days: number): string {
+  const date = new Date(base);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 export function RentalDetailDialog({
   open,
@@ -57,6 +90,123 @@ export function RentalDetailDialog({
   });
   const rental = detailQuery.data;
   const actions = rental ? getRentalActions(rental) : null;
+  const { role, empresaNome } = useAuth();
+  const { hasModule } = useCompanyModules(companyId);
+  const queryClient = useQueryClient();
+  const financialPermissions = getFinancialLedgerPermissions({
+    role,
+    moduleEnabled: hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO),
+    // Backend (company_has_operational_access, inside registrar_recebimento_locacao)
+    // is the authoritative gate for read-only companies - this dialog isn't
+    // handed that flag today, so a blocked attempt surfaces as a clear toast
+    // from the RPC instead of being silently hidden here.
+    companyReadOnly: false,
+  });
+  const financialQuery = useQuery({
+    queryKey: ["rental-financial-summary", companyId, rentalId],
+    queryFn: () => getRentalFinancialSummary(companyId, rentalId!),
+    enabled: open && Boolean(rentalId) && financialPermissions.visualizar,
+  });
+  const invalidateFinancials = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["rental-financial-summary", companyId, rentalId] }),
+      queryClient.invalidateQueries({ queryKey: ["receivables", companyId] }),
+      queryClient.invalidateQueries({ queryKey: ["clients-receivable", companyId] }),
+      queryClient.invalidateQueries({ queryKey: ["rentals-financial-summary", companyId] }),
+    ]);
+
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptAmount, setReceiptAmount] = useState("");
+  const [receiptMethod, setReceiptMethod] = useState("pix");
+  const [receiptInstallmentId, setReceiptInstallmentId] = useState<string | null>(null);
+  const receiptTargetInstallment = useMemo(
+    () => (receiptInstallmentId ? financialQuery.data?.parcelas.find((installment) => installment.id === receiptInstallmentId) : null),
+    [receiptInstallmentId, financialQuery.data],
+  );
+  const receiptMutation = useMutation({
+    mutationFn: async () => {
+      const amount = Number(receiptAmount.replace(",", "."));
+      if (!amount || amount <= 0) throw new Error("Informe um valor válido.");
+      return registerRentalReceipt(companyId, {
+        rentalId: rentalId!,
+        amount,
+        paymentMethod: receiptMethod,
+        clientUuid: crypto.randomUUID(),
+        installmentId: receiptInstallmentId ?? undefined,
+      });
+    },
+    onSuccess: async () => {
+      await invalidateFinancials();
+      setReceiptOpen(false);
+      setReceiptAmount("");
+      setReceiptInstallmentId(null);
+      toast.success("Recebimento registrado.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reverseReceiptId, setReverseReceiptId] = useState<string | null>(null);
+  const [reverseAmount, setReverseAmount] = useState("");
+  const [reverseJustification, setReverseJustification] = useState("");
+  const reverseMutation = useMutation({
+    mutationFn: async () => {
+      if (!reverseReceiptId) throw new Error("Selecione um recebimento.");
+      if (!reverseJustification.trim()) throw new Error("Informe a justificativa do estorno.");
+      const amount = reverseAmount.trim() ? Number(reverseAmount.replace(",", ".")) : undefined;
+      return reverseRentalReceipt(companyId, {
+        receiptId: reverseReceiptId,
+        justification: reverseJustification.trim(),
+        clientUuid: crypto.randomUUID(),
+        amount,
+      });
+    },
+    onSuccess: async () => {
+      await invalidateFinancials();
+      setReverseOpen(false);
+      setReverseReceiptId(null);
+      setReverseAmount("");
+      setReverseJustification("");
+      toast.success("Estorno registrado. O recebimento original permanece no histórico.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const openReverseDialog = (receiptId: string) => {
+    setReverseReceiptId(receiptId);
+    setReverseAmount("");
+    setReverseJustification("");
+    setReverseOpen(true);
+  };
+
+  const [paymentConditionOpen, setPaymentConditionOpen] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<"avista" | "parcelado">("avista");
+  const [paymentDueDate, setPaymentDueDate] = useState("");
+  const [installmentCount, setInstallmentCount] = useState(2);
+  const [installments, setInstallments] = useState<{ numero: number; valor: number; vencimento: string }[]>([]);
+  const installmentsSum = useMemo(
+    () => Math.round(installments.reduce((sum, installment) => sum + installment.valor, 0) * 100) / 100,
+    [installments],
+  );
+  const regenerateInstallments = (count: number) => {
+    const safeCount = Math.max(2, Math.min(24, Math.round(count) || 2));
+    setInstallmentCount(safeCount);
+    if (!rental) return;
+    const today = new Date();
+    setInstallments(
+      splitInstallments(rental.valor_total, safeCount).map((installment, index) => ({
+        ...installment,
+        vencimento: addDays(today, 30 * (index + 1)),
+      })),
+    );
+  };
+  const openPaymentCondition = () => {
+    setPaymentMode("avista");
+    setPaymentDueDate("");
+    setInstallmentCount(2);
+    setInstallments([]);
+    setPaymentConditionOpen(true);
+  };
+
   const [busy, setBusy] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
   const [materials, setMaterials] = useState<RentalMaterialOption[]>([]);
@@ -93,6 +243,25 @@ export function RentalDetailDialog({
     try {
       await operation();
       toast.success(success);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha na operação.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmWithPaymentCondition = async () => {
+    if (!rental) return;
+    const condition: PaymentCondition =
+      paymentMode === "avista"
+        ? { formaCobranca: "avista", vencimento: paymentDueDate }
+        : { formaCobranca: "parcelado", parcelas: installments };
+    setBusy(true);
+    try {
+      await confirmMaterialRental(companyId, rental.id, requestId("confirm"), condition);
+      toast.success("Reserva confirmada.");
+      setPaymentConditionOpen(false);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha na operação.");
@@ -199,6 +368,15 @@ export function RentalDetailDialog({
     setOccurrence("");
   };
 
+  const printReceipt = (kind: RentalReceiptKind) => {
+    if (!rental) return;
+    try {
+      openPrintWindow(buildRentalReceiptHtml(rental, empresaNome || "Backstage Pro", kind, financialQuery.data));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível abrir a impressão.");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto">
@@ -217,10 +395,138 @@ export function RentalDetailDialog({
               <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Total</p><p className="text-lg font-bold">{money.format(rental.valor_total)}</p></CardContent></Card>
             </div>
 
+            {financialPermissions.visualizar && financialQuery.data && (
+              <div className="space-y-3">
+                {financialQuery.data.status === "cancelado_pendente_regularizacao" && (
+                  <Card className="border-destructive/40 bg-destructive/5">
+                    <CardContent className="space-y-1 p-4 text-sm">
+                      <p className="flex items-center gap-2 font-semibold text-destructive"><AlertTriangle className="h-4 w-4" />Locação cancelada com valor recebido pendente de regularização</p>
+                      <p className="text-muted-foreground">
+                        {money.format(financialQuery.data.valor_recebido)} foram recebidos antes do cancelamento e ainda não foram devolvidos ao cliente. Registre o estorno abaixo quando o reembolso for efetuado.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+                <Card>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div className="flex flex-wrap gap-6">
+                      <div><p className="text-xs text-muted-foreground">Valor da locação</p><p className="font-semibold">{money.format(financialQuery.data.valor_original)}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Recebido</p><p className="font-semibold text-emerald-600">{money.format(financialQuery.data.valor_recebido)}</p></div>
+                      {financialQuery.data.valor_estornado > 0 && (
+                        <div><p className="text-xs text-muted-foreground">Estornado</p><p className="font-semibold text-destructive">{money.format(financialQuery.data.valor_estornado)}</p></div>
+                      )}
+                      {["pendente", "parcial"].includes(financialQuery.data.status) && (
+                        <div><p className="text-xs text-muted-foreground">A receber</p><p className="font-semibold text-amber-600">{money.format(financialQuery.data.valor_original - financialQuery.data.valor_recebido)}</p></div>
+                      )}
+                      <div><p className="text-xs text-muted-foreground">Condição</p><p className="font-medium">{financialQuery.data.forma_cobranca === "avista" ? "À vista" : "Parcelado"}</p></div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        {financialQuery.data.requer_revisao_vencimento ? (
+                          <Badge variant="outline" className="border-amber-500 text-amber-600">Revisar vencimento</Badge>
+                        ) : (
+                          <Badge variant={FINANCIAL_STATUS_BADGE[financialQuery.data.status]}>{FINANCIAL_STATUS_LABELS[financialQuery.data.status]}</Badge>
+                        )}
+                      </div>
+                    </div>
+                    {financialQuery.data.requer_revisao_vencimento && (
+                      <p className="w-full text-xs text-amber-600">
+                        Este título veio de um registro histórico (backfill) sem condição de pagamento conhecida - não é tratado como vencido. Defina um vencimento real quando revisar.
+                      </p>
+                    )}
+                    {financialPermissions.registrarRecebimento && financialQuery.data.forma_cobranca === "avista" && ["pendente", "parcial"].includes(financialQuery.data.status) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setReceiptInstallmentId(null);
+                          setReceiptAmount(String(financialQuery.data!.valor_original - financialQuery.data!.valor_recebido));
+                          setReceiptOpen(true);
+                        }}
+                      >
+                        Registrar recebimento
+                      </Button>
+                    )}
+                  </CardContent>
+
+                  {financialQuery.data.forma_cobranca === "avista" && financialQuery.data.recebimentos.length > 0 && (
+                    <CardContent className="border-t p-4 pt-3">
+                      <p className="mb-2 text-xs font-semibold text-muted-foreground">Histórico</p>
+                      <div className="space-y-1">
+                        {financialQuery.data.recebimentos.map((receipt) => (
+                          <div key={receipt.id} className="flex items-center justify-between text-sm">
+                            <span>{receipt.tipo === "estorno" ? "Estorno" : "Recebimento"} · {money.format(receipt.valor)} · {new Date(receipt.data_recebimento).toLocaleDateString("pt-BR")}{receipt.forma_pagamento ? ` · ${receipt.forma_pagamento}` : ""}</span>
+                            {receipt.tipo === "recebimento" && financialPermissions.estornar && (
+                              <Button size="sm" variant="ghost" onClick={() => openReverseDialog(receipt.id)}>Estornar</Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  )}
+
+                  {financialQuery.data.forma_cobranca === "parcelado" && (
+                    <CardContent className="border-t p-4 pt-3">
+                      <p className="mb-2 text-xs font-semibold text-muted-foreground">Parcelas</p>
+                      <div className="space-y-2">
+                        {financialQuery.data.parcelas.map((installment) => (
+                          <div key={installment.id} className="rounded-md border p-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                              <span>Parcela {installment.numero} · {money.format(installment.valor)} · vence {new Date(installment.vencimento).toLocaleDateString("pt-BR")}</span>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={FINANCIAL_STATUS_BADGE[installment.status]}>{FINANCIAL_STATUS_LABELS[installment.status]}</Badge>
+                                {financialPermissions.registrarRecebimento && ["pendente", "parcial"].includes(installment.status) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setReceiptInstallmentId(installment.id);
+                                      setReceiptAmount(String(installment.valor - installment.valor_recebido));
+                                      setReceiptOpen(true);
+                                    }}
+                                  >
+                                    Receber
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            {installment.recebimentos.length > 0 && (
+                              <div className="mt-2 space-y-1 border-t pt-2">
+                                {installment.recebimentos.map((receipt) => (
+                                  <div key={receipt.id} className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>{receipt.tipo === "estorno" ? "Estorno" : "Recebimento"} · {money.format(receipt.valor)} · {new Date(receipt.data_recebimento).toLocaleDateString("pt-BR")}</span>
+                                    {receipt.tipo === "recebimento" && financialPermissions.estornar && (
+                                      <Button size="sm" variant="ghost" onClick={() => openReverseDialog(receipt.id)}>Estornar</Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
-              {permissions.reservar && actions.canConfirm && <Button disabled={busy} onClick={() => execute(() => confirmMaterialRental(companyId, rental.id, requestId("confirm")), "Reserva confirmada.")}>Confirmar reserva</Button>}
+              {permissions.reservar && actions.canConfirm && (
+                hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? (
+                  <Button disabled={busy} onClick={openPaymentCondition}>Confirmar reserva</Button>
+                ) : (
+                  <Button disabled={busy} onClick={() => execute(() => confirmMaterialRental(companyId, rental.id, requestId("confirm")), "Reserva confirmada.")}>Confirmar reserva</Button>
+                )
+              )}
               {permissions.reservar && actions.canMarkReady && <Button disabled={busy} variant="outline" onClick={() => execute(() => markMaterialRentalReady(companyId, rental.id, requestId("ready")), "Locação pronta para retirada.")}>Marcar pronta</Button>}
               {permissions.editar && actions.canConclude && <Button disabled={busy} variant="outline" onClick={() => execute(() => concludeMaterialRental(companyId, rental.id, requestId("conclude")), "Locação concluída.")}>Concluir</Button>}
+              <Button variant="ghost" size="sm" onClick={() => printReceipt("comprovante")}><Printer className="mr-2 h-4 w-4" />Imprimir comprovante</Button>
+              {rental.itens.some((item) => item.quantidade_retirada > 0) && (
+                <Button variant="ghost" size="sm" onClick={() => printReceipt("retirada")}><Printer className="mr-2 h-4 w-4" />Imprimir retirada</Button>
+              )}
+              {rental.itens.some((item) => item.quantidade_devolvida > 0) && (
+                <Button variant="ghost" size="sm" onClick={() => printReceipt("devolucao")}><Printer className="mr-2 h-4 w-4" />Imprimir devolução</Button>
+              )}
             </div>
 
             <Tabs defaultValue="itens">
@@ -258,6 +564,147 @@ export function RentalDetailDialog({
           </div>
         )}
       </DialogContent>
+
+      <Dialog open={paymentConditionOpen} onOpenChange={setPaymentConditionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Condição de pagamento</DialogTitle>
+            <DialogDescription>Defina como esta locação será cobrada antes de confirmar a reserva. O vencimento nunca é herdado automaticamente da data de devolução.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Forma de cobrança</Label>
+              <Select
+                value={paymentMode}
+                onValueChange={(value) => {
+                  const mode = value as "avista" | "parcelado";
+                  setPaymentMode(mode);
+                  if (mode === "parcelado") regenerateInstallments(installmentCount);
+                }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="avista">À vista</SelectItem>
+                  <SelectItem value="parcelado">Parcelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {paymentMode === "avista" && (
+              <div className="space-y-2">
+                <Label htmlFor="payment-due-date">Vencimento *</Label>
+                <Input id="payment-due-date" type="date" value={paymentDueDate} onChange={(event) => setPaymentDueDate(event.target.value)} />
+              </div>
+            )}
+            {paymentMode === "parcelado" && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="installment-count">Número de parcelas</Label>
+                  <Input id="installment-count" type="number" min={2} max={24} value={installmentCount} onChange={(event) => regenerateInstallments(Number(event.target.value))} />
+                </div>
+                <div className="space-y-2">
+                  {installments.map((installment, index) => (
+                    <div key={installment.numero} className="grid grid-cols-[2.5rem_1fr_1fr] items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">{installment.numero}/{installments.length}</span>
+                      <Input
+                        type="number" min={0.01} step="0.01" value={installment.valor}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          setInstallments((previous) => previous.map((item, itemIndex) => (itemIndex === index ? { ...item, valor: value } : item)));
+                        }}
+                      />
+                      <Input
+                        type="date" value={installment.vencimento}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setInstallments((previous) => previous.map((item, itemIndex) => (itemIndex === index ? { ...item, vencimento: value } : item)));
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className={`text-xs ${rental && installmentsSum === rental.valor_total ? "text-muted-foreground" : "text-destructive"}`}>
+                  Soma das parcelas: {money.format(installmentsSum)} de {money.format(rental?.valor_total ?? 0)}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentConditionOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={busy || (paymentMode === "avista" ? !paymentDueDate : !rental || installmentsSum !== rental.valor_total)}
+              onClick={confirmWithPaymentCondition}
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar reserva
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar recebimento</DialogTitle>
+            <DialogDescription>
+              {receiptTargetInstallment
+                ? `Saldo pendente da parcela ${receiptTargetInstallment.numero}: ${money.format(receiptTargetInstallment.valor - receiptTargetInstallment.valor_recebido)}`
+                : financialQuery.data && `Saldo pendente: ${money.format(financialQuery.data.valor_original - financialQuery.data.valor_recebido)}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Valor recebido *</Label>
+              <Input type="number" min={0} step="0.01" value={receiptAmount} onChange={(event) => setReceiptAmount(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Forma de pagamento</Label>
+              <Select value={receiptMethod} onValueChange={setReceiptMethod}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                  <SelectItem value="transferencia">Transferência</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiptOpen(false)}>Cancelar</Button>
+            <Button disabled={receiptMutation.isPending} onClick={() => receiptMutation.mutate()}>
+              {receiptMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar recebimento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reverseOpen} onOpenChange={setReverseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Estornar recebimento</DialogTitle>
+            <DialogDescription>O recebimento original é preservado no histórico; o estorno é uma movimentação nova e auditável.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="reverse-amount">Valor a estornar (em branco = valor total do recebimento)</Label>
+              <Input id="reverse-amount" type="number" min={0} step="0.01" value={reverseAmount} onChange={(event) => setReverseAmount(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reverse-justification">Justificativa *</Label>
+              <Textarea id="reverse-justification" value={reverseJustification} onChange={(event) => setReverseJustification(event.target.value)} placeholder="Motivo do estorno" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" disabled={reverseMutation.isPending || !reverseJustification.trim()} onClick={() => reverseMutation.mutate()}>
+              {reverseMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar estorno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -1,10 +1,13 @@
-import { LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags } from "lucide-react";
+import { useState, type ComponentType } from "react";
+import { ChevronDown, LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags, Printer } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
@@ -13,11 +16,99 @@ import { canShowMaterialsNavigation } from "@/lib/material-permissions";
 import { canShowStockNavigation } from "@/lib/stock-permissions";
 import { canShowCustodyNavigation } from "@/lib/checkin-checkout-permissions";
 import { canShowRentalNavigation } from "@/lib/material-rental-permissions";
+import { canShowClientsNavigation } from "@/lib/client-permissions";
 import { canShowMaintenanceNavigation } from "@/lib/equipment-maintenance-permissions";
 import { canShowMaterialLabelsNavigation } from "@/lib/material-label-permissions";
 import appVersion from "../../package.json";
 
 const APP_VERSION = appVersion.version;
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon: ComponentType<{ className?: string }>;
+}
+
+interface NavGroup {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const GROUP_STATE_STORAGE_KEY = "backstage:sidebar-groups";
+
+function readStoredGroupState(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(GROUP_STATE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredGroupState(state: Record<string, boolean>) {
+  try {
+    window.localStorage.setItem(GROUP_STATE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // localStorage indisponível (modo privado, quota) - preferência de UI, não é crítico.
+  }
+}
+
+function NavGroupSection({
+  group,
+  collapsed,
+  currentPath,
+}: {
+  group: NavGroup;
+  collapsed: boolean;
+  currentPath: string;
+}) {
+  const hasActiveItem = group.items.some((item) => currentPath.startsWith(item.url));
+  const [open, setOpen] = useState(() => {
+    const stored = readStoredGroupState()[group.id];
+    // Um grupo com a rota atual dentro dele sempre abre, mesmo que o usuário
+    // tivesse deixado fechado antes - senão ele "perde" a página em que está.
+    return hasActiveItem || stored !== false;
+  });
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    const stored = readStoredGroupState();
+    writeStoredGroupState({ ...stored, [group.id]: next });
+  };
+
+  if (!group.items.length) return null;
+
+  return (
+    <Collapsible open={open || collapsed} onOpenChange={handleOpenChange}>
+      <SidebarGroupLabel asChild className="px-3">
+        <CollapsibleTrigger className="flex w-full items-center justify-between text-xs uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/70">
+          {!collapsed && <span>{group.label}</span>}
+          {!collapsed && (
+            <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} />
+          )}
+        </CollapsibleTrigger>
+      </SidebarGroupLabel>
+      <CollapsibleContent>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {group.items.map((item) => (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton asChild>
+                  <NavLink to={item.url} end={item.url === "/dashboard"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <item.icon className="mr-2 h-4 w-4" />
+                    {!collapsed && <span>{item.title}</span>}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -25,6 +116,7 @@ export function AppSidebar() {
   const { isMasterAdmin, isAdminEmpresa, profile, signOut, empresaLogoUrl, empresaNome, empresaReadOnly } = useAuth();
   const { platformLogoUrl, platformName } = usePlatformBranding();
   const { hasModule } = useCompanyModules();
+  const location = useLocation();
 
   // For company users, show empresa logo/name; for master, show platform branding
   const displayLogoUrl = isMasterAdmin ? platformLogoUrl : (empresaLogoUrl || platformLogoUrl);
@@ -47,6 +139,10 @@ export function AppSidebar() {
     isMasterAdmin,
     moduleEnabled: hasModule(MODULE_KEYS.LOCACAO_MATERIAIS),
   });
+  const hasClientsAccess = canShowClientsNavigation({
+    isMasterAdmin,
+    moduleEnabled: hasModule(MODULE_KEYS.LOCACAO_MATERIAIS),
+  });
   const hasMaintenanceAccess = canShowMaintenanceNavigation({
     isMasterAdmin,
     moduleEnabled: hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS),
@@ -56,75 +152,64 @@ export function AppSidebar() {
     moduleEnabled: hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS),
   });
 
-  // Items that require specific modules (only shown when module is active or user is master)
-  const moduleGatedItems = isMasterAdmin ? [
-    { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-    { title: "Usuários", url: "/usuarios", icon: Users },
-    { title: "Documentos", url: "/documentos", icon: FileText },
-    { title: "Funcionários", url: "/funcionarios", icon: HardHat },
-    { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-    { title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard },
-    { title: "Checklist", url: "/checklist", icon: ClipboardList },
-    { title: "Backups", url: "/backups", icon: Database },
-  ] : [
-    ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
-    ...(hasModule(MODULE_KEYS.EQUIPE_PERMISSOES) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
-    ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
-    ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
-    ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Relatórios", url: "/relatorios", icon: BarChart3 }] : []),
-    ...(hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) ? [{ title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard }] : []),
-    ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) ? [{ title: "Checklist", url: "/checklist", icon: ClipboardList }] : []),
-    ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
-  ];
-
-  // Base items always visible (Dashboard, Agenda, Plano, Módulos)
-  const companyItems = isUsuario
+  // Itens administrativos que exigem módulo específico (ou acesso master
+  // irrestrito). Mesma lógica de gate que já existia - só reorganizada em
+  // grupos. "usuario" nunca via nenhum destes antes (moduleGatedItems só
+  // entrava no menu de admin_empresa/master_admin) - preservado aqui.
+  const administracaoItems: NavItem[] = isUsuario ? [] : isMasterAdmin
     ? [
-        { title: "Agenda", url: "/agenda", icon: Calendar },
-        ...(hasMaterialsAccess
-          ? [{ title: "Materiais", url: "/materiais", icon: Package }]
-          : []),
-        ...(hasStockAccess
-          ? [{ title: "Estoque", url: "/estoque", icon: Warehouse }]
-          : []),
-        ...(hasCustodyAccess
-          ? [{ title: "Check-in / Check-out", url: "/checkin-checkout", icon: ScanLine }]
-          : []),
-        ...(hasRentalAccess
-          ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }]
-          : []),
-        ...(hasMaintenanceAccess
-          ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }]
-          : []),
-        ...(hasLabelsAccess
-          ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }]
-          : []),
-        ...(empresaReadOnly ? [{ title: "Assinatura e Módulos", url: "/plano", icon: CreditCard }] : []),
+        { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+        { title: "Usuários", url: "/usuarios", icon: Users },
+        { title: "Documentos", url: "/documentos", icon: FileText },
+        { title: "Funcionários", url: "/funcionarios", icon: HardHat },
+        { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+        { title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard },
+        { title: "Checklist", url: "/checklist", icon: ClipboardList },
       ]
     : [
-        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-        { title: "Agenda", url: "/agenda", icon: Calendar },
-        ...(hasMaterialsAccess
-          ? [{ title: "Materiais", url: "/materiais", icon: Package }]
-          : []),
-        ...(hasStockAccess
-          ? [{ title: "Estoque", url: "/estoque", icon: Warehouse }]
-          : []),
-        ...(hasCustodyAccess
-          ? [{ title: "Check-in / Check-out", url: "/checkin-checkout", icon: ScanLine }]
-          : []),
-        ...(hasRentalAccess
-          ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }]
-          : []),
-        ...(hasMaintenanceAccess
-          ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }]
-          : []),
-        ...(hasLabelsAccess
-          ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }]
-          : []),
-        ...moduleGatedItems,
-        { title: "Assinatura e Módulos", url: "/plano", icon: CreditCard },
+        ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
+        ...(hasModule(MODULE_KEYS.EQUIPE_PERMISSOES) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
+        ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
+        ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
+        ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Relatórios", url: "/relatorios", icon: BarChart3 }] : []),
+        ...(hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) ? [{ title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard }] : []),
+        ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) ? [{ title: "Checklist", url: "/checklist", icon: ClipboardList }] : []),
       ];
+
+  const configuracoesItems: NavItem[] = [
+    { title: "Impressoras", url: "/configuracoes/impressoras", icon: Printer },
+    ...(isMasterAdmin || hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
+    // Mesma condição de visibilidade que "Assinatura e Módulos" já tinha:
+    // sempre para admin/master, e só para "usuario" quando a empresa está
+    // bloqueada (precisa que ele veja o caminho para resolver).
+    ...(!isUsuario || empresaReadOnly ? [{ title: "Assinatura e Módulos", url: "/plano", icon: CreditCard }] : []),
+  ];
+
+  const groups: NavGroup[] = [
+    {
+      id: "principal",
+      label: "Principal",
+      items: [
+        ...(!isUsuario ? [{ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard }] : []),
+        { title: "Agenda", url: "/agenda", icon: Calendar },
+        ...(hasClientsAccess ? [{ title: "Clientes", url: "/clientes", icon: Users }] : []),
+      ],
+    },
+    {
+      id: "materiais-operacoes",
+      label: "Materiais & Operações",
+      items: [
+        ...(hasMaterialsAccess ? [{ title: "Materiais", url: "/materiais", icon: Package }] : []),
+        ...(hasStockAccess ? [{ title: "Estoque", url: "/estoque", icon: Warehouse }] : []),
+        ...(hasCustodyAccess ? [{ title: "Check-in / Check-out", url: "/checkin-checkout", icon: ScanLine }] : []),
+        ...(hasRentalAccess ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }] : []),
+        ...(hasMaintenanceAccess ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }] : []),
+        ...(hasLabelsAccess ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }] : []),
+      ],
+    },
+    { id: "administracao", label: "Administração", items: administracaoItems },
+    { id: "configuracoes", label: "Configurações", items: configuracoesItems },
+  ];
 
   const masterItems = [
     { title: "Painel Master", url: "/master", icon: Globe },
@@ -181,21 +266,14 @@ export function AppSidebar() {
             </SidebarGroupContent>
           )}
 
-          <SidebarGroupContent className={isMasterAdmin ? "mt-4" : "mt-4"}>
-            {!collapsed && isMasterAdmin && <p className="text-xs text-sidebar-foreground/40 px-3 mb-1 uppercase tracking-wider">Empresa</p>}
-            <SidebarMenu>
-              {companyItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url === "/dashboard"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
-                      <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          {!collapsed && isMasterAdmin && (
+            <p className="mt-4 text-xs text-sidebar-foreground/40 px-3 mb-1 uppercase tracking-wider">Empresa</p>
+          )}
+          <div className="mt-1 space-y-1">
+            {groups.map((group) => (
+              <NavGroupSection key={group.id} group={group} collapsed={collapsed} currentPath={location.pathname} />
+            ))}
+          </div>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>

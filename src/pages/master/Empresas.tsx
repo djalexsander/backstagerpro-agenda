@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon, Upload, X, ImageIcon, Sparkles, AlertTriangle, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Eye, CreditCard, CalendarDays, Package, CheckCircle, FileCheck, CalendarIcon, Upload, X, ImageIcon, Sparkles, AlertTriangle, Layers, Settings2 } from "lucide-react";
 import { EmpresaModulesManager } from "@/components/master/EmpresaModulesManager";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,6 +29,8 @@ import {
   getSubscriptionValueLabel,
   isLifetimePlan,
 } from "@/lib/subscription-license";
+import { createCompanyWithAdmin } from "@/lib/company-creation";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 
 export default function Empresas() {
   const { toast } = useToast();
@@ -189,42 +191,94 @@ export default function Empresas() {
           );
           if (lifetimeError) throw lifetimeError;
         }
+
+        const { error: provisioningError } = await supabase.rpc(
+          "provision_company_module_entitlements",
+          { _empresa_id: editItem.id },
+        );
+        if (provisioningError) throw provisioningError;
       } else {
-        const { data: newEmpresa, error } = await supabase.from("empresas").insert(payload).select("id").single();
-        if (error) throw error;
-
-        if (isVitalicio) {
-          const { error: lifetimeError } = await supabase.rpc(
-            "set_company_lifetime_subscription",
-            { _empresa_id: newEmpresa.id },
-          );
-          if (lifetimeError) throw lifetimeError;
-        }
-
-        // Upload logo after creating empresa
-        if (logoFile) {
-          const logoUrl = await uploadLogo(newEmpresa.id);
-          if (logoUrl) {
-            const { error: logoUpdateError } = await supabase
-              .from("empresas")
-              .update({ logo_url: logoUrl })
-              .eq("id", newEmpresa.id);
-            if (logoUpdateError) throw logoUpdateError;
-          }
-        }
-
-        if (form.email) {
-          const res = await supabase.functions.invoke("create-empresa-user", {
-            body: {
-              empresa_id: newEmpresa.id,
-              email: form.email,
-              full_name: form.nome_empresa,
-              role: form.papel,
+        // The empresa row must exist before the lifetime/provisioning RPCs and
+        // the admin invite can reference it, so creation can't be one client
+        // transaction. createCompanyWithAdmin compensates by deleting the
+        // empresa if any later step fails, so a rejected create-empresa-user
+        // call (e.g. reusing an email tied to another company) never leaves
+        // an orphaned, admin-less company in the listing.
+        await createCompanyWithAdmin(
+          {
+            empresaPayload: payload,
+            isVitalicio,
+            adminEmail: form.email || null,
+            adminFullName: form.nome_empresa,
+            adminRole: form.papel,
+            logoFile,
+          },
+          {
+            insertEmpresa: async (empresaPayload) => {
+              const { data, error } = await supabase
+                .from("empresas")
+                .insert(empresaPayload)
+                .select("id")
+                .single();
+              if (error) throw error;
+              return data.id;
             },
-          });
-          if (res.error) throw new Error(res.error.message || "Erro ao criar usuário");
-          if (res.data?.error) throw new Error(res.data.error);
-        }
+            setLifetimeSubscription: async (empresaId) => {
+              const { error } = await supabase.rpc(
+                "set_company_lifetime_subscription",
+                { _empresa_id: empresaId },
+              );
+              if (error) throw error;
+            },
+            provisionModuleEntitlements: async (empresaId) => {
+              const { error } = await supabase.rpc(
+                "provision_company_module_entitlements",
+                { _empresa_id: empresaId },
+              );
+              if (error) throw error;
+            },
+            uploadLogo: async (empresaId) => uploadLogo(empresaId),
+            updateEmpresaLogo: async (empresaId, logoUrl) => {
+              const { error } = await supabase
+                .from("empresas")
+                .update({ logo_url: logoUrl })
+                .eq("id", empresaId);
+              if (error) throw error;
+            },
+            createAdminUser: async (empresaId, email, fullName, roleValue) => {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const res = await supabase.functions.invoke("create-empresa-user", {
+                headers: {
+                  Authorization: `Bearer ${sessionData.session?.access_token ?? ""}`,
+                },
+                body: {
+                  empresa_id: empresaId,
+                  email,
+                  full_name: fullName,
+                  role: roleValue,
+                },
+              });
+              if (res.error) {
+                throw new Error(
+                  await getEdgeFunctionErrorMessage(res.error, "Erro ao criar usuário"),
+                );
+              }
+              if (res.data?.error) {
+                throw new Error(res.data.error);
+              }
+              if (!res.data?.success && !res.data?.user) {
+                throw new Error("A função não retornou um resultado válido");
+              }
+            },
+            deleteEmpresa: async (empresaId) => {
+              const { error } = await supabase
+                .from("empresas")
+                .delete()
+                .eq("id", empresaId);
+              if (error) throw error;
+            },
+          },
+        );
       }
     },
     onSuccess: () => {
@@ -274,9 +328,18 @@ export default function Empresas() {
         for (const uid of userIds) {
           const { data, error: unlinkError } = await supabase.functions.invoke(
             "delete-user",
-            { body: { user_id: uid, empresa_id: id } },
+            {
+              headers: {
+                Authorization: `Bearer ${await supabase.auth.getSession().then(({ data }) => data.session?.access_token ?? "")}`,
+              },
+              body: { user_id: uid, empresa_id: id },
+            },
           );
-          if (unlinkError) throw unlinkError;
+          if (unlinkError) {
+            throw new Error(
+              await getEdgeFunctionErrorMessage(unlinkError, "Erro ao remover usuário"),
+            );
+          }
           if (data?.error) throw new Error(data.error);
         }
       }
@@ -900,8 +963,11 @@ export default function Empresas() {
                       )}
                     </TableCell>
                     <TableCell className="text-right space-x-1" onClick={(ev) => ev.stopPropagation()}>
-                      <Button variant="ghost" size="sm" onClick={() => setDetailEmpresa(e)}>
+                      <Button variant="ghost" size="sm" onClick={() => setDetailEmpresa(e)} title="Visualizar empresa">
                         <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setDetailEmpresa(e)} title="Gerenciar módulos">
+                        <Settings2 className="h-4 w-4" />
                       </Button>
                       {!blocked && (
                         <Button variant="ghost" size="sm" className="text-destructive" onClick={() => toggleBlock.mutate({ id: e.id, blocked: true })}>

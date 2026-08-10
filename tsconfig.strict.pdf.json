@@ -10,6 +10,9 @@
     "src/lib/pdf-export.ts",
     "src/lib/pdf-export-checklist.ts",
     "src/lib/pdf-export-master.ts",
+    "src/lib/pdf-export-dashboard.ts",
+    "src/lib/pdf-export-team.ts",
+    "src/lib/pdf-export-operational.ts",
     "src/lib/pdf-save.ts"
   ]
 }

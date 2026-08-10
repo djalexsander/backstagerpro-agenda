@@ -118,8 +118,14 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','c3000000-0000-4000-8000-000000000008',true); SET LOCAL ROLE authenticated;
 DO $$ BEGIN PERFORM public.listar_modelos_etiqueta('c2000000-0000-4000-8000-000000000007'); END $$;
 RESET ROLE;
+-- Master without a linked company has zero operational label access,
+-- whether or not it names another tenant explicitly (tenant isolation is
+-- mandatory for master_admin too - see 20260808100000).
 SELECT set_config('request.jwt.claim.sub','c3000000-0000-4000-8000-000000000009',true); SET LOCAL ROLE authenticated;
-DO $$ BEGIN BEGIN PERFORM public.listar_modelos_etiqueta(NULL); RAISE EXCEPTION 'master without company accepted'; EXCEPTION WHEN SQLSTATE 'LB011' THEN NULL; END; PERFORM public.listar_modelos_etiqueta('c2000000-0000-4000-8000-000000000001'); END $$;
+DO $$ BEGIN
+  BEGIN PERFORM public.listar_modelos_etiqueta(NULL); RAISE EXCEPTION 'master without company accepted'; EXCEPTION WHEN SQLSTATE '42501' THEN NULL; END;
+  BEGIN PERFORM public.listar_modelos_etiqueta('c2000000-0000-4000-8000-000000000001'); RAISE EXCEPTION 'master cross-tenant read accepted'; EXCEPTION WHEN SQLSTATE '42501' THEN NULL; END;
+END $$;
 RESET ROLE;
 
 UPDATE public.materiais SET nome='Stage6 Material A changed' WHERE id='c5000000-0000-4000-8000-000000000001';

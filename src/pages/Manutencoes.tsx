@@ -8,33 +8,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 import { MaintenanceDetailDialog } from "@/components/equipment-maintenance/MaintenanceDetailDialog";
 import { NewMaintenanceDialog } from "@/components/equipment-maintenance/NewMaintenanceDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useEquipmentMaintenance } from "@/hooks/useEquipmentMaintenance";
 import { MODULE_KEYS } from "@/constants/module-keys";
-import { hasCompanyOperationalAccess } from "@/lib/access-control";
 import { listCustodyResponsibles } from "@/lib/checkin-checkout-service";
 import { MAINTENANCE_PRIORITY_LABELS, MAINTENANCE_STATUS_LABELS, MAINTENANCE_TYPE_LABELS } from "@/lib/equipment-maintenance-domain";
 import { getMaintenancePermissions } from "@/lib/equipment-maintenance-permissions";
 import type { MaintenanceFilters, MaintenancePriority, MaintenanceStatus, MaintenanceType } from "@/lib/equipment-maintenance-types";
-import { listStockCompaniesForMaster } from "@/lib/stock-service";
 
 const PAGE_SIZE = 15;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const initialFilters: MaintenanceFilters = { search: "", status: "todos", type: "todos", priority: "todos", responsible: "", materialId: "", dateFrom: "", dateTo: "" };
 
 export default function Manutencoes() {
-  const { role, empresaId, empresaReadOnly, isMasterAdmin } = useAuth();
+  const { role, empresaId: companyId, empresaReadOnly: readOnly, isMasterAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const masterCompanyId = isMasterAdmin ? searchParams.get("empresa") ?? "" : "";
-  const companiesQuery = useQuery({ queryKey: ["stock-master-companies"], queryFn: listStockCompaniesForMaster, enabled: isMasterAdmin });
-  const selectedCompany = (companiesQuery.data ?? []).find((company) => company.id === masterCompanyId);
-  const companyId = isMasterAdmin ? selectedCompany?.id ?? null : empresaId;
-  const selectedPlan = selectedCompany?.planos as { periodicidade: string | null; ativo: boolean } | null | undefined;
-  const readOnly = isMasterAdmin ? selectedCompany ? !hasCompanyOperationalAccess({ ...selectedCompany, plan_periodicity: selectedPlan?.periodicidade ?? null, plan_active: selectedPlan?.ativo ?? null }) : true : empresaReadOnly;
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS);
   const permissions = getMaintenancePermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
@@ -44,9 +35,8 @@ export default function Manutencoes() {
   const state = useEquipmentMaintenance({ companyId, page, pageSize: PAGE_SIZE, filters, enabled: permissions.visualizar });
   const responsiblesQuery = useQuery({ queryKey: ["maintenance-responsibles", companyId], queryFn: () => listCustodyResponsibles(companyId!), enabled: Boolean(companyId && permissions.visualizar) });
   const pages = Math.max(1, Math.ceil(state.orders.total / PAGE_SIZE));
-  const selector = isMasterAdmin ? <Card><CardContent className="max-w-xl p-4"><CompanyContextSelector companies={companiesQuery.data ?? []} value={masterCompanyId} onValueChange={(id) => { const next = new URLSearchParams(searchParams); next.set("empresa", id); next.delete("nova"); next.delete("custodia"); setSearchParams(next, { replace: true }); }} disabled={companiesQuery.isLoading} /></CardContent></Card> : null;
-  if (!companyId && !companiesQuery.isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Manutenção de Equipamentos</h1><p className="text-muted-foreground">Selecione explicitamente a empresa no contexto Master.</p>{selector}</div>;
-  if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><h1 className="text-2xl font-bold">Manutenção de Equipamentos</h1>{selector}<Card className="border-amber-500/50"><CardContent className="p-4">O módulo requer Manutenção de Equipamentos e Gestão de Materiais ativos.</CardContent></Card></div>;
+  if (!companyId) return <div className="space-y-4"><h1 className="text-2xl font-bold">Manutenção de Equipamentos</h1><p className="text-muted-foreground">{isMasterAdmin ? "Sua conta master não está vinculada a uma empresa operacional." : "Nenhuma empresa vinculada à sua conta."}</p></div>;
+  if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><h1 className="text-2xl font-bold">Manutenção de Equipamentos</h1><Card className="border-amber-500/50"><CardContent className="p-4">O módulo requer Manutenção de Equipamentos e Gestão de Materiais ativos.</CardContent></Card></div>;
   const indicators = [
     ["Ordens abertas", state.indicators.abertas, ClipboardList], ["Em manutenção", state.indicators.em_manutencao, Wrench],
     ["Aguardando peça", state.indicators.aguardando_peca, PackageOpen], ["Preventivas próximas", state.indicators.preventivas_proximas, ClipboardList],
@@ -54,7 +44,7 @@ export default function Manutencoes() {
   ] as const;
   return <div className="space-y-5">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-bold">Manutenção de Equipamentos</h1><p className="text-muted-foreground">Preventivas, corretivas, inspeções e indisponibilidade operacional.</p></div>{permissions.criar && <Button onClick={() => setNewOpen(true)}><Plus className="mr-2 h-4 w-4" />Nova ordem</Button>}</div>
-    {selector}{readOnly && <Card className="border-amber-500/50"><CardContent className="p-3 text-sm">Empresa em modo somente leitura. Consultas permanecem disponíveis.</CardContent></Card>}
+    {readOnly && <Card className="border-amber-500/50"><CardContent className="p-3 text-sm">Empresa em modo somente leitura. Consultas permanecem disponíveis.</CardContent></Card>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{indicators.map(([label,value,Icon]) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div><Icon className="h-6 w-6 text-muted-foreground" /></CardContent></Card>)}</div>
     <Card><CardHeader><CardTitle>Ordens de manutenção</CardTitle></CardHeader><CardContent className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Número, material, QR ou serial" /></div>

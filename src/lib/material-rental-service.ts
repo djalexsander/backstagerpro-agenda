@@ -9,6 +9,7 @@ import type {
   RentalMaterialOption,
   SaveRentalItemInput,
 } from "./material-rental-types";
+import type { PaymentCondition } from "./financial-ledger-types";
 
 interface RpcError {
   message?: string;
@@ -30,6 +31,12 @@ function throwRentalError(error: RpcError | null, context: string): never {
     LR015: "A quantidade supera o que ainda pode ser retirado.",
     LR016: "A locação possui retirada e não pode ser cancelada.",
     LR017: "Ainda existem retiradas ou devoluções pendentes.",
+    FN010: "Condição de pagamento inválida.",
+    FN011: "Informe ao menos uma parcela.",
+    FN012: "A soma das parcelas deve ser igual ao valor da locação.",
+    FN013: "Cada parcela deve ter um valor positivo.",
+    FN014: "Cada parcela deve ter um vencimento.",
+    FN015: "Informe o vencimento da cobrança à vista.",
   };
   const message = (error?.code && messages[error.code]) || error?.message || "Falha na operação de locação.";
   console.error(`[material-rental-service] ${context}`, error);
@@ -211,13 +218,23 @@ async function simpleRentalAction(
   if (error) throwRentalError(error, action);
 }
 
-export const confirmMaterialRental = (companyId: string, rentalId: string, clientUuid: string = crypto.randomUUID()) =>
-  simpleRentalAction("confirmar_reserva_locacao_material", companyId, rentalId, { _client_uuid: clientUuid });
-export const markMaterialRentalReady = (companyId: string, rentalId: string, clientUuid: string = crypto.randomUUID()) =>
+export const confirmMaterialRental = (
+  companyId: string,
+  rentalId: string,
+  clientUuid = crypto.randomUUID(),
+  paymentCondition?: PaymentCondition,
+) =>
+  simpleRentalAction("confirmar_reserva_locacao_material", companyId, rentalId, {
+    _client_uuid: clientUuid,
+    _forma_cobranca: paymentCondition?.formaCobranca,
+    _vencimento: paymentCondition?.formaCobranca === "avista" ? paymentCondition.vencimento : undefined,
+    _parcelas: paymentCondition?.formaCobranca === "parcelado" ? paymentCondition.parcelas : undefined,
+  });
+export const markMaterialRentalReady = (companyId: string, rentalId: string, clientUuid = crypto.randomUUID()) =>
   simpleRentalAction("marcar_locacao_pronta_retirada", companyId, rentalId, { _client_uuid: clientUuid });
-export const concludeMaterialRental = (companyId: string, rentalId: string, clientUuid: string = crypto.randomUUID()) =>
+export const concludeMaterialRental = (companyId: string, rentalId: string, clientUuid = crypto.randomUUID()) =>
   simpleRentalAction("concluir_locacao_material", companyId, rentalId, { _client_uuid: clientUuid });
-export const cancelMaterialRental = (companyId: string, rentalId: string, justification: string, clientUuid: string = crypto.randomUUID()) =>
+export const cancelMaterialRental = (companyId: string, rentalId: string, justification: string, clientUuid = crypto.randomUUID()) =>
   simpleRentalAction("cancelar_locacao_material", companyId, rentalId, {
     _justificativa: justification,
     _client_uuid: clientUuid,

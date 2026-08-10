@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  accessTokenHasActivationMethod,
+  accessTokenHasOtpAuthenticationMethod,
   getActivationRedirectUrl,
   mergeActivationMetadata,
   normalizeActivationFlow,
@@ -25,31 +25,39 @@ describe("account activation security", () => {
     expect(normalizeActivationFlow(undefined)).toBeNull();
   });
 
-  it("requires the exact invite or recovery authentication method", () => {
-    const inviteToken = createUnsignedToken({
-      amr: [{ method: "invite", timestamp: 1 }],
+  it("accepts sessions established via Supabase's OTP email link, regardless of invite vs recovery", () => {
+    // GoTrue's amr claim records the authentication METHOD ("otp", "password",
+    // "oauth", ...), not the EmailOtpType used to request the link ("invite",
+    // "recovery", ...). Invite and recovery links are both verified through
+    // the same OTP mechanism, so both produce amr method "otp" - never the
+    // literal strings "invite"/"recovery". Distinguishing invite from
+    // recovery is the job of account_activation_flow in user_metadata,
+    // checked separately in activate-account; this helper only confirms the
+    // session came from an OTP link at all.
+    const otpObjectFormat = createUnsignedToken({
+      amr: [{ method: "otp", timestamp: 1 }],
     });
-    const recoveryToken = createUnsignedToken({
-      amr: [{ method: "recovery", timestamp: 1 }],
-    });
+    const otpStringFormat = createUnsignedToken({ amr: ["otp"] });
 
-    expect(accessTokenHasActivationMethod(inviteToken, "invite")).toBe(true);
-    expect(accessTokenHasActivationMethod(inviteToken, "recovery")).toBe(false);
-    expect(accessTokenHasActivationMethod(recoveryToken, "recovery")).toBe(true);
-    expect(accessTokenHasActivationMethod(recoveryToken, "invite")).toBe(false);
+    expect(accessTokenHasOtpAuthenticationMethod(otpObjectFormat)).toBe(true);
+    expect(accessTokenHasOtpAuthenticationMethod(otpStringFormat)).toBe(true);
+  });
+
+  it("rejects sessions established via a non-OTP authentication method", () => {
     expect(
-      accessTokenHasActivationMethod(
-        createUnsignedToken({ amr: [{ method: "otp", timestamp: 1 }] }),
-        "invite",
-      ),
-    ).toBe(false);
-    expect(
-      accessTokenHasActivationMethod(
+      accessTokenHasOtpAuthenticationMethod(
         createUnsignedToken({ amr: [{ method: "password", timestamp: 1 }] }),
-        "recovery",
       ),
     ).toBe(false);
-    expect(accessTokenHasActivationMethod("invalid", "invite")).toBe(false);
+    expect(
+      accessTokenHasOtpAuthenticationMethod(
+        createUnsignedToken({ amr: [{ method: "oauth", timestamp: 1 }] }),
+      ),
+    ).toBe(false);
+    expect(accessTokenHasOtpAuthenticationMethod(createUnsignedToken({}))).toBe(
+      false,
+    );
+    expect(accessTokenHasOtpAuthenticationMethod("invalid")).toBe(false);
   });
 
   it("enforces password length bounds", () => {
@@ -70,6 +78,24 @@ describe("account activation security", () => {
     expect(() => getActivationRedirectUrl("http://agenda.example.com")).toThrow(
       /HTTPS/i,
     );
+  });
+
+  it("always targets /primeiro-acesso on the configured APP_URL host, even if it is a supabase.co domain", () => {
+    // APP_URL must be the frontend's own domain. If it is ever misconfigured
+    // to the Supabase project URL, this must still resolve to /primeiro-acesso
+    // on that host rather than silently rerouting to a different endpoint -
+    // rerouting previously masked the misconfiguration instead of surfacing it.
+    expect(
+      getActivationRedirectUrl("https://zupcxxtnaglcappazciu.supabase.co"),
+    ).toBe("https://zupcxxtnaglcappazciu.supabase.co/primeiro-acesso");
+  });
+
+  it("strips any existing path, query string and hash from APP_URL", () => {
+    expect(
+      getActivationRedirectUrl(
+        "https://agenda.example.com/some/path?x=1#frag",
+      ),
+    ).toBe("https://agenda.example.com/primeiro-acesso");
   });
 
   it("preserves metadata while recording the server-issued flow", () => {

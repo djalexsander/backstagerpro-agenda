@@ -1,6 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SET LOCAL search_path = public, extensions;
 
 SELECT plan(29);
 
@@ -31,6 +32,11 @@ SELECT ok(
   'the stage-one base module is globally available'
 );
 
+-- All six were "planned":true/inactive when this test was first written
+-- (Stage 1); each has since shipped its own stage migration and flipped to
+-- ativo=true. This now guards the opposite direction - that none of them
+-- silently regresses back to disabled - rather than re-asserting a
+-- point-in-time implementation snapshot that is no longer true.
 SELECT is(
   (
     SELECT count(*)
@@ -43,11 +49,10 @@ SELECT is(
       'etiquetas_materiais',
       'relatorios_materiais'
     )
-      AND ativo = false
-      AND metadata @> '{"planned":true}'::jsonb
+      AND ativo = true
   ),
-  5::bigint,
-  'unimplemented material modules remain inactive while stock is released'
+  6::bigint,
+  'every material module planned in Stage 1 has since been released'
 );
 
 SELECT is(
@@ -244,10 +249,19 @@ SELECT ok(
   'a lifetime company receives current and future module access'
 );
 
+-- etiquetas_materiais was the "not released yet" example when this test was
+-- written, but it shipped in Stage 6 - pinning this check to whichever real
+-- module happens to still be unreleased is exactly the fragility that broke
+-- this assertion once already. A synthetic catalog row scoped to this
+-- transaction exercises the same "exists but ativo=false" code path without
+-- depending on the state of the real release backlog.
+INSERT INTO public.module_catalog (feature_key, nome, ativo, metadata)
+VALUES ('__unreleased_test_module__', '__unreleased_test_module__', false, '{"planned":true}'::jsonb);
+
 SELECT ok(
   NOT public.company_has_active_module(
     '42000000-0000-4000-8000-000000000003',
-    'etiquetas_materiais'
+    '__unreleased_test_module__'
   ),
   'a lifetime company cannot enter a module that is not released yet'
 );

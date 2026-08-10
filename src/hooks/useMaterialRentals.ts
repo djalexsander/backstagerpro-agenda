@@ -41,6 +41,12 @@ export function useMaterialRentals({
       queryClient.invalidateQueries({ queryKey: ["material-custodies", companyId] }),
       queryClient.invalidateQueries({ queryKey: ["stock-materials", companyId] }),
       queryClient.invalidateQueries({ queryKey: ["stock-movements", companyId] }),
+      // Without this, a customer created through the quick-register form (which
+      // calls onCustomerCreated -> invalidateRentals) never shows up in this
+      // page's own customer list/selector: it's a separate query key from
+      // "material-rentals" and was never invalidated, so the newly created
+      // customer stayed invisible until a full page reload re-fetched it.
+      queryClient.invalidateQueries({ queryKey: ["rental-customers", companyId] }),
     ]);
   };
 

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   ArrowDownToLine,
@@ -50,12 +49,9 @@ import type {
   StockMovementFilters,
   StockMovementView,
 } from "@/lib/stock-types";
-import { listStockCompaniesForMaster } from "@/lib/stock-service";
-import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getStockPermissions } from "@/lib/stock-permissions";
-import { hasCompanyOperationalAccess } from "@/lib/access-control";
 
 const PAGE_SIZE = 10;
 
@@ -107,49 +103,22 @@ function Pagination({
 
 export default function Estoque() {
   const {
-    empresaId: authenticatedCompanyId,
+    empresaId,
     role,
     isMasterAdmin,
     empresaReadOnly,
   } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const masterCompanyId = isMasterAdmin
-    ? searchParams.get("empresa") ?? ""
-    : "";
+  const [searchParams] = useSearchParams();
   const requestedMaterialId = searchParams.get("material") || undefined;
   const requestedTab =
     searchParams.get("tab") === "historico" ? "historico" : "saldos";
-  const { data: masterCompanies = [], isLoading: loadingMasterCompanies } = useQuery({
-    queryKey: ["stock-master-companies"],
-    queryFn: listStockCompaniesForMaster,
-    enabled: isMasterAdmin,
-  });
-  const selectedMasterCompany = masterCompanies.find(
-    (company) => company.id === masterCompanyId,
-  );
-  const empresaId = isMasterAdmin
-    ? selectedMasterCompany?.id ?? null
-    : authenticatedCompanyId;
-  const selectedPlan = selectedMasterCompany?.planos as
-    | { periodicidade: string | null; ativo: boolean }
-    | null
-    | undefined;
-  const effectiveCompanyReadOnly = isMasterAdmin
-    ? selectedMasterCompany
-      ? !hasCompanyOperationalAccess({
-          ...selectedMasterCompany,
-          plan_periodicity: selectedPlan?.periodicidade ?? null,
-          plan_active: selectedPlan?.ativo ?? null,
-        })
-      : true
-    : empresaReadOnly;
   const { hasModule, isLoading: loadingModules } = useCompanyModules(empresaId);
   const permissions = getStockPermissions({
     role,
     moduleEnabled:
       hasModule(MODULE_KEYS.CONTROLE_ESTOQUE) &&
       hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
-    companyReadOnly: effectiveCompanyReadOnly,
+    companyReadOnly: empresaReadOnly,
     companySelected: !!empresaId,
   });
   const canWrite = permissions.movimentar;
@@ -198,16 +167,6 @@ export default function Estoque() {
   useEffect(() => setPage(1), [filters]);
   useEffect(() => setHistoryPageNumber(1), [historyFilters]);
 
-  const selectMasterCompany = (companyId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("empresa", companyId);
-    setSearchParams(next, { replace: true });
-    setMovementOpen(false);
-    setLocationsOpen(false);
-    setReversal(null);
-    setSelectedMaterial(null);
-  };
-
   const openOperation = (
     material: StockMaterial,
     nextOperation: typeof operation,
@@ -223,19 +182,11 @@ export default function Estoque() {
         <div>
           <h1 className="text-2xl font-bold">Controle de Estoque</h1>
           <p className="text-muted-foreground">
-            Selecione a empresa canônica para operar em contexto master.
+            {isMasterAdmin
+              ? "Sua conta master não está vinculada a uma empresa operacional."
+              : "Nenhuma empresa vinculada à sua conta."}
           </p>
         </div>
-        <Card>
-          <CardContent className="max-w-xl space-y-2 p-6">
-            <CompanyContextSelector
-              companies={masterCompanies}
-              value={masterCompanyId}
-              onValueChange={selectMasterCompany}
-              disabled={loadingMasterCompanies}
-            />
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -246,21 +197,9 @@ export default function Estoque() {
         <div>
           <h1 className="text-2xl font-bold">Controle de Estoque</h1>
           <p className="text-muted-foreground">
-            A empresa selecionada não possui acesso ao módulo.
+            Sua empresa não possui acesso ao módulo.
           </p>
         </div>
-        {isMasterAdmin && (
-          <Card>
-            <CardContent className="max-w-xl p-6">
-              <CompanyContextSelector
-                companies={masterCompanies}
-                value={masterCompanyId}
-                onValueChange={selectMasterCompany}
-                disabled={loadingMasterCompanies}
-              />
-            </CardContent>
-          </Card>
-        )}
         <Card className="border-amber-500/50">
           <CardContent className="p-4 text-sm text-muted-foreground">
             Verifique os módulos Gestão de Materiais e Controle de Estoque da
@@ -287,19 +226,6 @@ export default function Estoque() {
           </Button>
         )}
       </div>
-
-      {isMasterAdmin && (
-        <Card>
-          <CardContent className="max-w-xl p-4">
-            <CompanyContextSelector
-              companies={masterCompanies}
-              value={masterCompanyId}
-              onValueChange={selectMasterCompany}
-              disabled={loadingMasterCompanies}
-            />
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {([

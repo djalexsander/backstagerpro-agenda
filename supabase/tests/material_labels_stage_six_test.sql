@@ -101,10 +101,13 @@ SELECT set_config('request.jwt.claim.sub','a3000000-0000-4000-8000-000000000005'
 SELECT lives_ok($test$SELECT public.listar_modelos_etiqueta('a2000000-0000-4000-8000-000000000004')$test$,'readonly company can consult labels');
 SELECT throws_ok($test$SELECT public.salvar_modelo_etiqueta('Readonly',60,40,'qr_code','["nome"]',10,false,NULL,false,NULL,NULL,'a2000000-0000-4000-8000-000000000004')$test$,'LB010','A empresa esta em modo somente leitura.','readonly company cannot write');
 
+-- Master without a linked company has zero operational label access,
+-- whether or not it names another tenant explicitly (tenant isolation is
+-- mandatory for master_admin too - see 20260808100000).
 RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','a3000000-0000-4000-8000-000000000006',true); SET LOCAL ROLE authenticated;
-SELECT throws_ok($test$SELECT public.listar_modelos_etiqueta(NULL)$test$,'LB011','Selecione a empresa para operar etiquetas.','Master requires explicit company');
-SELECT is((SELECT count(*) FROM public.listar_modelos_etiqueta('a2000000-0000-4000-8000-000000000001')),1::bigint,'Master reads an explicitly selected company');
+SELECT throws_ok($test$SELECT public.listar_modelos_etiqueta(NULL)$test$,'42501','Empresa invalida.','Master without a linked company cannot infer a labels tenant');
+SELECT throws_ok($test$SELECT public.listar_modelos_etiqueta('a2000000-0000-4000-8000-000000000001')$test$,'42501','Empresa invalida.','Master cannot read another company by naming it explicitly');
 
 RESET ROLE;
 SELECT throws_ok(format('UPDATE public.etiqueta_impressoes SET quantidade=9 WHERE id=%L',(SELECT id FROM stage6_ids WHERE name='print_a')),'LB014','O historico de impressoes e imutavel.','print history cannot be updated even by owner');

@@ -17,6 +17,7 @@ export interface CustomerOption {
   cpf_cnpj: string | null;
   email: string | null;
   telefone: string | null;
+  observacoes: string | null;
   ativo: boolean;
 }
 

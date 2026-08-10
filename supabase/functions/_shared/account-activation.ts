@@ -46,10 +46,18 @@ export function getActivationRedirectUrl(appUrl: string | undefined): string {
   return parsed.toString();
 }
 
-export function accessTokenHasActivationMethod(
-  accessToken: string,
-  expectedFlow: AccountActivationFlow,
-): boolean {
+// Supabase Auth's AMR (Authentication Method Reference) claim records HOW the
+// session was established (e.g. "otp", "password", "oauth") - it is not the
+// EmailOtpType ("invite" | "recovery" | "magiclink" | ...) used to request the
+// link. Invite and recovery links are both verified through the same OTP
+// mechanism, so a session created from either link always carries the amr
+// value "otp", never the literal strings "invite"/"recovery". Comparing amr
+// against the flow name here always evaluated to false and made every
+// activation attempt fail with "Convite ou recuperação inválidos" - the flow
+// itself (invite vs recovery) is already verified via account_activation_flow
+// in user_metadata; this check only needs to confirm the session came from an
+// OTP email link rather than some other (weaker) authentication method.
+export function accessTokenHasOtpAuthenticationMethod(accessToken: string): boolean {
   try {
     const encodedPayload = accessToken.split(".")[1];
     if (!encodedPayload) return false;
@@ -62,8 +70,8 @@ export function accessTokenHasActivationMethod(
 
     return (
       payload.amr?.some((reference) => {
-        if (typeof reference === "string") return reference === expectedFlow;
-        return reference?.method === expectedFlow;
+        const method = typeof reference === "string" ? reference : reference?.method;
+        return method === "otp";
       }) ?? false
     );
   } catch {

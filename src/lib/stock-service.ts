@@ -21,17 +21,6 @@ function throwStockError(error: unknown, context: string): never {
   throw translated;
 }
 
-export async function listStockCompaniesForMaster() {
-  const { data, error } = await supabase
-    .from("empresas")
-    .select(
-      "id,nome_empresa,status,plano_bloqueado,trial_expires_at,plano_id,vencimento,precisa_escolher_plano,status_pagamento,planos!empresas_plano_id_fkey(periodicidade,ativo)",
-    )
-    .order("nome_empresa");
-  if (error) throwStockError(error, "list master companies");
-  return data ?? [];
-}
-
 export async function listStockLocations(
   companyId: string,
   includeInactive = false,

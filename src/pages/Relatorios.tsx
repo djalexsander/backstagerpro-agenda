@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, DollarSign, Calendar, FileText, Image,
-  ArrowRight, BarChart3, Users, ClipboardList, Music
+  ArrowRight, BarChart3, Users, ClipboardList, Music, Lock
 } from "lucide-react";
 import { useModuleAccess } from "@/components/ModuleGate";
+import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { useAuth } from "@/contexts/AuthContext";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { ReportExportModal, type ReportType } from "@/components/relatorios/ReportExportModal";
 import type { ExportFormat } from "@/lib/pdf-export";
@@ -18,12 +20,17 @@ interface ReportCard {
   icon: React.ElementType;
   available: boolean;
   navigateTo?: string;
-  comingSoon?: boolean;
+  /** Shown instead of "Disponível em breve" when available=false because a
+   * specific module isn't active (as opposed to the feature not existing). */
+  lockedReason?: string;
 }
 
 export default function Relatorios() {
   const navigate = useNavigate();
+  const { empresaId } = useAuth();
   const { canAccess } = useModuleAccess(MODULE_KEYS.RELATORIOS);
+  const { hasModule } = useCompanyModules(empresaId);
+  const hasOperacional = hasModule(MODULE_KEYS.PAINEL_OPERACIONAL);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportType>("dashboard");
@@ -35,11 +42,11 @@ export default function Relatorios() {
     setModalOpen(true);
   };
 
-  const reports: (ReportCard & { id: ReportType | string })[] = [
+  const reports: ReportCard[] = [
     {
       id: "dashboard",
       title: "Relatório do Dashboard",
-      description: "Visão geral com indicadores, gráficos de status e tendências de eventos.",
+      description: "Visão geral com indicadores, financeiro, locações e tendências de eventos.",
       icon: LayoutDashboard,
       available: true,
       navigateTo: "/dashboard",
@@ -47,7 +54,7 @@ export default function Relatorios() {
     {
       id: "financeiro",
       title: "Relatório Financeiro",
-      description: "Resumo de receitas, despesas e métricas financeiras dos eventos.",
+      description: "Receitas e despesas dos eventos, além da posição financeira de locações.",
       icon: DollarSign,
       available: true,
       navigateTo: "/financeiro",
@@ -61,28 +68,28 @@ export default function Relatorios() {
       navigateTo: "/agenda",
     },
     {
-      id: "equipe" as any,
+      id: "equipe",
       title: "Relatório de Equipe",
       description: "Análise da equipe com frequência em eventos e cachês acumulados.",
       icon: Users,
-      available: false,
-      comingSoon: true,
+      available: true,
+      navigateTo: "/funcionarios",
     },
     {
-      id: "operacional" as any,
+      id: "operacional",
       title: "Relatório Operacional",
-      description: "Painel operacional com logística, materiais e preparação de eventos.",
+      description: "Painel operacional com equipe escalada e progresso de checklist por evento.",
       icon: ClipboardList,
-      available: false,
-      comingSoon: true,
+      available: hasOperacional,
+      navigateTo: "/painel-operacional",
+      lockedReason: "Requer o módulo Painel Operacional",
     },
     {
-      id: "evento" as any,
+      id: "evento",
       title: "Relatório por Evento",
       description: "Relatório detalhado individual de cada evento com todos os dados.",
       icon: Music,
-      available: false,
-      comingSoon: true,
+      available: true,
     },
   ];
 
@@ -131,9 +138,9 @@ export default function Relatorios() {
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <report.icon className="h-5 w-5 text-primary" />
                 </div>
-                {report.comingSoon && (
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    Em breve
+                {!report.available && report.lockedReason && (
+                  <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    <Lock className="h-2.5 w-2.5" /> Bloqueado
                   </span>
                 )}
               </div>
@@ -145,9 +152,11 @@ export default function Relatorios() {
             <CardContent className="pt-0">
               {report.available ? (
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-primary">
-                    Abrir <ArrowRight className="h-3 w-3" />
-                  </Button>
+                  {report.navigateTo && (
+                    <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-primary">
+                      Abrir <ArrowRight className="h-3 w-3" />
+                    </Button>
+                  )}
                   <div className="flex gap-1 ml-auto">
                     <Button
                       variant="outline"
@@ -155,7 +164,7 @@ export default function Relatorios() {
                       className="h-7 text-[10px] px-2 gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenExportModal(report.id as ReportType, "pdf");
+                        handleOpenExportModal(report.id, "pdf");
                       }}
                     >
                       <FileText className="h-3 w-3" /> PDF
@@ -166,7 +175,7 @@ export default function Relatorios() {
                       className="h-7 text-[10px] px-2 gap-1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenExportModal(report.id as ReportType, "png");
+                        handleOpenExportModal(report.id, "png");
                       }}
                     >
                       <Image className="h-3 w-3" /> PNG
@@ -174,9 +183,21 @@ export default function Relatorios() {
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground/50 italic">
-                  Disponível em breve
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground/70">
+                    {report.lockedReason || "Disponível em breve"}
+                  </p>
+                  {report.lockedReason && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      onClick={(e) => { e.stopPropagation(); navigate("/plano"); }}
+                    >
+                      Ver Módulos Disponíveis
+                    </Button>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -1,6 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SET LOCAL search_path = public, extensions;
 SELECT no_plan();
 
 CREATE OR REPLACE FUNCTION public.stage35_force_custody_failure()
@@ -318,7 +319,9 @@ SELECT throws_ok(
 
 RESET ROLE;
 
--- Master keeps explicit cross-company backend authority.
+-- Master without a linked company has zero operational custody access,
+-- even naming another tenant explicitly (tenant isolation is mandatory for
+-- master_admin too - see 20260808100000).
 INSERT INTO auth.users (
   instance_id, id, aud, role, email, encrypted_password,
   email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
@@ -341,7 +344,7 @@ SELECT set_config(
   true
 );
 SET LOCAL ROLE authenticated;
-SELECT lives_ok(
+SELECT throws_ok(
   $test$SELECT public.registrar_checkout_material(
     '79000000-0000-4000-8000-000000000006', 1,
     '76000000-0000-4000-8000-000000000001', 'funcionario',
@@ -349,12 +352,15 @@ SELECT lives_ok(
     '79500000-0000-4000-8000-000000000003', NULL, 'master explicit tenant',
     NULL, NULL, NULL, '72000000-0000-4000-8000-000000000001'
   )$test$,
-  'master can operate an explicitly selected company'
+  '42501',
+  'Empresa inválida.',
+  'master without its own company cannot operate a named tenant'
 );
-SELECT ok(
+SELECT is(
   (SELECT count(*) FROM public.material_custodias
-   WHERE empresa_id = '72000000-0000-4000-8000-000000000002') > 0,
-  'master can read cross-company custody history'
+   WHERE empresa_id = '72000000-0000-4000-8000-000000000002'),
+  0::bigint,
+  'master without its own company cannot read cross-company custody history'
 );
 RESET ROLE;
 

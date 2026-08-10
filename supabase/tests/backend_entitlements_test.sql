@@ -1,23 +1,24 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SET LOCAL search_path = public, extensions;
 
 SELECT plan(17);
 
+-- Only the monthly plan is inserted here. planos_single_lifetime_idx
+-- (20260730063000_separate_trial_and_lifetime_plans.sql) allows exactly one
+-- 'vitalicio' row in the whole table, and one is already seeded by that same
+-- migration - a second INSERT here would violate the constraint. The
+-- lifetime company fixture below reuses the existing row instead, same
+-- pattern as equipment_maintenance_stage_five_test.sql's Lifetime company.
 INSERT INTO public.planos (
   id, nome, valor, max_usuarios, max_eventos, ativo, periodicidade
 )
-VALUES
-  (
-    '21000000-0000-4000-8000-000000000001',
-    '__backend_entitlement_monthly__',
-    100, 10, 100, true, 'mensal'
-  ),
-  (
-    '21000000-0000-4000-8000-000000000002',
-    '__backend_entitlement_lifetime__',
-    1000, 10, 100, true, 'vitalicio'
-  );
+VALUES (
+  '21000000-0000-4000-8000-000000000001',
+  '__backend_entitlement_monthly__',
+  100, 10, 100, true, 'mensal'
+);
 
 INSERT INTO public.empresas (
   id,
@@ -76,13 +77,17 @@ VALUES
     '22000000-0000-4000-8000-000000000008',
     '__expired_trial__', 'ativo', NULL,
     false, false, NULL, NULL, now() - interval '1 second'
-  ),
-  (
-    '22000000-0000-4000-8000-000000000009',
-    '__active_lifetime__', 'ativo',
-    '21000000-0000-4000-8000-000000000002',
-    false, false, 'pago', NULL, NULL
   );
+
+INSERT INTO public.empresas (
+  id, nome_empresa, status, plano_id,
+  plano_bloqueado, precisa_escolher_plano, status_pagamento, vencimento, trial_expires_at
+)
+SELECT
+  '22000000-0000-4000-8000-000000000009',
+  '__active_lifetime__', 'ativo', id,
+  false, false, 'pago', NULL, NULL
+FROM public.planos WHERE periodicidade = 'vitalicio' LIMIT 1;
 
 SELECT ok(
   public.company_has_operational_access(

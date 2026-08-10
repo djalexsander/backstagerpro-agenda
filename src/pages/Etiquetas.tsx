@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ChevronLeft, ChevronRight, Edit, LayoutTemplate, PackageCheck, Plus, Printer, Search, X } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,33 +8,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CompanyContextSelector } from "@/components/company/CompanyContextSelector";
 import { LabelModelDialog } from "@/components/material-labels/LabelModelDialog";
 import { LabelPrintDialog } from "@/components/material-labels/LabelPrintDialog";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useToast } from "@/hooks/use-toast";
-import { hasCompanyOperationalAccess } from "@/lib/access-control";
 import { addLabelBatchMaterial, canPrintMaterialWithModel, labelBatchTotal, labelHistoryPagination, LABEL_IDENTIFICATION_LABELS, labelReadinessMessage, removeLabelBatchMaterial, updateLabelBatchQuantity } from "@/lib/material-label-domain";
 import { getMaterialLabelPermissions } from "@/lib/material-label-permissions";
 import { archiveLabelModel, getLabelIndicators, listLabelModels, listLabelPrintHistory, searchLabelMaterials } from "@/lib/material-label-service";
 import type { LabelBatchSelection, LabelModel, LabelPrintBatch } from "@/lib/material-label-types";
-import { listStockCompaniesForMaster } from "@/lib/stock-service";
 import { useSearchParams } from "react-router-dom";
 
 const HISTORY_PAGE_SIZE = 10;
 
 export default function Etiquetas() {
-  const { role, empresaId, empresaNome, empresaReadOnly, isMasterAdmin } = useAuth();
+  const { role, empresaId: companyId, empresaNome, empresaReadOnly: readOnly, isMasterAdmin } = useAuth();
   const [searchParams] = useSearchParams(); const { toast } = useToast(); const queryClient = useQueryClient();
-  const [masterCompanyId, setMasterCompanyId] = useState("");
-  const companies = useQuery({ queryKey: ["stock-master-companies"], queryFn: listStockCompaniesForMaster, enabled: isMasterAdmin });
-  const selectedCompany = (companies.data ?? []).find((company) => company.id === masterCompanyId);
-  const companyId = isMasterAdmin ? selectedCompany?.id ?? null : empresaId;
-  const selectedPlan = selectedCompany?.planos as { periodicidade: string | null; ativo: boolean } | null | undefined;
-  const readOnly = isMasterAdmin ? selectedCompany ? !hasCompanyOperationalAccess({ ...selectedCompany, plan_periodicity: selectedPlan?.periodicidade ?? null, plan_active: selectedPlan?.ativo ?? null }) : true : empresaReadOnly;
-  const companyName = isMasterAdmin ? selectedCompany?.nome_empresa ?? "Empresa" : empresaNome ?? "Empresa";
+  const companyName = empresaNome ?? "Empresa";
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS);
   const permissions = getMaterialLabelPermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
@@ -52,20 +42,19 @@ export default function Etiquetas() {
   useEffect(() => { const available = models.data ?? []; if (!available.some((model) => model.id === selectedModelId)) setSelectedModelId(available.find((model) => model.padrao)?.id ?? available[0]?.id ?? ""); }, [models.data, selectedModelId]);
   useEffect(() => { setBatchItems([]); setHistoryPage(1); }, [companyId]);
   const selectedModel = (models.data ?? []).find((model) => model.id === selectedModelId) ?? null;
-  const invalidate = async () => { await Promise.all([
+  const invalidate = async () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["label-models", companyId] }), queryClient.invalidateQueries({ queryKey: ["label-materials", companyId] }),
     queryClient.invalidateQueries({ queryKey: ["label-history", companyId] }), queryClient.invalidateQueries({ queryKey: ["label-indicators", companyId] }),
-  ]); };
+  ]);
   const archiveMutation = useMutation({ mutationFn: (model: LabelModel) => archiveLabelModel(companyId!, model), onSuccess: async () => { await invalidate(); toast({ title: "Modelo inativado" }); }, onError: (error: Error) => toast({ title: "Não foi possível inativar", description: error.message, variant: "destructive" }) });
-  const selector = isMasterAdmin ? <Card><CardContent className="max-w-xl p-4"><CompanyContextSelector companies={companies.data ?? []} value={masterCompanyId} onValueChange={setMasterCompanyId} disabled={companies.isLoading} /></CardContent></Card> : null;
-  if (!companyId && !companies.isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><p className="text-muted-foreground">Selecione explicitamente a empresa no contexto Master.</p>{selector}</div>;
-  if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1>{selector}<Card className="border-amber-500/50"><CardContent className="p-4">O módulo requer Etiquetas e Gestão de Materiais ativos.</CardContent></Card></div>;
+  if (!companyId) return <div className="space-y-4"><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><p className="text-muted-foreground">{isMasterAdmin ? "Sua conta master não está vinculada a uma empresa operacional." : "Nenhuma empresa vinculada à sua conta."}</p></div>;
+  if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><Card className="border-amber-500/50"><CardContent className="p-4">O módulo requer Etiquetas e Gestão de Materiais ativos.</CardContent></Card></div>;
   const stats = indicators.data ?? { modelos_ativos: 0, materiais_identificados: 0, solicitacoes_hoje: 0, etiquetas_hoje: 0 };
   const totalLabels = labelBatchTotal(batchItems); const pagination = labelHistoryPagination(historyPage, HISTORY_PAGE_SIZE, history.data?.total ?? 0);
   return <div className="space-y-5">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><p className="text-muted-foreground">Modelos dimensionais, lotes multi-material e histórico auditável.</p></div>{permissions.gerenciarModelos && <Button onClick={() => { setEditingModel(null); setModelDialogOpen(true); }}><Plus className="mr-2 h-4 w-4" />Novo modelo</Button>}</div>
-    {selector}{readOnly && <Card className="border-amber-500/50"><CardContent className="p-3 text-sm">Empresa em modo somente leitura. Consultas permanecem disponíveis.</CardContent></Card>}
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([["Modelos ativos", stats.modelos_ativos, LayoutTemplate], ["Materiais identificados", stats.materiais_identificados, PackageCheck], ["Solicitações hoje", stats.solicitacoes_hoje, Printer], ["Etiquetas hoje", stats.etiquetas_hoje, Printer]] as [string, number, LucideIcon][]).map(([label, value, Icon]) => <Card key={String(label)}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs text-muted-foreground">{String(label)}</p><p className="text-2xl font-bold">{String(value)}</p></div><Icon className="h-6 w-6 text-muted-foreground" /></CardContent></Card>)}</div>
+    {readOnly && <Card className="border-amber-500/50"><CardContent className="p-3 text-sm">Empresa em modo somente leitura. Consultas permanecem disponíveis.</CardContent></Card>}
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Modelos ativos", stats.modelos_ativos, LayoutTemplate], ["Materiais identificados", stats.materiais_identificados, PackageCheck], ["Solicitações hoje", stats.solicitacoes_hoje, Printer], ["Etiquetas hoje", stats.etiquetas_hoje, Printer]].map(([label, value, Icon]) => <Card key={String(label)}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs text-muted-foreground">{String(label)}</p><p className="text-2xl font-bold">{String(value)}</p></div><Icon className="h-6 w-6 text-muted-foreground" /></CardContent></Card>)}</div>
     <Card><CardHeader><CardTitle>Modelos de etiqueta</CardTitle></CardHeader><CardContent>{models.isLoading ? <p>Carregando...</p> : !(models.data ?? []).length ? <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground">Crie o primeiro modelo para habilitar a impressão.</div> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{models.data!.map((model) => <div key={model.id} className="rounded-md border p-4"><div className="flex items-start justify-between gap-2"><div><p className="font-medium">{model.nome}</p><p className="text-sm text-muted-foreground">{Number(model.largura_mm)} × {Number(model.altura_mm)} mm · {LABEL_IDENTIFICATION_LABELS[model.tipo_identificacao]}</p></div>{model.padrao && <Badge>Padrão</Badge>}</div><p className="mt-2 text-xs text-muted-foreground">Versão {model.versao} · margem interna {Number(model.margem_interna_mm ?? 1.5)} mm</p>{permissions.gerenciarModelos && <div className="mt-3 flex gap-2"><Button size="sm" variant="outline" onClick={() => { setEditingModel(model); setModelDialogOpen(true); }}><Edit className="mr-1 h-3.5 w-3.5" />Editar</Button><Button size="sm" variant="ghost" onClick={() => archiveMutation.mutate(model)} disabled={archiveMutation.isPending}><Archive className="mr-1 h-3.5 w-3.5" />Inativar</Button></div>}</div>)}</div>}</CardContent></Card>
     <Card><CardHeader><CardTitle>Montar lote de etiquetas</CardTitle></CardHeader><CardContent className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2"><Select value={selectedModelId} onValueChange={setSelectedModelId}><SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger><SelectContent>{(models.data ?? []).map((model) => <SelectItem key={model.id} value={model.id}>{model.nome} · {Number(model.largura_mm)} × {Number(model.altura_mm)} mm</SelectItem>)}</SelectContent></Select><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar materiais" /></div></div>
