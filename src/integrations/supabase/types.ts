@@ -347,6 +347,65 @@ export type Database = {
           },
         ]
       }
+      empresa_impressora_config: {
+        Row: {
+          altura_mm: number | null
+          ativo: boolean
+          configuracoes: Json
+          created_at: string
+          created_by: string | null
+          empresa_id: string
+          finalidade: string
+          formato: string | null
+          id: string
+          largura_mm: number | null
+          nome_impressora: string | null
+          orientacao: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          altura_mm?: number | null
+          ativo?: boolean
+          configuracoes?: Json
+          created_at?: string
+          created_by?: string | null
+          empresa_id: string
+          finalidade: string
+          formato?: string | null
+          id?: string
+          largura_mm?: number | null
+          nome_impressora?: string | null
+          orientacao?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          altura_mm?: number | null
+          ativo?: boolean
+          configuracoes?: Json
+          created_at?: string
+          created_by?: string | null
+          empresa_id?: string
+          finalidade?: string
+          formato?: string | null
+          id?: string
+          largura_mm?: number | null
+          nome_impressora?: string | null
+          orientacao?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_impressora_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresa_modules: {
         Row: {
           activated_at: string | null
@@ -1348,6 +1407,221 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financeiro_lancamentos: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          empresa_id: string
+          forma_cobranca: string
+          forma_pagamento: string | null
+          id: string
+          observacoes: string | null
+          origem_id: string
+          origem_tipo: string
+          status: string
+          tipo: string
+          updated_at: string
+          updated_by: string | null
+          valor_estornado: number
+          valor_original: number
+          valor_recebido: number
+          vencimento: string | null
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          empresa_id: string
+          forma_cobranca?: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          origem_id: string
+          origem_tipo: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          updated_by?: string | null
+          valor_estornado?: number
+          valor_original: number
+          valor_recebido?: number
+          vencimento?: string | null
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          empresa_id?: string
+          forma_cobranca?: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          origem_id?: string
+          origem_tipo?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          updated_by?: string | null
+          valor_estornado?: number
+          valor_original?: number
+          valor_recebido?: number
+          vencimento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financeiro_lancamentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financeiro_lancamentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financeiro_parcelas: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          lancamento_id: string
+          numero: number
+          status: string
+          updated_at: string
+          valor: number
+          valor_estornado: number
+          valor_recebido: number
+          vencimento: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          lancamento_id: string
+          numero: number
+          status?: string
+          updated_at?: string
+          valor: number
+          valor_estornado?: number
+          valor_recebido?: number
+          vencimento: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          lancamento_id?: string
+          numero?: number
+          status?: string
+          updated_at?: string
+          valor?: number
+          valor_estornado?: number
+          valor_recebido?: number
+          vencimento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financeiro_parcelas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financeiro_parcelas_empresa_lancamento_fkey"
+            columns: ["empresa_id", "lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "financeiro_lancamentos"
+            referencedColumns: ["empresa_id", "id"]
+          },
+        ]
+      }
+      financeiro_recebimentos: {
+        Row: {
+          client_uuid: string
+          created_at: string
+          data_recebimento: string
+          empresa_id: string
+          executado_por: string | null
+          forma_pagamento: string | null
+          id: string
+          lancamento_id: string
+          observacao: string | null
+          parcela_id: string | null
+          recebimento_estornado_id: string | null
+          tipo: string
+          valor: number
+        }
+        Insert: {
+          client_uuid: string
+          created_at?: string
+          data_recebimento?: string
+          empresa_id: string
+          executado_por?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          lancamento_id: string
+          observacao?: string | null
+          parcela_id?: string | null
+          recebimento_estornado_id?: string | null
+          tipo?: string
+          valor: number
+        }
+        Update: {
+          client_uuid?: string
+          created_at?: string
+          data_recebimento?: string
+          empresa_id?: string
+          executado_por?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          lancamento_id?: string
+          observacao?: string | null
+          parcela_id?: string | null
+          recebimento_estornado_id?: string | null
+          tipo?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financeiro_recebimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financeiro_recebimentos_empresa_lancamento_fkey"
+            columns: ["empresa_id", "lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "financeiro_lancamentos"
+            referencedColumns: ["empresa_id", "id"]
+          },
+          {
+            foreignKeyName: "financeiro_recebimentos_lancamento_parcela_fkey"
+            columns: ["lancamento_id", "parcela_id"]
+            isOneToOne: false
+            referencedRelation: "financeiro_parcelas"
+            referencedColumns: ["lancamento_id", "id"]
+          },
+          {
+            foreignKeyName: "financeiro_recebimentos_recebimento_estornado_id_fkey"
+            columns: ["recebimento_estornado_id"]
+            isOneToOne: false
+            referencedRelation: "financeiro_recebimentos"
             referencedColumns: ["id"]
           },
         ]
@@ -3280,6 +3554,63 @@ export type Database = {
         }
         Relationships: []
       }
+      user_module_permissions: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          created_at: string
+          empresa_id: string
+          feature_key: string
+          granted_by: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          created_at?: string
+          empresa_id: string
+          feature_key: string
+          granted_by?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          created_at?: string
+          empresa_id?: string
+          feature_key?: string
+          granted_by?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_module_permissions_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_module_permissions_feature_key_fkey"
+            columns: ["feature_key"]
+            isOneToOne: false
+            referencedRelation: "module_catalog"
+            referencedColumns: ["feature_key"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -3417,6 +3748,31 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "estoque_movimentacoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      alternar_status_cliente: {
+        Args: { _ativo: boolean; _cliente_id: string; _empresa_id?: string }
+        Returns: {
+          ativo: boolean
+          cpf_cnpj: string | null
+          created_at: string
+          created_by: string
+          email: string | null
+          empresa_id: string
+          id: string
+          nome: string
+          nome_fantasia: string | null
+          observacoes: string | null
+          telefone: string | null
+          tipo_pessoa: Database["public"]["Enums"]["customer_person_type"]
+          updated_at: string
+          updated_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "clientes"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -3603,6 +3959,25 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      backfill_financeiro_locacoes: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          empresa_id: string
+          locacao_id: string
+          numero: string
+          resultado: string
+        }[]
+      }
+      backfill_financeiro_manutencoes: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          empresa_id: string
+          numero: string
+          ordem_id: string
+          resultado: string
+        }[]
+      }
+      backfill_user_module_view_permissions: { Args: never; Returns: undefined }
       buscar_materiais_custodia: {
         Args: { _busca: string; _empresa_id?: string; _limite?: number }
         Returns: {
@@ -3817,7 +4192,10 @@ export type Database = {
         Args: {
           _client_uuid: string
           _empresa_id?: string
+          _forma_cobranca?: string
           _locacao_id: string
+          _parcelas?: Json
+          _vencimento?: string
         }
         Returns: {
           client_uuid: string
@@ -4060,6 +4438,42 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      estornar_recebimento_locacao: {
+        Args: {
+          _client_uuid: string
+          _empresa_id?: string
+          _justificativa: string
+          _recebimento_id: string
+          _valor?: number
+        }
+        Returns: {
+          cliente_id: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          empresa_id: string
+          forma_cobranca: string
+          forma_pagamento: string | null
+          id: string
+          observacoes: string | null
+          origem_id: string
+          origem_tipo: string
+          status: string
+          tipo: string
+          updated_at: string
+          updated_by: string | null
+          valor_estornado: number
+          valor_original: number
+          valor_recebido: number
+          vencimento: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "financeiro_lancamentos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       event_belongs_to_company: {
         Args: { _empresa_id: string; _event_id: string }
         Returns: boolean
@@ -4071,6 +4485,15 @@ export type Database = {
       finalize_user_auth_deletion: {
         Args: { _audit_id: string; _error?: string; _success: boolean }
         Returns: undefined
+      }
+      financeiro_status_from_valores: {
+        Args: {
+          _cancelado: boolean
+          _valor_estornado: number
+          _valor_original: number
+          _valor_recebido: number
+        }
+        Returns: string
       }
       generate_material_barcode: {
         Args: { _material_id: string }
@@ -4118,6 +4541,17 @@ export type Database = {
         Args: { _file_path: string }
         Returns: boolean
       }
+      list_user_module_permissions: {
+        Args: { _empresa_id: string; _user_id?: string }
+        Returns: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          feature_key: string
+          module_nome: string
+        }[]
+      }
       listar_clientes: {
         Args: {
           _busca?: string
@@ -4148,6 +4582,34 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      listar_clientes_a_receber: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          cliente_id: string
+          cliente_nome: string
+          cliente_nome_fantasia: string
+          proximo_vencimento: string
+          quantidade_titulos: number
+          total_devido: number
+          total_pendente_regularizacao: number
+          total_vencido: number
+        }[]
+      }
+      listar_contas_receber: {
+        Args: {
+          _busca?: string
+          _empresa_id?: string
+          _pagina?: number
+          _por_pagina?: number
+          _somente_revisao?: boolean
+          _somente_vencidos?: boolean
+          _status?: string
+        }
+        Returns: {
+          item: Json
+          total_count: number
+        }[]
+      }
       listar_custodias_materiais: {
         Args: {
           _busca?: string
@@ -4162,6 +4624,18 @@ export type Database = {
           _somente_abertas?: boolean
           _status?: string
           _tamanho_pagina?: number
+        }
+        Returns: {
+          item: Json
+          total_count: number
+        }[]
+      }
+      listar_despesas_manutencao: {
+        Args: {
+          _busca?: string
+          _empresa_id?: string
+          _pagina?: number
+          _por_pagina?: number
         }
         Returns: {
           item: Json
@@ -4340,6 +4814,35 @@ export type Database = {
         Args: { _at: string; _company_id: string }
         Returns: string
       }
+      obter_configuracoes_impressora: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          altura_mm: number | null
+          ativo: boolean
+          configuracoes: Json
+          created_at: string
+          created_by: string | null
+          empresa_id: string
+          finalidade: string
+          formato: string | null
+          id: string
+          largura_mm: number | null
+          nome_impressora: string | null
+          orientacao: string
+          updated_at: string
+          updated_by: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "empresa_impressora_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      obter_financeiro_locacao: {
+        Args: { _empresa_id?: string; _locacao_id: string }
+        Returns: Json
+      }
       obter_indicadores_custodia: {
         Args: { _empresa_id?: string }
         Returns: Json
@@ -4363,6 +4866,23 @@ export type Database = {
       obter_ordem_manutencao: {
         Args: { _empresa_id?: string; _ordem_id: string }
         Returns: Json
+      }
+      obter_resumo_financeiro_locacoes: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          valor_a_receber: number
+          valor_contratado: number
+          valor_pendente_regularizacao: number
+          valor_recebido: number
+          valor_vencido: number
+        }[]
+      }
+      obter_resumo_financeiro_manutencoes: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          quantidade_ordens: number
+          valor_total: number
+        }[]
       }
       obter_resumo_manutencao_material: {
         Args: { _empresa_id?: string; _material_id: string }
@@ -4596,6 +5116,45 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      registrar_recebimento_locacao: {
+        Args: {
+          _client_uuid: string
+          _data_recebimento?: string
+          _empresa_id?: string
+          _forma_pagamento: string
+          _locacao_id: string
+          _observacao?: string
+          _parcela_id?: string
+          _valor: number
+        }
+        Returns: {
+          cliente_id: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          empresa_id: string
+          forma_cobranca: string
+          forma_pagamento: string | null
+          id: string
+          observacoes: string | null
+          origem_id: string
+          origem_tipo: string
+          status: string
+          tipo: string
+          updated_at: string
+          updated_by: string | null
+          valor_estornado: number
+          valor_original: number
+          valor_recebido: number
+          vencimento: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "financeiro_lancamentos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       registrar_retirada_locacao_material: {
         Args: {
           _client_uuid: string
@@ -4710,6 +5269,10 @@ export type Database = {
         }
         Returns: string
       }
+      resolve_financial_company: {
+        Args: { _requested_company_id: string; _write: boolean }
+        Returns: string
+      }
       resolve_material_labels_company: {
         Args: { _requested_company_id: string; _write: boolean }
         Returns: string
@@ -4753,6 +5316,41 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "clientes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      salvar_configuracao_impressora: {
+        Args: {
+          _altura_mm?: number
+          _ativo?: boolean
+          _configuracoes?: Json
+          _empresa_id?: string
+          _finalidade: string
+          _formato?: string
+          _largura_mm?: number
+          _nome_impressora?: string
+          _orientacao?: string
+        }
+        Returns: {
+          altura_mm: number | null
+          ativo: boolean
+          configuracoes: Json
+          created_at: string
+          created_by: string | null
+          empresa_id: string
+          finalidade: string
+          formato: string | null
+          id: string
+          largura_mm: number | null
+          nome_impressora: string | null
+          orientacao: string
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresa_impressora_config"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -4864,6 +5462,46 @@ export type Database = {
         Args: { _empresa_id: string }
         Returns: Json
       }
+      set_user_module_permissions: {
+        Args: { _empresa_id: string; _permissions: Json; _user_id: string }
+        Returns: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          created_at: string
+          empresa_id: string
+          feature_key: string
+          granted_by: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "user_module_permissions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      sync_equipment_maintenance_financial_entry: {
+        Args: { _company_id: string; _ordem_id: string }
+        Returns: undefined
+      }
+      sync_material_rental_financial_entry: {
+        Args: {
+          _company_id: string
+          _forma_cobranca?: string
+          _locacao_id: string
+          _parcelas?: Json
+          _vencimento?: string
+        }
+        Returns: undefined
+      }
+      sync_material_rental_status: {
+        Args: { _company_id: string; _locacao_id: string }
+        Returns: undefined
+      }
       template_belongs_to_company: {
         Args: { _empresa_id: string; _template_id: string }
         Returns: boolean
@@ -4928,6 +5566,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      user_has_module_action: {
+        Args: { _action: string; _empresa_id: string; _feature_key: string }
+        Returns: boolean
       }
       validate_material_label_fields: { Args: { _fields: Json }; Returns: Json }
     }
