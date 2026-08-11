@@ -1,13 +1,14 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { labelBatchTotal, labelModelToSnapshot, materialToLabelSnapshot } from "@/lib/material-label-domain";
-import { openLabelPrintWindow, printLabelRequest } from "@/lib/material-label-print";
+import { openLabelPrintWindow, printLabelBatchDesktop, printLabelRequest } from "@/lib/material-label-print";
 import { registerLabelPrintBatch } from "@/lib/material-label-service";
 import type { LabelBatchSelection, LabelModel } from "@/lib/material-label-types";
+import { isDesktopRuntime, listPrinterConfigs } from "@/lib/printer-service";
 import { LabelCanvas } from "./LabelCanvas";
 
 export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, model, items, onPrinted }: {
@@ -19,13 +20,32 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
   const preview = useMemo(() => items.map((item) => ({
     key: item.material.id, quantity: item.quantity, material: materialToLabelSnapshot(item.material, companyName),
   })), [items, companyName]);
+  // One client_uuid per dialog opening, reused across retries within it
+  // (not regenerated per mutate() call): registrar_solicitacao_impressao_lote_etiquetas
+  // is idempotent by client_uuid (see docs/stage-6-physical-printing-homologation.md,
+  // "simular retry com a mesma chave idempotente"), so if the desktop print
+  // step fails *after* the batch is already registered, clicking the button
+  // again reuses the same batch instead of registering a duplicate history row.
+  const clientUuidRef = useRef<string>();
+  useEffect(() => { if (open) clientUuidRef.current = crypto.randomUUID(); }, [open]);
   const mutation = useMutation({
     mutationFn: async () => {
       if (!model || !items.length || total < 1 || items.some((item) => item.quantity < 1 || item.quantity > 500)) throw new Error("Revise o modelo, os materiais e as quantidades.");
+      const clientUuid = clientUuidRef.current ?? crypto.randomUUID();
+
+      if (isDesktopRuntime()) {
+        const configs = await listPrinterConfigs(companyId);
+        const printerName = configs.find((config) => config.finalidade === "etiqueta")?.nome_impressora;
+        if (!printerName) throw new Error("Nenhuma impressora de etiquetas configurada. Vá em Configurações → Impressoras.");
+        const record = await registerLabelPrintBatch(companyId, { model, items, clientUuid });
+        await printLabelBatchDesktop(printerName, record);
+        return record;
+      }
+
       const popup = openLabelPrintWindow();
       if (!popup) throw new Error("O navegador bloqueou a janela de impressão. Permita pop-ups e tente novamente.");
       try {
-        const record = await registerLabelPrintBatch(companyId, { model, items, clientUuid: crypto.randomUUID() });
+        const record = await registerLabelPrintBatch(companyId, { model, items, clientUuid });
         printLabelRequest(record, popup); return record;
       } catch (error) { popup.close(); throw error; }
     },

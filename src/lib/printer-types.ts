@@ -39,3 +39,11 @@ export interface SystemPrinter {
   name: string;
   isDefault: boolean;
 }
+
+// One page (rasterized to PNG) repeated `quantity` times in a single spool
+// job - see printImagesToWindowsPrinter in printer-service.ts and the
+// print_label_batch Tauri command (src-tauri/src/printing.rs).
+export interface PrintImageJob {
+  pngBytes: Uint8Array;
+  quantity: number;
+}

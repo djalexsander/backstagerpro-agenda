@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rpc, invoke } = vi.hoisted(() => ({ rpc: vi.fn(), invoke: vi.fn() }));
+const { rpc, invoke, html2canvasMock } = vi.hoisted(() => ({ rpc: vi.fn(), invoke: vi.fn(), html2canvasMock: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc } }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+// jsdom has no real canvas 2D context, so html2canvas can't actually
+// rasterize anything under vitest - mocked at the module boundary, same
+// principle as mocking invoke/isTauri below.
+vi.mock("html2canvas", () => ({ default: html2canvasMock }));
 
 // UpdateService.ts imports the Vite-only "virtual:pwa-register" module,
 // which doesn't resolve under Vitest. Mocked here with the exact same
@@ -19,6 +23,8 @@ import {
   listPrinterConfigs,
   listSystemPrinters,
   openPrintWindow,
+  printImagesToWindowsPrinter,
+  rasterizeHtmlToPngBytes,
   savePrinterConfig,
 } from "./printer-service";
 
@@ -145,5 +151,96 @@ describe("openPrintWindow", () => {
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     expect(() => openPrintWindow("<html></html>")).toThrow(/pop-up/i);
     openSpy.mockRestore();
+  });
+});
+
+describe("rasterizeHtmlToPngBytes", () => {
+  // The Vitest 4.1 runner invokes a dynamically-imported mock an extra time
+  // during its own teardown, with no arguments (reproduced: stack goes
+  // through @vitest/runner's callCleanupHooks, not through
+  // rasterizeHtmlToPngBytes) - harmless for the invoke-based tests above
+  // since toHaveBeenCalledWith only needs one matching call, but it means
+  // any custom mockImplementation here must tolerate a call with no
+  // `element` instead of assuming it only ever runs once.
+  beforeEach(() => html2canvasMock.mockReset());
+
+  it("renders the html off-screen at the given physical size, then removes the container even on success", async () => {
+    let captured: HTMLElement | null = null;
+    const fakeBlob = { arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+    html2canvasMock.mockImplementation(async (element?: HTMLElement) => {
+      if (element) captured = element;
+      return { toBlob: (callback: (blob: unknown) => void) => callback(fakeBlob) };
+    });
+
+    const bytes = await rasterizeHtmlToPngBytes({ widthMm: 50, heightMm: 30, html: "<p>ola</p>" });
+
+    expect(captured).not.toBeNull();
+    expect(captured!.style.width).toBe("50mm");
+    expect(captured!.style.height).toBe("30mm");
+    expect(captured!.innerHTML).toContain("ola");
+    expect(Array.from(bytes)).toEqual([1, 2, 3]);
+    expect(document.body.contains(captured)).toBe(false);
+  });
+
+  it("still removes the offscreen container when html2canvas itself throws", async () => {
+    let captured: HTMLElement | null = null;
+    html2canvasMock.mockImplementation(async (element?: HTMLElement) => {
+      if (!element) return undefined;
+      captured = element;
+      throw new Error("boom");
+    });
+
+    await expect(rasterizeHtmlToPngBytes({ widthMm: 10, heightMm: 10, html: "<p/>" })).rejects.toThrow("boom");
+    expect(captured).not.toBeNull();
+    expect(document.body.contains(captured)).toBe(false);
+  });
+});
+
+describe("printImagesToWindowsPrinter", () => {
+  const originalTauri = (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+
+  beforeEach(() => {
+    (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {};
+    invoke.mockReset();
+  });
+  afterEach(() => {
+    (window as unknown as { __TAURI__?: unknown }).__TAURI__ = originalTauri;
+  });
+
+  it("throws instead of invoking outside the desktop shell", async () => {
+    delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+    await expect(printImagesToWindowsPrinter("LABEL", [], "doc")).rejects.toThrow(/desktop/i);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("sends the printer name, document name and jobs (bytes as plain arrays) to the Rust command", async () => {
+    invoke.mockResolvedValue(undefined);
+    await printImagesToWindowsPrinter("LABEL", [{ pngBytes: new Uint8Array([1, 2, 3]), quantity: 3 }], "Etiquetas - lote 1");
+    expect(invoke).toHaveBeenCalledWith("print_label_batch", {
+      printerName: "LABEL",
+      documentName: "Etiquetas - lote 1",
+      jobs: [{ pngBytes: [1, 2, 3], quantity: 3 }],
+    });
+  });
+
+  it('maps the Rust "NOT_FOUND" sentinel to a message naming the configured printer', async () => {
+    invoke.mockRejectedValue("NOT_FOUND");
+    await expect(
+      printImagesToWindowsPrinter("LABEL", [{ pngBytes: new Uint8Array(), quantity: 1 }], "doc"),
+    ).rejects.toThrow(/"LABEL".*não foi encontrada/);
+  });
+
+  it("lets a caller override the not-found and failure messages for flow-specific wording", async () => {
+    invoke.mockRejectedValue("NOT_FOUND");
+    await expect(
+      printImagesToWindowsPrinter("LABEL", [{ pngBytes: new Uint8Array(), quantity: 1 }], "doc", { notFound: "mensagem customizada" }),
+    ).rejects.toThrow("mensagem customizada");
+  });
+
+  it("wraps any other spool error with a generic message plus the Rust detail", async () => {
+    invoke.mockRejectedValue("driver travado");
+    await expect(
+      printImagesToWindowsPrinter("LABEL", [{ pngBytes: new Uint8Array(), quantity: 1 }], "doc"),
+    ).rejects.toThrow(/Não foi possível enviar a impressão.*driver travado/);
   });
 });

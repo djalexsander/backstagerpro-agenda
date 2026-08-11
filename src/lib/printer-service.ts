@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { supabase } from "@/integrations/supabase/client";
 import { isTauri } from "@/features/update/UpdateService";
-import type { PrinterConfig, SavePrinterConfigInput, SystemPrinter } from "./printer-types";
+import type { PrintImageJob, PrinterConfig, SavePrinterConfigInput, SystemPrinter } from "./printer-types";
 
 interface RpcError {
   message?: string;
@@ -101,6 +101,10 @@ export function isPrinterCurrentlyInstalled(savedPrinterName: string | null | un
  * src/lib/material-label-print.tsx for label printing - reused here for
  * cupom/receipt and any other browser-based print flow, instead of a
  * second implementation.
+ *
+ * Web/PWA only. Inside the Tauri desktop shell, window.open() has no
+ * popup to open (WebView2 there doesn't spawn one) and always returns
+ * null - see printImagesToWindowsPrinter for the desktop replacement.
  */
 export function openPrintWindow(html: string, windowName = "print"): Window {
   const popup = window.open("", "_blank", "popup,width=900,height=700");
@@ -112,4 +116,95 @@ export function openPrintWindow(html: string, windowName = "print"): Window {
   popup.document.close();
   popup.document.title = windowName;
   return popup;
+}
+
+/**
+ * Renders a self-contained HTML fragment off-screen at its true physical
+ * size (widthMm x heightMm, browser-native mm units - no manual px/DPI
+ * math needed) and rasterizes it to PNG bytes via html2canvas (already an
+ * existing dependency, unused elsewhere in the app until now). Used only
+ * on the desktop path - the web path keeps printing the live HTML/DOM
+ * directly through the browser's own print pipeline (openPrintWindow).
+ *
+ * The container is attached to the document (off-screen via a large
+ * negative offset, not display:none) because html2canvas needs a real
+ * layout box to capture - detached or display:none nodes have none.
+ */
+export async function rasterizeHtmlToPngBytes({
+  widthMm,
+  heightMm,
+  html,
+  scale = 4,
+}: {
+  widthMm: number;
+  heightMm: number;
+  html: string;
+  scale?: number;
+}): Promise<Uint8Array> {
+  const { default: html2canvas } = await import("html2canvas");
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-10000px";
+  container.style.top = "0";
+  container.style.width = `${widthMm}mm`;
+  container.style.height = `${heightMm}mm`;
+  container.style.background = "#ffffff";
+  container.style.overflow = "hidden";
+  container.innerHTML = html;
+  document.body.appendChild(container);
+  try {
+    const canvas = await html2canvas(container, { scale, backgroundColor: "#ffffff", logging: false });
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => (result ? resolve(result) : reject(new Error("Falha ao gerar a imagem para impressão."))),
+        "image/png",
+      );
+    });
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    container.remove();
+  }
+}
+
+// Must match PRINTER_NOT_FOUND in src-tauri/src/printing.rs exactly - the
+// Rust side returns this bare string (not a sentence) when OpenPrinterW
+// fails, so the frontend can show "impressora não encontrada" instead of
+// a generic failure message.
+const PRINTER_NOT_FOUND_ERROR = "NOT_FOUND";
+
+/**
+ * Sends already-rasterized page images straight to a named Windows printer
+ * through the print_label_batch Tauri command (src-tauri/src/printing.rs),
+ * which spools them via GDI using that printer's own default DEVMODE - no
+ * window, no popup, no print dialog. Desktop-only, like listSystemPrinters.
+ *
+ * `messages` lets a caller override the two error strings with
+ * flow-specific wording (e.g. "etiqueta" vs a generic "impressão") without
+ * duplicating the invoke/error-mapping logic at every call site.
+ */
+export async function printImagesToWindowsPrinter(
+  printerName: string,
+  jobs: PrintImageJob[],
+  documentName: string,
+  messages?: { notFound?: string; failed?: string },
+): Promise<void> {
+  if (!isDesktopRuntime()) {
+    throw new Error("Impressão direta só está disponível no aplicativo desktop.");
+  }
+  try {
+    await invoke("print_label_batch", {
+      printerName,
+      documentName,
+      jobs: jobs.map((job) => ({ pngBytes: Array.from(job.pngBytes), quantity: job.quantity })),
+    });
+  } catch (error) {
+    const isNotFound =
+      error === PRINTER_NOT_FOUND_ERROR || (error instanceof Error && error.message === PRINTER_NOT_FOUND_ERROR);
+    if (isNotFound) {
+      throw new Error(messages?.notFound ?? `A impressora "${printerName}" não foi encontrada no Windows.`);
+    }
+    const detail = typeof error === "string" ? error : error instanceof Error ? error.message : undefined;
+    const base = messages?.failed ?? "Não foi possível enviar a impressão para a impressora.";
+    throw new Error(detail ? `${base} ${detail}` : base);
+  }
 }

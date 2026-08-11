@@ -24,3 +24,23 @@ log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2.5.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Direct dependency only on Windows: GDI/spooler bindings used to print
+# label bitmaps through the driver-configured printer (src/printing.rs).
+# Already resolved transitively at 0.61.3 via webview2-com/wry - pinning
+# the same major.minor here instead of pulling in a second version.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Printing",
+] }
+
+# Full debuginfo on this crate's huge generated bindings crashes rustc
+# 1.97.0 during codegen in this environment (`cargo check` - metadata
+# only - is fine; `cargo build` - full codegen - crashes with
+# STATUS_BREAKPOINT). Not needed anyway: this app never steps through
+# `windows`'s own generated source in a debugger.
+[profile.dev.package.windows]
+debug = false

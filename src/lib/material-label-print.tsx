@@ -2,7 +2,9 @@ import JsBarcode from "jsbarcode";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QRCodeSVG } from "qrcode.react";
 import { expandLabelBatch, LABEL_FIELD_LABELS } from "./material-label-domain";
-import type { LabelMaterialSnapshot, LabelPrintBatch } from "./material-label-types";
+import type { LabelMaterialSnapshot, LabelModelSnapshot, LabelPrintBatch } from "./material-label-types";
+import { printImagesToWindowsPrinter, rasterizeHtmlToPngBytes } from "./printer-service";
+import type { PrintImageJob } from "./printer-types";
 
 function escapeHtml(value: unknown) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -20,26 +22,29 @@ export function openLabelPrintWindow() {
   return window.open("", "_blank", "popup,width=900,height=700");
 }
 
-export function printLabelRequest(request: LabelPrintBatch, target?: Window | null) {
-  const popup = target ?? openLabelPrintWindow();
-  if (!popup) throw new Error("O navegador bloqueou a janela de impressão. Permita pop-ups e tente novamente.");
-  const model = request.modelo_snapshot;
-  const renderLabel = (material: LabelMaterialSnapshot) => {
-    const qr = model.tipo_identificacao !== "codigo_barras" && material.conteudo_qr_code
-      ? renderToStaticMarkup(<QRCodeSVG value={material.conteudo_qr_code} level="M" size={Math.min(model.altura_mm * 3, model.largura_mm * 1.8)} />) : "";
-    const barcode = model.tipo_identificacao !== "qr_code" && material.codigo_barras ? barcodeMarkup(material.codigo_barras) : "";
-    const fieldValues = { nome: material.nome, codigo_interno: material.codigo_interno, categoria: material.categoria,
-      marca_modelo: [material.marca, material.modelo].filter(Boolean).join(" "), numero_serie: material.numero_serie,
-      numero_patrimonio: material.numero_patrimonio, localizacao: material.localizacao, empresa: material.empresa };
-    const fields = model.campos.map((field, index) => {
-      const value = fieldValues[field];
-      return value ? `<div class="field ${index === 0 ? "primary" : ""}"><small>${escapeHtml(LABEL_FIELD_LABELS[field])}:</small> ${escapeHtml(value)}</div>` : "";
-    }).join("");
-    return `<article class="label"><div class="codes">${qr}${barcode}</div><div class="fields">${fields}</div></article>`;
-  };
-  const labels = expandLabelBatch(request).map(renderLabel).join("");
-  popup.document.open();
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas - lote ${escapeHtml(request.id)}</title><style>
+// One physical label's markup (QR/barcode + fields), shared by both the web
+// print popup below and the desktop rasterize-and-spool path
+// (printLabelBatchDesktop) - both print exactly the same content, only the
+// delivery mechanism differs.
+export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMaterialSnapshot) {
+  const qr = model.tipo_identificacao !== "codigo_barras" && material.conteudo_qr_code
+    ? renderToStaticMarkup(<QRCodeSVG value={material.conteudo_qr_code} level="M" size={Math.min(model.altura_mm * 3, model.largura_mm * 1.8)} />) : "";
+  const barcode = model.tipo_identificacao !== "qr_code" && material.codigo_barras ? barcodeMarkup(material.codigo_barras) : "";
+  const fieldValues = { nome: material.nome, codigo_interno: material.codigo_interno, categoria: material.categoria,
+    marca_modelo: [material.marca, material.modelo].filter(Boolean).join(" "), numero_serie: material.numero_serie,
+    numero_patrimonio: material.numero_patrimonio, localizacao: material.localizacao, empresa: material.empresa };
+  const fields = model.campos.map((field, index) => {
+    const value = fieldValues[field];
+    return value ? `<div class="field ${index === 0 ? "primary" : ""}"><small>${escapeHtml(LABEL_FIELD_LABELS[field])}:</small> ${escapeHtml(value)}</div>` : "";
+  }).join("");
+  return `<article class="label"><div class="codes">${qr}${barcode}</div><div class="fields">${fields}</div></article>`;
+}
+
+// Shared between the popup document (web) and the offscreen rasterization
+// container (desktop) - `@page` only matters for the former, but it's
+// harmless for html2canvas to see it too, so one string serves both.
+export function buildLabelSheetCss(model: LabelModelSnapshot) {
+  return `<style>
     @page { size: ${model.largura_mm}mm ${model.altura_mm}mm; margin: 0; }
     * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: white; }
     .label { width: ${model.largura_mm}mm; height: ${model.altura_mm}mm; padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; page-break-after: always; display: flex; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
@@ -48,6 +53,36 @@ export function printLabelRequest(request: LabelPrintBatch, target?: Window | nu
     .fields { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
     .field { overflow-wrap: anywhere; } .field.primary { font-weight: 700; } small { color: #555; font-size: .72em; }
     @media screen { body { background: #ddd; } .label { margin: 8px auto; background: white; box-shadow: 0 1px 6px #777; } }
-  </style></head><body>${labels}<script>window.addEventListener('load',function(){window.focus();window.print();});</script></body></html>`);
+  </style>`;
+}
+
+export function printLabelRequest(request: LabelPrintBatch, target?: Window | null) {
+  const popup = target ?? openLabelPrintWindow();
+  if (!popup) throw new Error("O navegador bloqueou a janela de impressão. Permita pop-ups e tente novamente.");
+  const model = request.modelo_snapshot;
+  const labels = expandLabelBatch(request).map((material) => renderLabelMarkup(model, material)).join("");
+  popup.document.open();
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas - lote ${escapeHtml(request.id)}</title>${buildLabelSheetCss(model)}</head><body>${labels}<script>window.addEventListener('load',function(){window.focus();window.print();});</script></body></html>`);
   popup.document.close();
+}
+
+// Desktop (Tauri) counterpart to printLabelRequest: same markup/CSS, but
+// instead of a popup + window.print() it rasterizes each distinct material
+// once (not once per physical label - a batch item's `quantidade` repeats
+// happen spooler-side in Rust, off the same bytes) and sends the whole
+// batch through the Windows print spooler in one job. See
+// src-tauri/src/printing.rs for the receiving end.
+export async function printLabelBatchDesktop(printerName: string, batch: LabelPrintBatch): Promise<void> {
+  const model = batch.modelo_snapshot;
+  const css = buildLabelSheetCss(model);
+  const items = [...batch.itens].sort((a, b) => a.ordem - b.ordem);
+  const jobs: PrintImageJob[] = [];
+  for (const item of items) {
+    const html = `${css}${renderLabelMarkup(model, item.material_snapshot)}`;
+    const pngBytes = await rasterizeHtmlToPngBytes({ widthMm: model.largura_mm, heightMm: model.altura_mm, html });
+    jobs.push({ pngBytes, quantity: item.quantidade });
+  }
+  await printImagesToWindowsPrinter(printerName, jobs, `Etiquetas - lote ${batch.id}`, {
+    failed: "Não foi possível enviar a etiqueta para a impressora.",
+  });
 }

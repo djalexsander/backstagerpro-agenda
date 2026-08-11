@@ -1,3 +1,5 @@
+mod printing;
+
 #[derive(serde::Serialize, Clone)]
 struct PrinterInfo {
   name: String,
@@ -148,7 +150,11 @@ mod tests {
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
-    .invoke_handler(tauri::generate_handler![list_windows_printers, is_whatsapp_app_available])
+    .invoke_handler(tauri::generate_handler![
+      list_windows_printers,
+      is_whatsapp_app_available,
+      printing::print_label_batch
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

@@ -16,6 +16,8 @@ import {
   listPrinterConfigs,
   listSystemPrinters,
   openPrintWindow,
+  printImagesToWindowsPrinter,
+  rasterizeHtmlToPngBytes,
   savePrinterConfig,
 } from "@/lib/printer-service";
 import { PRINTER_PURPOSE_LABELS, type PrinterConfig, type PrinterPurpose, type SystemPrinter } from "@/lib/printer-types";
@@ -28,13 +30,28 @@ const DEFAULT_FORMAT: Record<PrinterPurpose, { format: string; width?: number; h
   documento: { format: "A4" },
 };
 
-function buildTestHtml(purpose: PrinterPurpose, config: PrinterConfig | undefined) {
-  const label = PRINTER_PURPOSE_LABELS[purpose];
+// Physical size for the test print - documento is always A4, the other two
+// purposes use the saved format falling back to a generic receipt-ish size
+// (matches the original web-only buildTestHtml behavior exactly; only the
+// return shape changed so both the web <style> string and the desktop
+// rasterization container below can share it).
+function testPrintSizeMm(purpose: PrinterPurpose, config: PrinterConfig | undefined): { widthMm: number; heightMm: number } {
+  if (purpose === "documento") return { widthMm: 210, heightMm: 297 };
   const width = config?.largura_mm ?? DEFAULT_FORMAT[purpose].width;
-  const size = purpose === "documento" ? "210mm 297mm" : width ? `${width}mm ${config?.altura_mm ?? 40}mm` : "80mm 40mm";
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Teste - ${label}</title>
-    <style>@page{size:${size};margin:4mm;} body{font-family:Arial,sans-serif;padding:8px;}</style>
-    </head><body><h3>Teste de impressão</h3><p>Finalidade: ${label}</p><p>Impressora configurada: ${config?.nome_impressora ?? "(nenhuma)"}</p>
+  if (!width) return { widthMm: 80, heightMm: 40 };
+  return { widthMm: width, heightMm: config?.altura_mm ?? 40 };
+}
+
+function testPrintBodyMarkup(purpose: PrinterPurpose, config: PrinterConfig | undefined) {
+  const label = PRINTER_PURPOSE_LABELS[purpose];
+  return `<h3>Teste de impressão</h3><p>Finalidade: ${label}</p><p>Impressora configurada: ${config?.nome_impressora ?? "(nenhuma)"}</p>`;
+}
+
+function buildTestHtml(purpose: PrinterPurpose, config: PrinterConfig | undefined) {
+  const { widthMm, heightMm } = testPrintSizeMm(purpose, config);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Teste - ${PRINTER_PURPOSE_LABELS[purpose]}</title>
+    <style>@page{size:${widthMm}mm ${heightMm}mm;margin:4mm;} body{font-family:Arial,sans-serif;padding:8px;}</style>
+    </head><body>${testPrintBodyMarkup(purpose, config)}
     <script>window.addEventListener('load',function(){window.focus();window.print();});</script></body></html>`;
 }
 
@@ -158,16 +175,37 @@ export default function ConfiguracoesImpressoras() {
       toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" }),
   });
 
-  const handleTestPrint = (purpose: PrinterPurpose) => {
-    const config = configsQuery.data?.find((item) => item.finalidade === purpose);
-    if (desktop && config?.nome_impressora) {
-      toast({
-        title: "Escolha a impressora na janela que vai abrir",
-        description: `Este app ainda não envia a impressão direto para o dispositivo - selecione "${config.nome_impressora}" na janela de impressão do sistema.`,
+  // Web: unchanged popup + window.print() flow. Desktop: no window at all -
+  // rasterizes the same test content and sends it straight to the selected
+  // Windows queue via printImagesToWindowsPrinter, same bridge the label
+  // batch print uses (src/lib/material-label-print.tsx, printLabelBatchDesktop).
+  const testPrintMutation = useMutation({
+    mutationFn: async (purpose: PrinterPurpose) => {
+      const config = configsQuery.data?.find((item) => item.finalidade === purpose);
+      if (!desktop) {
+        openPrintWindow(buildTestHtml(purpose, config));
+        return;
+      }
+      if (!config?.nome_impressora) {
+        throw new Error(`Nenhuma impressora configurada para "${PRINTER_PURPOSE_LABELS[purpose]}".`);
+      }
+      const { widthMm, heightMm } = testPrintSizeMm(purpose, config);
+      const pngBytes = await rasterizeHtmlToPngBytes({
+        widthMm,
+        heightMm,
+        html: `<div style="box-sizing:border-box;width:${widthMm}mm;height:${heightMm}mm;padding:4mm;font-family:Arial,sans-serif;color:#000;background:#fff;">${testPrintBodyMarkup(purpose, config)}</div>`,
       });
-    }
-    openPrintWindow(buildTestHtml(purpose, config));
-  };
+      await printImagesToWindowsPrinter(config.nome_impressora, [{ pngBytes, quantity: 1 }], `Teste - ${PRINTER_PURPOSE_LABELS[purpose]}`);
+    },
+    onSuccess: (_result, purpose) => {
+      if (!desktop) return;
+      const config = configsQuery.data?.find((item) => item.finalidade === purpose);
+      toast({ title: "Teste enviado para a impressora", description: config?.nome_impressora });
+    },
+    onError: (error: Error) => toast({ title: "Não foi possível testar a impressão", description: error.message, variant: "destructive" }),
+  });
+
+  const handleTestPrint = (purpose: PrinterPurpose) => testPrintMutation.mutate(purpose);
 
   if (!companyId) {
     return (
