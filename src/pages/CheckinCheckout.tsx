@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarClock,
+  Camera,
   ClipboardCheck,
   Loader2,
   ListRestart,
@@ -26,6 +27,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MaterialPhotoImage } from "@/components/materials/MaterialPhotoImage";
+import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
 import { CheckoutDialog } from "@/components/checkin-checkout/CheckoutDialog";
 import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
 import { CancelCheckoutDialog } from "@/components/checkin-checkout/CancelCheckoutDialog";
@@ -107,6 +109,7 @@ export default function CheckinCheckout() {
   const [historyPage, setHistoryPage] = useState(1);
   const [historyFilters, setHistoryFilters] = useState(INITIAL_FILTERS);
   const [scannerValue, setScannerValue] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<CustodyMaterialSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchMessage, setSearchMessage] = useState("");
@@ -136,10 +139,16 @@ export default function CheckinCheckout() {
 
   useEffect(() => setHistoryPage(1), [historyFilters]);
 
-  const executeSearch = async (event?: FormEvent) => {
-    event?.preventDefault();
+  // Central identification function - manual typing, USB/Bluetooth scanner
+  // (both submit the form, hitting the FormEvent branch) and the camera
+  // reader (which passes its decoded text directly, see handleQrDetected)
+  // all funnel through this exact same function and the exact same RPC.
+  // No second identification rule was created for the camera.
+  const executeSearch = async (eventOrValue?: FormEvent | string) => {
+    const explicitValue = typeof eventOrValue === "string" ? eventOrValue : undefined;
+    if (typeof eventOrValue !== "string") eventOrValue?.preventDefault();
     if (!companyId) return;
-    const normalized = normalizeCustodyScan(scannerValue);
+    const normalized = normalizeCustodyScan(explicitValue ?? scannerValue);
     if (!normalized) {
       scannerRef.current?.focus();
       return;
@@ -155,6 +164,19 @@ export default function CheckinCheckout() {
     } finally {
       setSearching(false);
     }
+  };
+
+  // onDetected -> setScannerValue -> executeSearch(code) directly, instead
+  // of relying on scannerValue from state: setState is async, so reading
+  // scannerValue back out immediately after setting it isn't guaranteed to
+  // see the new value yet. Passing the decoded text straight through
+  // sidesteps that race entirely.
+  const handleQrDetected = (code: string) => {
+    setScannerValue(code);
+    void executeSearch(code);
+    // Camera reader closed - hand focus back to the identification field so
+    // scanning again (camera, USB/Bluetooth, or typing) works immediately.
+    requestAnimationFrame(() => scannerRef.current?.focus());
   };
 
   const refreshAfterOperation = async () => {
@@ -236,12 +258,21 @@ export default function CheckinCheckout() {
               placeholder="UUID, QR, código de barras, código interno, patrimônio, série ou nome"
               autoComplete="off"
             />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12"
+              onClick={() => setCameraOpen(true)}
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Ler com a câmera
+            </Button>
             <Button className="h-12" disabled={searching} type="submit">
               {searching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanLine className="mr-2 h-4 w-4" />}
               Identificar
             </Button>
           </form>
-          <p className="mt-2 text-xs text-muted-foreground">Scanners USB/Bluetooth funcionam como teclado: mantenha o cursor no campo e finalize com Enter.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Scanners USB/Bluetooth funcionam como teclado: mantenha o cursor no campo e finalize com Enter. Em celulares e tablets, use "Ler com a câmera" para ler o QR Code da etiqueta.</p>
           {searchMessage && <p className="mt-3 rounded-md border border-amber-500/40 p-3 text-sm">{searchMessage}</p>}
           {!!searchResults.length && (
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -320,6 +351,8 @@ export default function CheckinCheckout() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <MaterialQrScanner open={cameraOpen} onOpenChange={setCameraOpen} onDetected={handleQrDetected} />
 
       {companyId && <CheckoutDialog open={!!checkoutMaterial} onOpenChange={(open) => !open && setCheckoutMaterial(null)} companyId={companyId} material={checkoutMaterial} responsibles={responsibles} onSaved={refreshAfterOperation} />}
       {companyId && <CheckinDialog open={!!checkinOperation} onOpenChange={(open) => !open && setCheckinOperation(null)} companyId={companyId} operation={checkinOperation} locations={locations} onSaved={refreshAfterOperation} />}
