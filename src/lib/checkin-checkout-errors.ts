@@ -3,6 +3,19 @@ import {
   type SafeSupabaseError,
 } from "./supabase-error";
 
+// These codes are not defined here — they are raised via
+// `RAISE ... USING ERRCODE` by the SQL functions originally created in
+// supabase/migrations/20260802160000_material_checkin_checkout_stage_three.sql
+// (registrar_checkout_material, registrar_checkin_material,
+// cancelar_checkout_material). registrar_checkin_material was later
+// redefined in
+// supabase/migrations/20260806080000_fix_rental_status_sync_on_generic_checkin.sql
+// — when looking up a code, check for a later `CREATE OR REPLACE FUNCTION`
+// of the same name before trusting the original migration. If an RPC starts
+// raising a new code, it falls back to `fallbackMessage` until a
+// translation is added below. Unique constraint violation names are a
+// separate mechanism, translated via `uniqueConstraintMessages` below, not
+// through this map.
 export const CUSTODY_ERROR_MESSAGES = {
   CI001: "A quantidade devolvida supera a quantidade pendente.",
   CI002: "Material individual deve usar quantidade um.",

@@ -1,3 +1,8 @@
+// Projects the canonical role/module/read-only state onto this screen's
+// four actions. It is not a parallel permission system: recognizedRole and
+// the write roles below are the same three canonical roles used across the
+// project (master_admin, admin_empresa, usuario). The backend RPCs re-check
+// company, module and role independently, so this stays advisory for the UI.
 export interface CustodyPermissions {
   visualizar: boolean;
   checkout: boolean;

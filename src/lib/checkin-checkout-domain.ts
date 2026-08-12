@@ -71,6 +71,10 @@ export function materialMatchesCustodyIdentifier(
 export function getCustodyMaterialActions(
   material: CustodyMaterialSearchResult,
 ) {
+  // Balances at inactive locations are excluded on purpose: the backend
+  // (registrar_checkout_material) rejects a checkout from an inactive
+  // location, so counting that stock as "available" here would offer an
+  // action the RPC would then reject.
   const available = material.saldos.reduce(
     (total, balance) => total + (balance.localizacao_ativa ? balance.quantidade : 0),
     0,
@@ -97,6 +101,11 @@ export function deriveCustodyStatus(
   return "concluida";
 }
 
+// Client-side mirror of the checks `registrar_checkout_material` /
+// `registrar_checkin_material` also run in SQL. This only exists for
+// immediate form feedback — the database remains the sole authority, so a
+// business rule change must land in the RPC first and be mirrored here
+// afterwards. See docs/checkin-checkout-guide.md.
 export function validateCheckout(
   input: CheckoutInput,
   material: CustodyMaterialSearchResult,
@@ -112,6 +121,12 @@ export function validateCheckout(
   if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
     errors.quantity = "Informe uma quantidade inteira maior que zero.";
   } else if (material.tipo_controle === "individual" && input.quantity !== 1) {
+    // Quantity 1 for individual-controlled items is enforced in the database
+    // by the CHECK constraint material_custodias_individual_quantity and
+    // re-validated by the RPC (raises CI002 otherwise). The partial unique
+    // index material_custodias_individual_active_uidx enforces a separate
+    // rule — only one active custody per individual material at a time — and
+    // does not constrain quantity.
     errors.quantity = "Material individual deve sair com quantidade um.";
   } else if (!selectedBalance || input.quantity > selectedBalance.quantidade) {
     errors.quantity = "A quantidade supera o saldo disponível na origem.";

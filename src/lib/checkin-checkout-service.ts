@@ -1,3 +1,8 @@
+// Only entry point for check-in/check-out data access: every export here
+// calls a Supabase RPC. There is no direct insert/update/delete against the
+// custody or stock tables from the frontend — mutations and their stock
+// side effects happen atomically inside the RPCs. See
+// docs/checkin-checkout-guide.md.
 import { supabase } from "@/integrations/supabase/client";
 import { translateCustodyError } from "./checkin-checkout-errors";
 import type {
