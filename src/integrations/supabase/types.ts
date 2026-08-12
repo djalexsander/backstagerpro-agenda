@@ -4776,6 +4776,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      master_provision_company_module_entitlements: {
+        Args: { _empresa_id: string }
+        Returns: undefined
+      }
+      master_set_company_plan: {
+        Args: {
+          _empresa_id: string
+          _plano_id: string
+          _renew_trial?: boolean
+          _status?: string
+          _vencimento?: string | null
+        }
+        Returns: Json
+      }
+      master_set_user_role: {
+        Args: {
+          _empresa_id: string | null
+          _full_name: string
+          _role: string
+          _target_user_id: string
+        }
+        Returns: Json
+      }
       material_is_operationally_available: {
         Args: { _company_id: string; _material_id: string }
         Returns: boolean
@@ -5459,7 +5482,7 @@ export type Database = {
         Returns: Json
       }
       set_company_lifetime_subscription: {
-        Args: { _empresa_id: string }
+        Args: { _empresa_id: string; _status?: string }
         Returns: Json
       }
       set_user_module_permissions: {

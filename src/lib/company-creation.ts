@@ -1,6 +1,5 @@
 export interface CreateCompanyWithAdminParams {
   empresaPayload: Record<string, unknown>;
-  isVitalicio: boolean;
   adminEmail: string | null;
   adminFullName: string;
   adminRole: string;
@@ -9,7 +8,7 @@ export interface CreateCompanyWithAdminParams {
 
 export interface CreateCompanyWithAdminClient {
   insertEmpresa(payload: Record<string, unknown>): Promise<string>;
-  setLifetimeSubscription(empresaId: string): Promise<void>;
+  applyPlan(empresaId: string): Promise<void>;
   provisionModuleEntitlements(empresaId: string): Promise<void>;
   uploadLogo(empresaId: string, file: File): Promise<string | null>;
   updateEmpresaLogo(empresaId: string, logoUrl: string): Promise<void>;
@@ -46,9 +45,10 @@ export async function createCompanyWithAdmin(
   const empresaId = await client.insertEmpresa(params.empresaPayload);
 
   try {
-    if (params.isVitalicio) {
-      await client.setLifetimeSubscription(empresaId);
-    }
+    // One canonical transition covers every plan shape (paid, trial or
+    // vitalícia) - the caller decides which RPC that maps to, this
+    // orchestration just needs the plan applied before provisioning.
+    await client.applyPlan(empresaId);
 
     await client.provisionModuleEntitlements(empresaId);
 

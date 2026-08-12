@@ -70,12 +70,20 @@ export default function UsuariosGlobais() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const profileRes = await supabase.from("profiles").update({ full_name: editName, empresa_id: editEmpresaId || null } as any).eq("user_id", editUser.user_id);
-      if (profileRes.error) throw profileRes.error;
-      if (editUser.roleId) {
-        const roleRes = await supabase.from("user_roles").update({ role: editRole } as any).eq("id", editUser.roleId);
-        if (roleRes.error) throw roleRes.error;
-      }
+      // A user can carry more than one user_roles row (e.g. the "usuario"
+      // role a signup trigger creates, plus "admin_empresa" added later by
+      // Master > Empresas when inviting a company admin). master_set_user_role
+      // reconciles profiles and user_roles to a single canonical role in one
+      // transaction, guarding against a demotion leaving the user with the
+      // old role still active (or no role at all) and against removing the
+      // platform's last master_admin.
+      const { error } = await supabase.rpc("master_set_user_role", {
+        _target_user_id: editUser.user_id,
+        _role: editRole,
+        _full_name: editName,
+        _empresa_id: editEmpresaId || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-users"] });

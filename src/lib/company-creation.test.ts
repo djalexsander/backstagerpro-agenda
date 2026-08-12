@@ -4,7 +4,7 @@ import { createCompanyWithAdmin, type CreateCompanyWithAdminClient } from "./com
 function buildClient(overrides: Partial<CreateCompanyWithAdminClient> = {}): CreateCompanyWithAdminClient {
   return {
     insertEmpresa: vi.fn().mockResolvedValue("empresa-1"),
-    setLifetimeSubscription: vi.fn().mockResolvedValue(undefined),
+    applyPlan: vi.fn().mockResolvedValue(undefined),
     provisionModuleEntitlements: vi.fn().mockResolvedValue(undefined),
     uploadLogo: vi.fn().mockResolvedValue(null),
     updateEmpresaLogo: vi.fn().mockResolvedValue(undefined),
@@ -16,7 +16,6 @@ function buildClient(overrides: Partial<CreateCompanyWithAdminClient> = {}): Cre
 
 const baseParams = {
   empresaPayload: { nome_empresa: "Backstage pro" },
-  isVitalicio: false,
   adminEmail: "admin@example.com",
   adminFullName: "Backstage pro",
   adminRole: "admin_empresa",
@@ -39,12 +38,28 @@ describe("createCompanyWithAdmin", () => {
     expect(client.deleteEmpresa).not.toHaveBeenCalled();
   });
 
-  it("grants the lifetime subscription only when the plan is vitalício", async () => {
+  it("applies the plan for every company, regardless of plan shape", async () => {
     const client = buildClient();
 
-    await createCompanyWithAdmin({ ...baseParams, isVitalicio: true }, client);
+    await createCompanyWithAdmin(baseParams, client);
 
-    expect(client.setLifetimeSubscription).toHaveBeenCalledWith("empresa-1");
+    expect(client.applyPlan).toHaveBeenCalledWith("empresa-1");
+  });
+
+  it("applies the plan before provisioning module entitlements", async () => {
+    const callOrder: string[] = [];
+    const client = buildClient({
+      applyPlan: vi.fn().mockImplementation(async () => {
+        callOrder.push("applyPlan");
+      }),
+      provisionModuleEntitlements: vi.fn().mockImplementation(async () => {
+        callOrder.push("provisionModuleEntitlements");
+      }),
+    });
+
+    await createCompanyWithAdmin(baseParams, client);
+
+    expect(callOrder).toEqual(["applyPlan", "provisionModuleEntitlements"]);
   });
 
   it("skips admin creation entirely when no admin email is provided", async () => {
@@ -79,14 +94,14 @@ describe("createCompanyWithAdmin", () => {
     expect(client.deleteEmpresa).toHaveBeenCalledWith("empresa-1");
   });
 
-  it("rolls back the empresa when granting the lifetime subscription fails", async () => {
+  it("rolls back the empresa when applying the plan fails", async () => {
     const client = buildClient({
-      setLifetimeSubscription: vi.fn().mockRejectedValue(new Error("lifetime rpc failed")),
+      applyPlan: vi.fn().mockRejectedValue(new Error("plan rpc failed")),
     });
 
     await expect(
-      createCompanyWithAdmin({ ...baseParams, isVitalicio: true }, client),
-    ).rejects.toThrow("lifetime rpc failed");
+      createCompanyWithAdmin(baseParams, client),
+    ).rejects.toThrow("plan rpc failed");
     expect(client.provisionModuleEntitlements).not.toHaveBeenCalled();
     expect(client.deleteEmpresa).toHaveBeenCalledWith("empresa-1");
   });

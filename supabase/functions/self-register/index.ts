@@ -221,7 +221,15 @@ Deno.serve(async (req) => {
     await supabaseAdmin.from("notificacoes_master").insert({
       empresa_id: company.id,
       tipo: "auto_cadastro",
-      mensagem: `Nova empresa aguardando confirmação: ${input.companyName} (${input.email})`,
+      // No master approval step exists for self-registered companies: the
+      // company is created active (status "ativo") and the confirmation
+      // below is the responsible user's own e-mail verification link
+      // (Supabase Auth email_confirm flow), not something for the master
+      // account to act on. The wording describes a one-time action already
+      // taken at signup (a link was sent) instead of an open "aguardando"
+      // state, since nothing updates this notification once the e-mail is
+      // actually confirmed.
+      mensagem: `Novo auto-cadastro: ${input.companyName} (${input.email}) — link de confirmação enviado ao responsável.`,
       dados: {
         nome_empresa: input.companyName,
         nome_responsavel: input.responsibleName,
@@ -233,7 +241,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin.from("system_logs").insert({
       tipo: "auth",
       acao: "auto_cadastro_pendente",
-      descricao: `Auto cadastro aguardando confirmação: ${input.companyName} - ${input.responsibleName} (${input.email})`,
+      descricao: `Auto cadastro criado: ${input.companyName} - ${input.responsibleName} (${input.email}) - link de confirmação de e-mail enviado ao responsável`,
       user_id: userId,
       user_name: input.responsibleName,
       empresa_id: company.id,

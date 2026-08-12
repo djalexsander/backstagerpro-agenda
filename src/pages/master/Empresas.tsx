@@ -30,6 +30,10 @@ import {
   isLifetimePlan,
 } from "@/lib/subscription-license";
 import { createCompanyWithAdmin } from "@/lib/company-creation";
+import {
+  resolveEditablePlano,
+  shouldApplyMasterPlanTransition,
+} from "@/lib/master-company-plan-edit";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 
 export default function Empresas() {
@@ -126,79 +130,84 @@ export default function Empresas() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const plano = planos.find((p: any) => p.nome === form.plano);
-      const trialDays = plano?.trial_days || 0;
-
-      const selectedPlano = planos.find((p: any) => p.nome === form.plano);
-      const isVitalicio = isLifetimePlan(selectedPlano);
-      const payload: any = { nome_empresa: form.nome_empresa, email: form.email, telefone: form.telefone, plano: form.plano, status: form.status, vencimento: isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null) };
-
-      if (!editItem) {
-        const today = new Date();
-        payload.data_contrato = format(today, "yyyy-MM-dd");
-        payload.vencimento = isVitalicio ? null : (form.vencimento ? form.vencimento.toISOString() : null);
-        payload.plano_bloqueado = false;
-
-        if (trialDays > 0) {
-          const expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + trialDays);
-          payload.trial_expires_at = expiresAt.toISOString();
-        }
-
-        if (plano && !isVitalicio) {
-          payload.plano_id = plano.id;
-        }
+      // The Select only lists active plans, but an empresa parked on a
+      // legacy/inactive plan must still be editable (name, email, phone,
+      // status) without that plan being reassigned - fall back to the
+      // unfiltered list only when the dropdown still points at the
+      // company's current plan, never for a genuine new selection.
+      const selectedPlano = resolveEditablePlano(planos, allPlanos, editItem, form.plano);
+      if (!selectedPlano) {
+        throw new Error("Plano selecionado não foi encontrado");
       }
+      const isVitalicio = isLifetimePlan(selectedPlano);
+      const vencimentoIso = isVitalicio || !form.vencimento ? null : form.vencimento.toISOString();
+
+      // master_set_company_plan is the single canonical, transactional
+      // transition for every plan shape (paid, trial or vitalícia): it
+      // keeps plano_id, status_pagamento, vencimento, trial_expires_at,
+      // precisa_escolher_plano and plano_bloqueado coherent, and cancels
+      // any pending charge left over from whatever plan the company had
+      // before. It replaces this file's own ad hoc field bookkeeping.
+      const applyPlan = async (empresaId: string) => {
+        const { error } = await supabase.rpc("master_set_company_plan", {
+          _empresa_id: empresaId,
+          _plano_id: selectedPlano.id,
+          _status: form.status,
+          _vencimento: vencimentoIso,
+        });
+        if (error) throw error;
+      };
 
       if (editItem) {
-        if (editItem.plano !== form.plano) {
-          if (trialDays > 0) {
-            const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + trialDays);
-            payload.trial_expires_at = expiresAt.toISOString();
-            payload.plano_bloqueado = false;
-          } else {
-            payload.trial_expires_at = null;
-            payload.plano_bloqueado = false;
-          }
-          if (plano && !isVitalicio) {
-            payload.plano_id = plano.id;
-          }
-        }
+        const payload: Record<string, unknown> = {
+          nome_empresa: form.nome_empresa,
+          email: form.email,
+          telefone: form.telefone,
+        };
 
         // Upload logo if provided
         if (logoFile) {
           payload.logo_url = await uploadLogo(editItem.id);
         }
 
-        const directPayload = isVitalicio
-          ? {
-              nome_empresa: payload.nome_empresa,
-              email: payload.email,
-              telefone: payload.telefone,
-              ...(payload.logo_url ? { logo_url: payload.logo_url } : {}),
-            }
-          : payload;
-        const { error } = await supabase
-          .from("empresas")
-          .update(directPayload)
-          .eq("id", editItem.id);
-        if (error) throw error;
-        if (isVitalicio) {
-          const { error: lifetimeError } = await supabase.rpc(
-            "set_company_lifetime_subscription",
-            { _empresa_id: editItem.id },
-          );
-          if (lifetimeError) throw lifetimeError;
+        if (shouldApplyMasterPlanTransition(editItem, selectedPlano)) {
+          // Re-applied unconditionally whenever the company is (or is
+          // becoming) Vitalícia or trial, or the plan itself changed, so a
+          // status-only edit stays atomic with vencimento and (for trial)
+          // trial_expires_at instead of drifting apart. It also fires for a
+          // paid plan left untouched but still status_pagamento = 'pendente'
+          // - the legacy-inconsistent state a paid plano_id can get stuck in
+          // - so the Master can sanitize it without an artificial plan swap.
+          // The RPC itself keeps this idempotent for trial: re-saving
+          // without an explicit renewal never pushes the expiration further
+          // out.
+          await applyPlan(editItem.id);
+        } else {
+          // Plan unchanged: status/vencimento remain directly editable by
+          // the master without going through the plan-transition RPC.
+          payload.status = form.status;
+          payload.vencimento = vencimentoIso;
         }
 
+        const { error } = await supabase
+          .from("empresas")
+          .update(payload)
+          .eq("id", editItem.id);
+        if (error) throw error;
+
         const { error: provisioningError } = await supabase.rpc(
-          "provision_company_module_entitlements",
+          "master_provision_company_module_entitlements",
           { _empresa_id: editItem.id },
         );
         if (provisioningError) throw provisioningError;
       } else {
-        // The empresa row must exist before the lifetime/provisioning RPCs and
+        const payload: Record<string, unknown> = {
+          nome_empresa: form.nome_empresa,
+          email: form.email,
+          telefone: form.telefone,
+        };
+
+        // The empresa row must exist before the plan/provisioning RPCs and
         // the admin invite can reference it, so creation can't be one client
         // transaction. createCompanyWithAdmin compensates by deleting the
         // empresa if any later step fails, so a rejected create-empresa-user
@@ -207,7 +216,6 @@ export default function Empresas() {
         await createCompanyWithAdmin(
           {
             empresaPayload: payload,
-            isVitalicio,
             adminEmail: form.email || null,
             adminFullName: form.nome_empresa,
             adminRole: form.papel,
@@ -223,16 +231,10 @@ export default function Empresas() {
               if (error) throw error;
               return data.id;
             },
-            setLifetimeSubscription: async (empresaId) => {
-              const { error } = await supabase.rpc(
-                "set_company_lifetime_subscription",
-                { _empresa_id: empresaId },
-              );
-              if (error) throw error;
-            },
+            applyPlan,
             provisionModuleEntitlements: async (empresaId) => {
               const { error } = await supabase.rpc(
-                "provision_company_module_entitlements",
+                "master_provision_company_module_entitlements",
                 { _empresa_id: empresaId },
               );
               if (error) throw error;
@@ -552,34 +554,55 @@ export default function Empresas() {
               <div className="space-y-2">
                 <Label>Plano</Label>
                 <Select value={form.plano} onValueChange={(v) => {
-                  const selectedPlano = planos.find((p: any) => p.nome === v);
+                  const selectedPlano = planos.find((p: any) => p.nome === v) ?? allPlanos.find((p: any) => p.nome === v);
                   const isVitalicio = selectedPlano?.periodicidade === "vitalicio";
                   setForm(p => ({ ...p, plano: v, vencimento: isVitalicio ? null : p.vencimento || addMonths(new Date(), 1) }));
                 }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {planos.map((p: any) => {
+                    {(() => {
+                      // A company parked on a legacy/inactive plan has no
+                      // matching entry in the active-only list below - add
+                      // it back purely so the Select can keep showing (and
+                      // preserving) the plan it's already on. It's never
+                      // offered to a company that isn't already on it.
+                      const activeNomes = new Set(planos.map((p: any) => p.nome));
+                      const currentLegacyPlano =
+                        editItem?.plano && !activeNomes.has(editItem.plano)
+                          ? allPlanos.find((p: any) => p.nome === editItem.plano)
+                          : null;
+                      const planoOptions = currentLegacyPlano ? [...planos, currentLegacyPlano] : planos;
+                      return planoOptions.map((p: any) => {
                       const sufixo = p.periodicidade === "vitalicio" ? "" : p.periodicidade === "anual" ? "/ano" : "/mês";
+                      const isLegacyOption = currentLegacyPlano && p.nome === currentLegacyPlano.nome;
                       return (
                         <SelectItem key={p.nome} value={p.nome} className="capitalize">
-                          {p.nome} — R$ {Number(p.valor).toFixed(2)}{sufixo}
+                          {p.nome} — R$ {Number(p.valor).toFixed(2)}{sufixo}{isLegacyOption ? " (atual, inativo)" : ""}
                         </SelectItem>
                       );
-                    })}
+                      });
+                    })()}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Papel do Usuário</Label>
-                <Select value={form.papel} onValueChange={(v) => setForm(p => ({ ...p, papel: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin_empresa">Admin da Empresa</SelectItem>
-                    <SelectItem value="usuario">Usuário</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!editItem && (
+                <div className="space-y-2">
+                  <Label>Papel do Usuário</Label>
+                  <Select value={form.papel} onValueChange={(v) => setForm(p => ({ ...p, papel: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin_empresa">Admin da Empresa</SelectItem>
+                      <SelectItem value="usuario">Usuário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
+            {editItem && (
+              <p className="text-xs text-muted-foreground">
+                Para alterar o papel de um usuário desta empresa, use Master &gt; Usuários Globais.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Status</Label>
