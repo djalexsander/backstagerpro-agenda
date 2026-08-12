@@ -14,12 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, FileText, Image, Loader2 } from "lucide-react";
+import { CalendarIcon, FileText, Image, Loader2, Printer } from "lucide-react";
 import { format, startOfMonth, parseISO } from "date-fns";
 import { toast } from "sonner";
 import type { ExportFormat } from "@/lib/pdf-export";
 import {
   executeReportExport,
+  executeReportPrint,
   MONTHS,
   MODES_BY_REPORT,
   REPORT_TITLES,
@@ -34,7 +35,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reportType: ReportType;
-  exportFormat: ExportFormat;
+  exportFormat: ExportFormat | "print";
 }
 
 export function ReportExportModal({ open, onOpenChange, reportType, exportFormat }: Props) {
@@ -107,14 +108,24 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
     setExporting(true);
 
     try {
-      await executeReportExport({
-        empresaId,
-        reportType,
-        exportFormat,
-        filters,
-        branding: { empresaNome, empresaLogoUrl },
-        includeRentals: rentalsPermissions.visualizar,
-      });
+      if (exportFormat === "print") {
+        await executeReportPrint({
+          empresaId,
+          companyName: empresaNome || "Backstage Pro",
+          reportType,
+          filters,
+          includeRentals: rentalsPermissions.visualizar,
+        });
+      } else {
+        await executeReportExport({
+          empresaId,
+          reportType,
+          exportFormat,
+          filters,
+          branding: { empresaNome, empresaLogoUrl },
+          includeRentals: rentalsPermissions.visualizar,
+        });
+      }
 
       onOpenChange(false);
     } catch (err) {
@@ -130,11 +141,11 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {exportFormat === "pdf" ? <FileText className="h-5 w-5 text-primary" /> : <Image className="h-5 w-5 text-primary" />}
-            Exportar {REPORT_TITLES[reportType]}
+            {exportFormat === "pdf" ? <FileText className="h-5 w-5 text-primary" /> : exportFormat === "png" ? <Image className="h-5 w-5 text-primary" /> : <Printer className="h-5 w-5 text-primary" />}
+            {exportFormat === "print" ? "Imprimir" : "Exportar"} {REPORT_TITLES[reportType]}
           </DialogTitle>
           <DialogDescription>
-            Configure o recorte do relatório antes de gerar o arquivo.
+            Configure o recorte do relatório antes de {exportFormat === "print" ? "imprimir" : "gerar o arquivo"}.
           </DialogDescription>
         </DialogHeader>
 
@@ -143,7 +154,7 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
           <div className="flex items-center gap-2">
             <Label className="text-sm text-muted-foreground w-20">Formato</Label>
             <span className="text-sm font-medium uppercase bg-primary/10 text-primary px-2.5 py-0.5 rounded">
-              {exportFormat}
+              {exportFormat === "print" ? "Impressão A4" : exportFormat}
             </span>
           </div>
 
@@ -246,9 +257,9 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
           </Button>
           <Button onClick={handleConfirmExport} disabled={exporting}>
             {exporting ? (
-              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando {exportFormat.toUpperCase()}...</>
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> {exportFormat === "print" ? "Preparando impressão..." : `Gerando ${exportFormat.toUpperCase()}...`}</>
             ) : (
-              <>Gerar {exportFormat.toUpperCase()}</>
+              <>{exportFormat === "print" ? "Imprimir" : `Gerar ${exportFormat.toUpperCase()}`}</>
             )}
           </Button>
         </DialogFooter>

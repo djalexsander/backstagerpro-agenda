@@ -1,38 +1,44 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   toastMock,
   isDesktopRuntimeMock,
+  getConfiguredPrinterMock,
   listPrinterConfigsMock,
+  listBobinaProfilesMock,
   registerLabelPrintBatchMock,
-  openLabelPrintWindowMock,
-  printLabelBatchDesktopMock,
-  printLabelRequestMock,
+  printLabelBatchMock,
 } = vi.hoisted(() => ({
   toastMock: vi.fn(),
   isDesktopRuntimeMock: vi.fn(),
+  getConfiguredPrinterMock: vi.fn(),
   listPrinterConfigsMock: vi.fn(),
+  listBobinaProfilesMock: vi.fn(),
   registerLabelPrintBatchMock: vi.fn(),
-  openLabelPrintWindowMock: vi.fn(),
-  printLabelBatchDesktopMock: vi.fn(),
-  printLabelRequestMock: vi.fn(),
+  printLabelBatchMock: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
 vi.mock("@/lib/printer-service", () => ({
   isDesktopRuntime: isDesktopRuntimeMock,
+  getConfiguredPrinter: getConfiguredPrinterMock,
   listPrinterConfigs: listPrinterConfigsMock,
+}));
+// resolveBobinaProfile is left real (pure, no side effects) - only the RPC
+// call is mocked, same "mock the lowest boundary" approach as printer-service above.
+vi.mock("@/lib/bobina-profile-service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/bobina-profile-service")>()),
+  listBobinaProfiles: listBobinaProfilesMock,
 }));
 vi.mock("@/lib/material-label-service", () => ({ registerLabelPrintBatch: registerLabelPrintBatchMock }));
 vi.mock("@/lib/material-label-print", () => ({
-  openLabelPrintWindow: openLabelPrintWindowMock,
-  printLabelBatchDesktop: printLabelBatchDesktopMock,
-  printLabelRequest: printLabelRequestMock,
+  printLabelBatch: printLabelBatchMock,
 }));
 
 import { LabelPrintDialog } from "./LabelPrintDialog";
+import type { BobinaProfile } from "@/lib/bobina-profile-types";
 import type { LabelBatchSelection, LabelMaterial, LabelModel, LabelPrintBatch } from "@/lib/material-label-types";
 
 const model: LabelModel = {
@@ -101,46 +107,31 @@ describe("LabelPrintDialog", () => {
   beforeEach(() => {
     toastMock.mockReset();
     isDesktopRuntimeMock.mockReset();
-    listPrinterConfigsMock.mockReset();
+    getConfiguredPrinterMock.mockReset();
+    listPrinterConfigsMock.mockReset().mockResolvedValue([]);
+    listBobinaProfilesMock.mockReset().mockResolvedValue([]);
     registerLabelPrintBatchMock.mockReset().mockResolvedValue(fakeRecord);
-    openLabelPrintWindowMock.mockReset();
-    printLabelBatchDesktopMock.mockReset().mockResolvedValue(undefined);
-    printLabelRequestMock.mockReset();
+    printLabelBatchMock.mockReset().mockResolvedValue(undefined);
   });
   afterEach(() => vi.clearAllMocks());
 
-  it("web: shows the popup-blocked message and never registers the batch when window.open is blocked", async () => {
+  it("web: registers the batch and delegates to the canonical iframe print flow", async () => {
     isDesktopRuntimeMock.mockReturnValue(false);
-    openLabelPrintWindowMock.mockReturnValue(null);
     renderDialog();
 
     clickPrint();
 
-    await waitFor(() =>
-      expect(toastMock).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "Não foi possível imprimir", description: expect.stringMatching(/navegador bloqueou/i) }),
-      ),
-    );
-    expect(registerLabelPrintBatchMock).not.toHaveBeenCalled();
-  });
-
-  it("web: registers the batch and prints into the already-open popup, never touching the desktop bridge", async () => {
-    isDesktopRuntimeMock.mockReturnValue(false);
-    const popup = { close: vi.fn() } as unknown as Window;
-    openLabelPrintWindowMock.mockReturnValue(popup);
-    renderDialog();
-
-    clickPrint();
-
-    await waitFor(() => expect(printLabelRequestMock).toHaveBeenCalledWith(fakeRecord, popup));
+    // No printer config / bobina profile exists in these fixtures, so the
+    // resolved profile is null - printLabelBatch falls back to
+    // legacyProfileFromModel internally, same as before this feature existed.
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, undefined, null));
     expect(registerLabelPrintBatchMock).toHaveBeenCalledWith("company-1", expect.objectContaining({ model, items }));
-    expect(listPrinterConfigsMock).not.toHaveBeenCalled();
-    expect(printLabelBatchDesktopMock).not.toHaveBeenCalled();
+    expect(getConfiguredPrinterMock).not.toHaveBeenCalled();
   });
 
   it("desktop: shows a specific error and never registers the batch when no printer is configured for etiqueta", async () => {
     isDesktopRuntimeMock.mockReturnValue(true);
-    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "cupom", nome_impressora: "POS-80" }]);
+    getConfiguredPrinterMock.mockRejectedValue(new Error("Nenhuma impressora de etiquetas configurada. Configure em Configurações > Impressoras."));
     renderDialog();
 
     clickPrint();
@@ -151,28 +142,27 @@ describe("LabelPrintDialog", () => {
       ),
     );
     expect(registerLabelPrintBatchMock).not.toHaveBeenCalled();
-    expect(printLabelBatchDesktopMock).not.toHaveBeenCalled();
+    expect(printLabelBatchMock).not.toHaveBeenCalled();
   });
 
   it("desktop: registers the batch, then sends it straight to the configured printer with no popup and no window.open", async () => {
     isDesktopRuntimeMock.mockReturnValue(true);
-    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", nome_impressora: "LABEL" }]);
+    const configuredPrinter = { finalidade: "etiqueta", nome_impressora: "LABEL", ativo: true };
+    getConfiguredPrinterMock.mockResolvedValue(configuredPrinter);
     const { onPrinted, onOpenChange } = renderDialog();
 
     clickPrint();
 
-    await waitFor(() => expect(printLabelBatchDesktopMock).toHaveBeenCalledWith("LABEL", fakeRecord));
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, configuredPrinter, null));
     expect(registerLabelPrintBatchMock).toHaveBeenCalledWith("company-1", expect.objectContaining({ model, items }));
-    expect(openLabelPrintWindowMock).not.toHaveBeenCalled();
-    expect(printLabelRequestMock).not.toHaveBeenCalled();
     await waitFor(() => expect(onPrinted).toHaveBeenCalled());
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it("desktop: reuses the same client_uuid across retries after a failed print, instead of registering a duplicate", async () => {
     isDesktopRuntimeMock.mockReturnValue(true);
-    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", nome_impressora: "LABEL" }]);
-    printLabelBatchDesktopMock.mockRejectedValueOnce(new Error("Não foi possível enviar a etiqueta para a impressora."));
+    getConfiguredPrinterMock.mockResolvedValue({ finalidade: "etiqueta", nome_impressora: "LABEL", ativo: true });
+    printLabelBatchMock.mockRejectedValueOnce(new Error("Não foi possível enviar a etiqueta para a impressora."));
     renderDialog();
 
     clickPrint();
@@ -184,5 +174,65 @@ describe("LabelPrintDialog", () => {
     const secondUuid = registerLabelPrintBatchMock.mock.calls[1][1].clientUuid;
 
     expect(secondUuid).toBe(firstUuid);
+  });
+});
+
+function bobinaProfile(overrides: Partial<BobinaProfile> = {}): BobinaProfile {
+  return {
+    id: "profile-1", empresa_id: "company-1", nome: "50x30 - 2 colunas",
+    largura_etiqueta_mm: 50, altura_etiqueta_mm: 30, colunas: 2,
+    espacamento_horizontal_mm: 4, espacamento_vertical_mm: 2,
+    margem_esquerda_mm: 2, margem_direita_mm: 2, margem_superior_mm: 2, margem_inferior_mm: 2,
+    orientacao: "retrato", largura_midia_mm: null, offset_horizontal_mm: 0, offset_vertical_mm: 0,
+    dpi: "automatico", dpi_personalizado: null, padrao: false, ativo: true, updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("LabelPrintDialog bobina profile resolution", () => {
+  beforeEach(() => {
+    toastMock.mockReset();
+    isDesktopRuntimeMock.mockReset().mockReturnValue(false);
+    getConfiguredPrinterMock.mockReset();
+    registerLabelPrintBatchMock.mockReset().mockResolvedValue(fakeRecord);
+    printLabelBatchMock.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(() => vi.clearAllMocks());
+
+  it("resolves the profile linked to the etiqueta printer config and forwards it to printLabelBatch", async () => {
+    const linked = bobinaProfile({ id: "profile-linked" });
+    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", perfil_bobina_padrao_id: "profile-linked" }]);
+    listBobinaProfilesMock.mockResolvedValue([bobinaProfile({ id: "profile-other", padrao: true }), linked]);
+    renderDialog();
+
+    await screen.findByText(/50x30 - 2 colunas/);
+    clickPrint();
+
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, undefined, linked));
+  });
+
+  it("falls back to the company's default profile when the printer has none linked yet", async () => {
+    const defaultProfile = bobinaProfile({ id: "profile-default", padrao: true });
+    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", perfil_bobina_padrao_id: null }]);
+    listBobinaProfilesMock.mockResolvedValue([defaultProfile]);
+    renderDialog();
+
+    await screen.findByText(/50x30 - 2 colunas/);
+    clickPrint();
+
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, undefined, defaultProfile));
+  });
+
+  it("shows the bobina's layout preview (columns from the resolved profile), not the old one-card-per-material grid", async () => {
+    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", perfil_bobina_padrao_id: "profile-1" }]);
+    listBobinaProfilesMock.mockResolvedValue([bobinaProfile()]);
+    renderDialog();
+
+    expect(await screen.findByText(/Layout na bobina — 50x30 - 2 colunas/)).toBeInTheDocument();
+    // items = [{ material: Furadeira, quantity: 2 }] -> flattened to 2 identical cells on a 2-column bobina, i.e. one row.
+    // Scoped to the preview grid itself: LabelCanvas's separate "Conteúdo
+    // da etiqueta" sample also renders the material's name as a field.
+    const grid = await screen.findByTestId("bobina-preview");
+    expect(within(grid).getAllByText("Furadeira")).toHaveLength(2);
   });
 });

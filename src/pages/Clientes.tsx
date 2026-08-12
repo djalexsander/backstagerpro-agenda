@@ -33,7 +33,7 @@ import type { CustomerOption } from "@/lib/material-rental-types";
 import { listMaterialRentals } from "@/lib/material-rental-service";
 import { listClientsReceivable } from "@/lib/financial-ledger-service";
 import { buildClientReportHtml } from "@/lib/client-report-print";
-import { openPrintWindow } from "@/lib/printer-service";
+import { printHtmlDocument } from "@/lib/printer-service";
 
 const emptyForm: SaveClientInput = {
   personType: "pessoa_fisica",
@@ -84,7 +84,14 @@ export default function Clientes() {
         listClientsReceivable(companyId).catch(() => []),
       ]);
       const receivable = receivableRows.find((row) => row.cliente_id === client.id) ?? null;
-      openPrintWindow(buildClientReportHtml(empresaNome || "Backstage Pro", client, rentalsPage.items, receivable));
+      await printHtmlDocument({
+        companyId,
+        purpose: "documento",
+        documentName: `Relatório do cliente - ${client.nome_fantasia || client.nome}`,
+        widthMm: 210,
+        heightMm: 297,
+        html: buildClientReportHtml(empresaNome || "Backstage Pro", client, rentalsPage.items, receivable),
+      });
     } catch (error) {
       toast({ title: "Não foi possível gerar o relatório", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
     } finally {

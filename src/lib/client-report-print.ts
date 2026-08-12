@@ -43,9 +43,11 @@ export function buildClientReportHtml(
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Relatório do cliente - ${escapeHtml(client.nome)}</title>
   <style>
-    @page { size: A4; margin: 18mm; }
+    @page { size: A4; margin: 12mm; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body { width: 210mm; font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+    .print-document { width: 100%; padding: 12mm; background: #fff; font-family: Arial, sans-serif; font-size: 12px; color: #111; }
     h1 { font-size: 18px; margin: 0 0 4px; }
     h2 { font-size: 14px; margin: 18px 0 6px; border-bottom: 1px solid #999; padding-bottom: 2px; }
     .muted { color: #555; }
@@ -56,9 +58,10 @@ export function buildClientReportHtml(
     .summary div { min-width: 140px; }
     .summary .label { font-size: 10px; color: #555; }
     .summary .value { font-size: 14px; font-weight: bold; }
-    @media screen { body { max-width: 760px; margin: 24px auto; } }
+    @media screen { body { margin: 24px auto; box-shadow: 0 1px 8px #999; } }
+    @media print { body { width: auto; } .print-document { padding: 0; } }
   </style></head>
-  <body>
+  <body><main class="print-document">
     <h1>${escapeHtml(empresaNome)}</h1>
     <p class="muted">Relatório do cliente — gerado em ${new Date().toLocaleString("pt-BR")}</p>
 
@@ -83,5 +86,5 @@ export function buildClientReportHtml(
       <thead><tr><th>Número</th><th>Retirada</th><th>Devolução</th><th>Status</th><th>Itens</th><th class="right">Valor</th></tr></thead>
       <tbody>${rentalRows || `<tr><td colspan="6" class="muted">Nenhuma locação encontrada.</td></tr>`}</tbody>
     </table>
-  </body></html>`;
+  </main></body></html>`;
 }

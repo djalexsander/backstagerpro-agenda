@@ -1,26 +1,35 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Printer as PrinterIcon, RefreshCw } from "lucide-react";
+import { BobinaProfilesSection } from "@/components/printer-settings/BobinaProfilesSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { listBobinaProfiles, resolveBobinaProfile } from "@/lib/bobina-profile-service";
+import { legacyProfileFromModel } from "@/lib/label-layout-engine";
+import { printBobinaTestPage } from "@/lib/material-label-print";
 import { getPrinterPermissions } from "@/lib/printer-permissions";
 import {
   isDesktopRuntime,
   isPrinterCurrentlyInstalled,
   listPrinterConfigs,
   listSystemPrinters,
-  openPrintWindow,
-  printImagesToWindowsPrinter,
-  rasterizeHtmlToPngBytes,
+  printHtmlDocument,
+  resolveEffectivePrinterConfig,
   savePrinterConfig,
 } from "@/lib/printer-service";
 import { PRINTER_PURPOSE_LABELS, type PrinterConfig, type PrinterPurpose, type SystemPrinter } from "@/lib/printer-types";
+import {
+  clearTerminalPrinterOverride,
+  hasTerminalPrinterOverride,
+  saveTerminalPrinterOverride,
+} from "@/lib/terminal-printer-config";
 
 const PURPOSES: PrinterPurpose[] = ["etiqueta", "cupom", "documento"];
 
@@ -29,6 +38,21 @@ const DEFAULT_FORMAT: Record<PrinterPurpose, { format: string; width?: number; h
   cupom: { format: "58mm", width: 58 },
   documento: { format: "A4" },
 };
+
+type PrinterDraft = { printerName: string; format: string; width: string; height: string; bobinaProfileId: string };
+
+/** Shared by the initial draft-seeding effect and "usar padrão da empresa"
+ * (handleClearOverride) so the two never drift into different field-mapping
+ * logic for the same PrinterConfig -> form-state conversion. */
+function draftFromConfig(purpose: PrinterPurpose, config: PrinterConfig | undefined): PrinterDraft {
+  return {
+    printerName: config?.nome_impressora ?? "",
+    format: config?.formato ?? DEFAULT_FORMAT[purpose].format,
+    width: config?.largura_mm != null ? String(config.largura_mm) : DEFAULT_FORMAT[purpose].width != null ? String(DEFAULT_FORMAT[purpose].width) : "",
+    height: config?.altura_mm != null ? String(config.altura_mm) : DEFAULT_FORMAT[purpose].height != null ? String(DEFAULT_FORMAT[purpose].height) : "",
+    bobinaProfileId: config?.perfil_bobina_padrao_id ?? "",
+  };
+}
 
 // Physical size for the test print - documento is always A4, the other two
 // purposes use the saved format falling back to a generic receipt-ish size
@@ -47,12 +71,15 @@ function testPrintBodyMarkup(purpose: PrinterPurpose, config: PrinterConfig | un
   return `<h3>Teste de impressão</h3><p>Finalidade: ${label}</p><p>Impressora configurada: ${config?.nome_impressora ?? "(nenhuma)"}</p>`;
 }
 
-function buildTestHtml(purpose: PrinterPurpose, config: PrinterConfig | undefined) {
-  const { widthMm, heightMm } = testPrintSizeMm(purpose, config);
+function buildTestHtml(
+  purpose: PrinterPurpose,
+  config: PrinterConfig | undefined,
+  size = testPrintSizeMm(purpose, config),
+) {
+  const { widthMm, heightMm } = size;
   return `<!doctype html><html><head><meta charset="utf-8"><title>Teste - ${PRINTER_PURPOSE_LABELS[purpose]}</title>
     <style>@page{size:${widthMm}mm ${heightMm}mm;margin:4mm;} body{font-family:Arial,sans-serif;padding:8px;}</style>
-    </head><body>${testPrintBodyMarkup(purpose, config)}
-    <script>window.addEventListener('load',function(){window.focus();window.print();});</script></body></html>`;
+    </head><body>${testPrintBodyMarkup(purpose, config)}</body></html>`;
 }
 
 // Isolated so the desktop/web branching in the main component stays
@@ -133,73 +160,146 @@ export default function ConfiguracoesImpressoras() {
   });
   const defaultSystemPrinter = systemPrintersQuery.data?.find((printer) => printer.isDefault);
 
-  const [drafts, setDrafts] = useState<Record<PrinterPurpose, { printerName: string; format: string; width: string; height: string }>>({
-    etiqueta: { printerName: "", format: "", width: "", height: "" },
-    cupom: { printerName: "", format: "", width: "", height: "" },
-    documento: { printerName: "", format: "", width: "", height: "" },
+  // Bobina profiles are company-wide (not per-purpose), but only the
+  // etiqueta card offers a picker for them - see section 7/8 of the
+  // request: a printer isn't permanently tied to one size, it just points
+  // at whichever profile is currently loaded.
+  const bobinaProfilesQuery = useQuery({
+    queryKey: ["bobina-profiles", companyId],
+    queryFn: () => listBobinaProfiles(companyId!),
+    enabled: Boolean(companyId && permissions.visualizar),
   });
 
+  const [drafts, setDrafts] = useState<Record<PrinterPurpose, PrinterDraft>>({
+    etiqueta: { printerName: "", format: "", width: "", height: "", bobinaProfileId: "" },
+    cupom: { printerName: "", format: "", width: "", height: "", bobinaProfileId: "" },
+    documento: { printerName: "", format: "", width: "", height: "", bobinaProfileId: "" },
+  });
+  // Whether THIS terminal has its own saved selection per purpose (see
+  // src/lib/terminal-printer-config.ts) - drives the status line/badge and
+  // the "usar padrão da empresa" action in each card below.
+  const [terminalOverrideActive, setTerminalOverrideActive] = useState<Record<PrinterPurpose, boolean>>({
+    etiqueta: false, cupom: false, documento: false,
+  });
+  // Per-purpose opt-in checked right before "Salvar": when on, saving also
+  // writes the company-wide default (empresa_impressora_config) in addition
+  // to this terminal's local override, so a fresh/never-configured terminal
+  // has something sensible to fall back to. Off by default so the ordinary
+  // save action never silently touches another terminal's fallback.
+  const [setAsCompanyDefault, setSetAsCompanyDefault] = useState<Record<PrinterPurpose, boolean>>({
+    etiqueta: false, cupom: false, documento: false,
+  });
+
+  /** Local override (if this terminal has one) layered over the company
+   * default - the same resolution every real print job goes through
+   * (resolveEffectivePrinterConfig, called internally by getConfiguredPrinter
+   * in printer-service.ts). Keeping the settings screen on this exact
+   * function is what guarantees "o que a tela mostra é o que vai imprimir". */
+  function getEffectiveConfig(purpose: PrinterPurpose): PrinterConfig | undefined {
+    if (!companyId) return undefined;
+    return resolveEffectivePrinterConfig(companyId, configsQuery.data ?? [], purpose) ?? undefined;
+  }
+
   useEffect(() => {
-    if (!configsQuery.data) return;
+    if (!companyId) return;
+    setTerminalOverrideActive({
+      etiqueta: hasTerminalPrinterOverride(companyId, "etiqueta"),
+      cupom: hasTerminalPrinterOverride(companyId, "cupom"),
+      documento: hasTerminalPrinterOverride(companyId, "documento"),
+    });
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!configsQuery.data || !companyId) return;
     setDrafts((current) => {
       const next = { ...current };
       for (const purpose of PURPOSES) {
-        const existing = configsQuery.data!.find((item) => item.finalidade === purpose);
-        next[purpose] = {
-          printerName: existing?.nome_impressora ?? "",
-          format: existing?.formato ?? DEFAULT_FORMAT[purpose].format,
-          width: existing?.largura_mm != null ? String(existing.largura_mm) : DEFAULT_FORMAT[purpose].width != null ? String(DEFAULT_FORMAT[purpose].width) : "",
-          height: existing?.altura_mm != null ? String(existing.altura_mm) : DEFAULT_FORMAT[purpose].height != null ? String(DEFAULT_FORMAT[purpose].height) : "",
-        };
+        const effective = resolveEffectivePrinterConfig(companyId, configsQuery.data!, purpose);
+        next[purpose] = draftFromConfig(purpose, effective ?? undefined);
       }
       return next;
     });
-  }, [configsQuery.data]);
+  }, [configsQuery.data, companyId]);
 
   const saveMutation = useMutation({
-    mutationFn: (purpose: PrinterPurpose) => {
+    mutationFn: async (purpose: PrinterPurpose) => {
       const draft = drafts[purpose];
-      return savePrinterConfig(companyId!, {
-        purpose,
+      saveTerminalPrinterOverride(companyId!, purpose, {
         printerName: draft.printerName,
         format: draft.format,
-        widthMm: draft.width ? Number(draft.width) : undefined,
-        heightMm: draft.height ? Number(draft.height) : undefined,
+        widthMm: draft.width ? Number(draft.width) : null,
+        heightMm: draft.height ? Number(draft.height) : null,
+        orientation: "retrato",
+        bobinaProfileId: purpose === "etiqueta" ? (draft.bobinaProfileId || null) : null,
       });
+      if (setAsCompanyDefault[purpose]) {
+        await savePrinterConfig(companyId!, {
+          purpose,
+          printerName: draft.printerName,
+          format: draft.format,
+          widthMm: draft.width ? Number(draft.width) : undefined,
+          heightMm: draft.height ? Number(draft.height) : undefined,
+          bobinaProfileId: purpose === "etiqueta" ? (draft.bobinaProfileId || null) : undefined,
+        });
+      }
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["printer-configs", companyId] });
-      toast({ title: "Configuração de impressora salva" });
+    onSuccess: async (_result, purpose) => {
+      setTerminalOverrideActive((current) => ({ ...current, [purpose]: true }));
+      if (setAsCompanyDefault[purpose]) {
+        await queryClient.invalidateQueries({ queryKey: ["printer-configs", companyId] });
+      }
+      toast({
+        title: "Configuração salva neste terminal",
+        description: setAsCompanyDefault[purpose] ? "Também definida como padrão da empresa." : undefined,
+      });
     },
     onError: (error: Error) =>
       toast({ title: "Não foi possível salvar", description: error.message, variant: "destructive" }),
   });
 
-  // Web: unchanged popup + window.print() flow. Desktop: no window at all -
-  // rasterizes the same test content and sends it straight to the selected
-  // Windows queue via printImagesToWindowsPrinter, same bridge the label
-  // batch print uses (src/lib/material-label-print.tsx, printLabelBatchDesktop).
+  function handleClearOverride(purpose: PrinterPurpose) {
+    if (!companyId) return;
+    clearTerminalPrinterOverride(companyId, purpose);
+    setTerminalOverrideActive((current) => ({ ...current, [purpose]: false }));
+    // Override is gone, so this now resolves straight to the company default.
+    const fallback = resolveEffectivePrinterConfig(companyId, configsQuery.data ?? [], purpose);
+    setDrafts((current) => ({ ...current, [purpose]: draftFromConfig(purpose, fallback ?? undefined) }));
+    toast({ title: "Configuração deste terminal removida", description: "Este terminal volta a usar o padrão da empresa." });
+  }
+
   const testPrintMutation = useMutation({
     mutationFn: async (purpose: PrinterPurpose) => {
-      const config = configsQuery.data?.find((item) => item.finalidade === purpose);
-      if (!desktop) {
-        openPrintWindow(buildTestHtml(purpose, config));
+      const config = getEffectiveConfig(purpose);
+      // Etiqueta goes through the exact same bobina pipeline a real batch
+      // uses (printBobinaTestPage - section 11 of the request), not the
+      // generic single-box test page below. cupom/documento are untouched.
+      if (purpose === "etiqueta") {
+        const profile = resolveBobinaProfile(bobinaProfilesQuery.data ?? [], config?.perfil_bobina_padrao_id)
+          ?? legacyProfileFromModel({
+            largura_mm: config?.largura_mm ?? DEFAULT_FORMAT.etiqueta.width ?? 50,
+            altura_mm: config?.altura_mm ?? DEFAULT_FORMAT.etiqueta.height ?? 30,
+          });
+        await printBobinaTestPage(companyId!, profile);
         return;
       }
-      if (!config?.nome_impressora) {
-        throw new Error(`Nenhuma impressora configurada para "${PRINTER_PURPOSE_LABELS[purpose]}".`);
-      }
       const { widthMm, heightMm } = testPrintSizeMm(purpose, config);
-      const pngBytes = await rasterizeHtmlToPngBytes({
-        widthMm,
-        heightMm,
-        html: `<div style="box-sizing:border-box;width:${widthMm}mm;height:${heightMm}mm;padding:4mm;font-family:Arial,sans-serif;color:#000;background:#fff;">${testPrintBodyMarkup(purpose, config)}</div>`,
+      await printHtmlDocument({
+        companyId: companyId!,
+        purpose,
+        documentName: `Teste - ${PRINTER_PURPOSE_LABELS[purpose]}`,
+        widthMm: purpose === "documento" ? 210 : undefined,
+        heightMm: purpose === "documento" ? 297 : undefined,
+        dynamicHeight: purpose === "cupom",
+        paginate: false,
+        html: (layout) => buildTestHtml(purpose, config, {
+          widthMm: layout.widthMm,
+          heightMm: layout.heightMm ?? heightMm,
+        }),
       });
-      await printImagesToWindowsPrinter(config.nome_impressora, [{ pngBytes, quantity: 1 }], `Teste - ${PRINTER_PURPOSE_LABELS[purpose]}`);
     },
     onSuccess: (_result, purpose) => {
       if (!desktop) return;
-      const config = configsQuery.data?.find((item) => item.finalidade === purpose);
+      const config = getEffectiveConfig(purpose);
       toast({ title: "Teste enviado para a impressora", description: config?.nome_impressora });
     },
     onError: (error: Error) => toast({ title: "Não foi possível testar a impressão", description: error.message, variant: "destructive" }),
@@ -265,8 +365,9 @@ export default function ConfiguracoesImpressoras() {
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
           {PURPOSES.map((purpose) => {
-            const config = configsQuery.data?.find((item) => item.finalidade === purpose);
+            const config = getEffectiveConfig(purpose);
             const draft = drafts[purpose];
+            const hasOverride = terminalOverrideActive[purpose];
             return (
               <Card key={purpose}>
                 <CardHeader>
@@ -281,6 +382,21 @@ export default function ConfiguracoesImpressoras() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {hasOverride ? (
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2 py-1.5 text-xs">
+                      <span>Configuração específica deste terminal</span>
+                      {permissions.configurar && (
+                        <Button
+                          type="button" variant="link" size="sm" className="h-auto p-0 text-xs"
+                          onClick={() => handleClearOverride(purpose)}
+                        >
+                          Usar padrão da empresa
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Usando a configuração padrão da empresa neste terminal.</p>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor={`printer-name-${purpose}`}>Impressora{desktop ? "" : " (apelido)"}</Label>
                     {desktop ? (
@@ -327,16 +443,52 @@ export default function ConfiguracoesImpressoras() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2 pt-2">
+                  {purpose === "etiqueta" && (
+                    <div className="space-y-2">
+                      <Label htmlFor={`bobina-profile-${purpose}`}>Perfil de bobina</Label>
+                      <Select
+                        value={draft.bobinaProfileId || "none"}
+                        onValueChange={(value) => setDrafts((current) => ({ ...current, etiqueta: { ...current.etiqueta, bobinaProfileId: value === "none" ? "" : value } }))}
+                        disabled={!permissions.configurar}
+                      >
+                        <SelectTrigger id={`bobina-profile-${purpose}`}><SelectValue placeholder="Nenhum (usa o tamanho do modelo)" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum (usa o tamanho do modelo)</SelectItem>
+                          {(bobinaProfilesQuery.data ?? []).map((bobinaProfile) => (
+                            <SelectItem key={bobinaProfile.id} value={bobinaProfile.id}>
+                              {bobinaProfile.nome} · {Number(bobinaProfile.largura_etiqueta_mm)}×{Number(bobinaProfile.altura_etiqueta_mm)}mm · {bobinaProfile.colunas} col.
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Uma mesma impressora pode trocar de perfil quando a bobina física é trocada.</p>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2 pt-2">
                     {permissions.configurar && (
-                      <Button size="sm" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate(purpose)}>
-                        {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Salvar
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`company-default-${purpose}`}
+                          checked={setAsCompanyDefault[purpose]}
+                          onCheckedChange={(checked) =>
+                            setSetAsCompanyDefault((current) => ({ ...current, [purpose]: checked === true }))}
+                        />
+                        <Label htmlFor={`company-default-${purpose}`} className="text-xs font-normal text-muted-foreground">
+                          Definir também como padrão da empresa
+                        </Label>
+                      </div>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => handleTestPrint(purpose)}>
-                      Testar impressão
-                    </Button>
+                    <div className="flex gap-2">
+                      {permissions.configurar && (
+                        <Button size="sm" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate(purpose)}>
+                          {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Salvar
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => handleTestPrint(purpose)}>
+                        Testar impressão
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -344,6 +496,8 @@ export default function ConfiguracoesImpressoras() {
           })}
         </div>
       )}
+
+      <BobinaProfilesSection companyId={companyId} canManage={permissions.configurar} />
     </div>
   );
 }

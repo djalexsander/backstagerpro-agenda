@@ -18,9 +18,11 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LabelImageJob {
+pub struct PrintImageJob {
   png_bytes: Vec<u8>,
   quantity: u32,
+  width_mm: Option<f64>,
+  height_mm: Option<f64>,
 }
 
 // Sentinel returned (verbatim, not wrapped in a sentence) when the named
@@ -30,7 +32,7 @@ pub struct LabelImageJob {
 pub const PRINTER_NOT_FOUND: &str = "NOT_FOUND";
 
 #[tauri::command]
-pub fn print_label_batch(printer_name: String, document_name: String, jobs: Vec<LabelImageJob>) -> Result<(), String> {
+pub fn print_label_batch(printer_name: String, document_name: String, jobs: Vec<PrintImageJob>) -> Result<(), String> {
   #[cfg(not(target_os = "windows"))]
   {
     let _ = (printer_name, document_name, jobs);
@@ -45,13 +47,13 @@ pub fn print_label_batch(printer_name: String, document_name: String, jobs: Vec<
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
-  use super::{LabelImageJob, PRINTER_NOT_FOUND};
+  use super::{PrintImageJob, PRINTER_NOT_FOUND};
   use std::ffi::c_void;
   use std::mem::size_of;
   use windows::core::PCWSTR;
   use windows::Win32::Graphics::Gdi::{
     CreateDCW, DeleteDC, GetDeviceCaps, StretchDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HDC,
-    HORZRES, SRCCOPY, VERTRES,
+    HORZRES, LOGPIXELSX, LOGPIXELSY, SRCCOPY, VERTRES,
   };
   use windows::Win32::Graphics::Printing::{ClosePrinter, OpenPrinterW, PRINTER_HANDLE};
 
@@ -103,7 +105,7 @@ mod windows_impl {
     }
   }
 
-  pub fn print_label_batch(printer_name: String, document_name: String, jobs: Vec<LabelImageJob>) -> Result<(), String> {
+  pub fn print_label_batch(printer_name: String, document_name: String, jobs: Vec<PrintImageJob>) -> Result<(), String> {
     if jobs.is_empty() {
       return Ok(());
     }
@@ -159,14 +161,14 @@ mod windows_impl {
     result
   }
 
-  fn print_all_pages(hdc: HDC, page_width: i32, page_height: i32, jobs: &[LabelImageJob]) -> Result<(), String> {
+  fn print_all_pages(hdc: HDC, page_width: i32, page_height: i32, jobs: &[PrintImageJob]) -> Result<(), String> {
     for job in jobs {
       let decoded = image::load_from_memory_with_format(&job.png_bytes, image::ImageFormat::Png)
-        .map_err(|error| format!("Falha ao decodificar a imagem da etiqueta: {error}"))?;
+        .map_err(|error| format!("Falha ao decodificar a imagem de impressão: {error}"))?;
       let rgba = decoded.to_rgba8();
       let (width, height) = (rgba.width(), rgba.height());
       if width == 0 || height == 0 {
-        return Err("A imagem da etiqueta veio vazia.".to_string());
+        return Err("A imagem de impressão veio vazia.".to_string());
       }
       let mut pixels = rgba.into_raw();
       // Windows 32bpp BI_RGB DIBs store bytes as B,G,R,A per pixel.
@@ -191,21 +193,27 @@ mod windows_impl {
         bmiColors: Default::default(),
       };
 
+      let (target_width, target_height) = target_size(
+        hdc,
+        page_width,
+        page_height,
+        width,
+        height,
+        job.width_mm,
+        job.height_mm,
+      );
+
       for _ in 0..job.quantity.max(1) {
         unsafe {
           if StartPage(hdc) <= 0 {
             return Err("Não foi possível iniciar uma página de impressão.".to_string());
           }
-          // Stretch to fully fill the page the driver already reports for
-          // this queue - the driver's own configured physical size (e.g.
-          // 50x30mm) is what page_width/page_height represent, so this is
-          // a 1:1 physical fit with no extra "fit to page" logic needed.
-          StretchDIBits(
+          let copied_lines = StretchDIBits(
             hdc,
             0,
             0,
-            page_width,
-            page_height,
+            target_width,
+            target_height,
             0,
             0,
             width as i32,
@@ -215,6 +223,9 @@ mod windows_impl {
             DIB_RGB_COLORS,
             SRCCOPY,
           );
+          if copied_lines == 0 || copied_lines == -1 {
+            return Err("Não foi possível transferir a imagem para a página de impressão.".to_string());
+          }
           if EndPage(hdc) <= 0 {
             return Err("Não foi possível finalizar uma página de impressão.".to_string());
           }
@@ -222,6 +233,49 @@ mod windows_impl {
       }
     }
     Ok(())
+  }
+
+  // New callers send the intended physical dimensions. They are converted
+  // with the printer's own DPI and uniformly reduced only when they exceed
+  // the printable area. Legacy callers without dimensions retain the old
+  // full-page behavior, preserving command compatibility.
+  fn target_size(
+    hdc: HDC,
+    page_width: i32,
+    page_height: i32,
+    image_width: u32,
+    image_height: u32,
+    width_mm: Option<f64>,
+    height_mm: Option<f64>,
+  ) -> (i32, i32) {
+    if width_mm.is_none() && height_mm.is_none() {
+      return (page_width, page_height);
+    }
+
+    let dpi_x = unsafe { GetDeviceCaps(Some(hdc), LOGPIXELSX) }.max(1) as f64;
+    let dpi_y = unsafe { GetDeviceCaps(Some(hdc), LOGPIXELSY) }.max(1) as f64;
+    let source_aspect = image_width as f64 / image_height.max(1) as f64;
+
+    let width_bound_mm = width_mm.filter(|value| *value > 0.0);
+    let height_bound_mm = height_mm.filter(|value| *value > 0.0);
+    let (desired_width_mm, desired_height_mm) = match (width_bound_mm, height_bound_mm) {
+      (Some(width), Some(height)) if width / height > source_aspect => (height * source_aspect, height),
+      (Some(width), Some(_height)) => (width, width / source_aspect),
+      (Some(width), None) => (width, width / source_aspect),
+      (None, Some(height)) => (height * source_aspect, height),
+      (None, None) => return (page_width, page_height),
+    };
+
+    let desired_width = (desired_width_mm / 25.4 * dpi_x).max(1.0);
+    let desired_height = (desired_height_mm / 25.4 * dpi_y).max(1.0);
+    let scale = 1.0_f64
+      .min(page_width as f64 / desired_width)
+      .min(page_height as f64 / desired_height);
+
+    (
+      (desired_width * scale).round().max(1.0) as i32,
+      (desired_height * scale).round().max(1.0) as i32,
+    )
   }
 }
 
@@ -245,7 +299,12 @@ mod tests {
     let result = print_label_batch(
       "LABEL".to_string(),
       "manual_check_print_label_batch".to_string(),
-      vec![LabelImageJob { png_bytes: white_pixel_png, quantity: 1 }],
+      vec![PrintImageJob {
+        png_bytes: white_pixel_png,
+        quantity: 1,
+        width_mm: None,
+        height_mm: None,
+      }],
     );
     println!("print_label_batch(\"LABEL\", ...) -> {result:?}");
   }

@@ -35,8 +35,8 @@ import { getFinancialLedgerPermissions } from "@/lib/financial-ledger-permission
 import { getRentalFinancialSummary, registerRentalReceipt, reverseRentalReceipt } from "@/lib/financial-ledger-service";
 import type { FinancialLedgerStatus, PaymentCondition } from "@/lib/financial-ledger-types";
 import { splitInstallments } from "@/lib/installment-split";
-import { openPrintWindow } from "@/lib/printer-service";
-import { buildRentalReceiptHtml, type RentalReceiptKind } from "@/lib/rental-receipt-print";
+import { isDesktopRuntime } from "@/lib/printer-service";
+import { printRentalReceipt, type RentalReceiptKind } from "@/lib/rental-receipt-print";
 
 const FINANCIAL_STATUS_LABELS: Record<FinancialLedgerStatus, string> = {
   pendente: "Pendente",
@@ -368,12 +368,19 @@ export function RentalDetailDialog({
     setOccurrence("");
   };
 
-  const printReceipt = (kind: RentalReceiptKind) => {
+  const printReceipt = async (kind: RentalReceiptKind) => {
     if (!rental) return;
     try {
-      openPrintWindow(buildRentalReceiptHtml(rental, empresaNome || "Backstage Pro", kind, financialQuery.data));
+      await printRentalReceipt({
+        companyId,
+        rental,
+        empresaNome: empresaNome || "Backstage Pro",
+        kind,
+        financial: financialQuery.data,
+      });
+      if (isDesktopRuntime()) toast.success("Impressão enviada para a impressora.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível abrir a impressão.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível imprimir o comprovante.");
     }
   };
 

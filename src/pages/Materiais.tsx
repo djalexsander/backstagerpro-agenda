@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   Power,
+  Printer,
   Search,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,8 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getMaterialPermissions } from "@/lib/material-permissions";
 import { getStockPermissions } from "@/lib/stock-permissions";
+import { buildA4DocumentHtml } from "@/lib/a4-document-print";
+import { printHtmlDocument } from "@/lib/printer-service";
 
 const PAGE_SIZE = 10;
 
@@ -91,6 +94,7 @@ export default function Materiais() {
     role,
     empresaId,
     empresaReadOnly,
+    empresaNome,
     isMasterAdmin,
   } = useAuth();
   const { hasModule } = useCompanyModules(empresaId);
@@ -130,6 +134,7 @@ export default function Materiais() {
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [activeTarget, setActiveTarget] =
     useState<MaterialWithRelations | null>(null);
 
@@ -194,6 +199,77 @@ export default function Materiais() {
     }
     setEditId(null);
     setFormOpen(true);
+  };
+
+  const printMaterialsReport = async () => {
+    if (!empresaId || isPrinting) return;
+
+    setIsPrinting(true);
+    try {
+      const activeCount = filtered.filter((item) => item.ativo).length;
+      const availableCount = filtered.filter(
+        (item) => item.ativo && item.status_operacional === "disponivel",
+      ).length;
+
+      await printHtmlDocument({
+        companyId: empresaId,
+        purpose: "documento",
+        documentName: "Relatório de materiais e estoque",
+        widthMm: 210,
+        heightMm: 297,
+        html: buildA4DocumentHtml({
+          companyName: empresaNome ?? "Backstage Pro",
+          title: "Relatório de materiais e estoque",
+          subtitle: `${filtered.length} registro(s), conforme os filtros atuais`,
+          metrics: [
+            { label: "Total", value: filtered.length },
+            { label: "Ativos", value: activeCount },
+            { label: "Disponíveis", value: availableCount },
+            {
+              label: "Categorias",
+              value: new Set(
+                filtered.map((item) => item.categoria?.id).filter(Boolean),
+              ).size,
+            },
+          ],
+          sections: [
+            {
+              title: "Materiais",
+              columns: [
+                "Código",
+                "Material",
+                "Categoria",
+                "Marca / modelo",
+                "Quantidade",
+                "Situação",
+              ],
+              rows: filtered.map((material) => [
+                material.codigo_interno,
+                material.nome,
+                material.categoria?.nome ?? "Sem categoria",
+                [material.marca, material.modelo].filter(Boolean).join(" / ") ||
+                  "—",
+                `${material.quantidade} ${material.unidade_medida}`,
+                material.ativo
+                  ? MATERIAL_STATUS_LABELS[material.status_operacional]
+                  : "Inativo",
+              ]),
+            },
+          ],
+        }),
+      });
+    } catch (printError) {
+      toast({
+        title: "Não foi possível imprimir o relatório",
+        description:
+          printError instanceof Error
+            ? printError.message
+            : "Falha inesperada ao preparar a impressão.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const renderActions = (material: MaterialWithRelations) => (
@@ -262,8 +338,17 @@ export default function Materiais() {
             Cadastro e controle dos materiais e equipamentos da empresa.
           </p>
         </div>
-      {(permissions.gerenciarCategorias || permissions.criar) && (
-          <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={printMaterialsReport}
+            disabled={isPrinting || isLoading}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            {isPrinting ? "Preparando..." : "Imprimir"}
+          </Button>
+          {(permissions.gerenciarCategorias || permissions.criar) && (
+            <>
             {permissions.gerenciarCategorias && (
               <Button variant="outline" onClick={() => setCategoryOpen(true)}>
                 <FolderCog className="mr-2 h-4 w-4" />
@@ -276,8 +361,9 @@ export default function Materiais() {
                 Cadastrar
               </Button>
             )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { buildRentalReceiptHtml } from "./rental-receipt-print";
+import { describe, expect, it, vi } from "vitest";
+
+const { printHtmlDocumentMock } = vi.hoisted(() => ({ printHtmlDocumentMock: vi.fn() }));
+vi.mock("./printer-service", () => ({ printHtmlDocument: printHtmlDocumentMock }));
+
+import { buildRentalReceiptHtml, printRentalReceipt } from "./rental-receipt-print";
 import type { RentalDetail } from "./material-rental-types";
 
 // Same formatter as rental-receipt-print.ts - Node's pt-BR ICU data uses a
@@ -118,5 +122,204 @@ describe("buildRentalReceiptHtml", () => {
     );
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it.each([58, 80])("uses the requested %smm width instead of hard-coding 80mm", (widthMm) => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", "comprovante", null, { widthMm });
+    expect(html).toContain(`size: ${widthMm}mm auto`);
+    expect(html).toContain(`width: ${widthMm}mm`);
+  });
+
+  it("uses compact physical columns and reduced padding at 58mm", () => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", "comprovante", null, { widthMm: 58 });
+
+    expect(html).toContain("padding: 1.5mm 1.5mm 1.2mm");
+    expect(html).toContain("grid-template-columns: minmax(0, 1fr) 9mm 9mm 17mm");
+    expect(html).toContain("column-gap: 0.6mm");
+  });
+
+  it("uses wider explicit columns at 80mm", () => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", "comprovante", null, { widthMm: 80 });
+
+    expect(html).toContain("padding: 1.5mm 1.4mm 1.2mm");
+    expect(html).toContain("grid-template-columns: minmax(0, 1fr) 11mm 11mm 21mm");
+    expect(html).toContain("column-gap: 0.8mm");
+  });
+
+  it("uses high-contrast semibold thermal typography at 58mm", () => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", "comprovante", null, { widthMm: 58 });
+
+    expect(html).toContain("font-size: 10.5px; line-height: 1.25; color: #000; font-weight: 600; opacity: 1");
+    expect(html).toContain(".sheet, .sheet * { color: #000; opacity: 1; }");
+    expect(html).toContain("font-size: 9.25px; line-height: 1.1; font-weight: 700");
+    expect(html).toContain("font-size: 9.5px; font-weight: 600");
+    expect(html).toContain("font-size: 10.25px; font-weight: 600; color: #000");
+  });
+
+  it("uses the slightly larger thermal typography at 80mm without changing its grid", () => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", "comprovante", null, { widthMm: 80 });
+
+    expect(html).toContain("font-size: 12.25px; line-height: 1.25; color: #000; font-weight: 600; opacity: 1");
+    expect(html).toContain("font-size: 10.75px; line-height: 1.1; font-weight: 700");
+    expect(html).toContain("font-size: 11.25px; font-weight: 600");
+    expect(html).toContain("grid-template-columns: minmax(0, 1fr) 11mm 11mm 21mm");
+  });
+
+  it("keeps fixed material columns while allowing only a long material name to wrap", () => {
+    const longName = "Sistema de line array ativo com subwoofer e acessórios para montagem externa";
+    const html = buildRentalReceiptHtml(
+      {
+        ...rental,
+        itens: [
+          rental.itens[0],
+          {
+            ...rental.itens[0],
+            id: "item2",
+            material: { ...rental.itens[0].material, nome: longName },
+          },
+        ],
+      },
+      "Backstage Pro",
+      "comprovante",
+      null,
+      { widthMm: 58 },
+    );
+
+    expect(html).toContain("Line Array Neo 210");
+    expect(html).toContain(longName);
+    expect(html).toMatch(/\.item-material \{[^}]*white-space: normal/);
+    expect(html).toMatch(/\.item-code \{[^}]*white-space: nowrap/);
+    expect(html).toMatch(/\.item-quantity \{[^}]*text-align: center[^}]*white-space: nowrap/);
+    expect(html).toMatch(/\.item-subtotal \{[^}]*text-align: right[^}]*white-space: nowrap/);
+  });
+
+  it("keeps large monetary values inside dedicated right-aligned columns", () => {
+    const largeValue = 1_234_567.89;
+    const html = buildRentalReceiptHtml(
+      {
+        ...rental,
+        valor_total: largeValue,
+        itens: [{ ...rental.itens[0], subtotal: largeValue }],
+      },
+      "Backstage Pro",
+      "comprovante",
+      {
+        id: "f-large",
+        origem_tipo: "locacao_material",
+        origem_id: "r1",
+        cliente_id: "c1",
+        valor_original: largeValue,
+        valor_recebido: 123_456.78,
+        status: "parcial",
+        vencimento: null,
+        forma_pagamento: "pix",
+        recebimentos: [],
+      },
+      { widthMm: 58 },
+    );
+
+    expect(html).toContain(money.format(largeValue));
+    expect(html).toContain('class="item-subtotal"');
+    expect(html).toContain('class="total-row"');
+    expect(html).toContain('class="amount-row amount-primary"');
+  });
+
+  it.each([58, 80])("keeps long party names, a six-character code and R$ 125.450,00 structurally separated at %smm", (widthMm) => {
+    const largeValue = 125_450;
+    const longClientName = "Cliente Corporativo Produções Artísticas e Eventos Especiais";
+    const longResponsibleName = "Alexandre Responsável Operacional de Equipamentos";
+    const html = buildRentalReceiptHtml(
+      {
+        ...rental,
+        valor_total: largeValue,
+        responsavel_nome: longResponsibleName,
+        cliente: { ...rental.cliente, nome: longClientName },
+        itens: [
+          {
+            ...rental.itens[0],
+            subtotal: largeValue,
+            material: {
+              ...rental.itens[0].material,
+              nome: "Sistema profissional de line array para eventos de grande porte",
+              codigo_interno: "MAT123",
+            },
+          },
+        ],
+      },
+      "Backstage Pro",
+      "comprovante",
+      null,
+      { widthMm },
+    );
+
+    expect(html).toContain(longClientName);
+    expect(html).toContain(longResponsibleName);
+    expect(html).toContain('<span class="item-code" role="cell">MAT123</span>');
+    expect(html).toContain(`<span class="item-subtotal" role="cell">${money.format(largeValue)}</span>`);
+    expect(html).toContain(`<div class="total-row"><strong>Valor total</strong><strong>${money.format(largeValue)}</strong></div>`);
+    expect(html).toMatch(/\.detail-value \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
+    expect(html).toMatch(/\.date-value \{[^}]*white-space: nowrap/);
+    expect(html).toMatch(/\.item-code \{[^}]*white-space: nowrap/);
+    expect(html).toMatch(/\.item-quantity \{[^}]*text-align: center/);
+    expect(html).toMatch(/\.item-subtotal \{[^}]*text-align: right[^}]*white-space: nowrap/);
+  });
+
+  it("formats issue, pickup and return dates without commas or seconds", () => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", "comprovante", null, { widthMm: 58 });
+    const dates = Array.from(html.matchAll(/class="detail-value date-value">([^<]+)</g), (match) => match[1]);
+
+    expect(dates).toHaveLength(3);
+    dates.forEach((value) => expect(value).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/));
+  });
+
+  it("renders section rules below titles and ends shortly after the signature", () => {
+    const html = buildRentalReceiptHtml(
+      rental,
+      "Backstage Pro",
+      "comprovante",
+      {
+        id: "f1",
+        origem_tipo: "locacao_material",
+        origem_id: "r1",
+        cliente_id: "c1",
+        valor_original: 2400,
+        valor_recebido: 1000,
+        status: "parcial",
+        vencimento: null,
+        forma_pagamento: "pix",
+        recebimentos: [],
+      },
+    );
+
+    expect(html).toContain('<div class="section-heading"><h3>Materiais</h3><div class="section-rule"></div></div>');
+    expect(html).toContain('<div class="section-heading"><h3>Situação financeira</h3><div class="section-rule"></div></div>');
+    expect(html).not.toMatch(/h3 \{[^}]*border/);
+    expect(html).toContain("padding: 1.5mm 1.4mm 1.2mm");
+    expect(html).toContain(".section-heading { margin: 1.5mm 0 0.5mm; }");
+    expect(html).toMatch(/h3 \{[^}]*margin: 0 0 1\.2mm/);
+    expect(html).toContain('<div class="signature"><div class="signature-line"></div>Assinatura do cliente</div>');
+  });
+
+  it.each([
+    ["comprovante", "COMPROVANTE DE LOCAÇÃO"],
+    ["retirada", "COMPROVANTE DE RETIRADA"],
+    ["devolucao", "COMPROVANTE DE DEVOLUÇÃO"],
+  ] as const)("uses the centered shared thermal header for %s", (kind, title) => {
+    const html = buildRentalReceiptHtml(rental, "Backstage Pro", kind, null);
+    expect(html).toContain('<header class="receipt-header">');
+    expect(html).toContain(`<p class="receipt-title">${title}</p>`);
+  });
+
+  it.each(["comprovante", "retirada", "devolucao"] as const)("routes %s through the canonical cupom purpose", async (kind) => {
+    printHtmlDocumentMock.mockResolvedValue(undefined);
+    await printRentalReceipt({ companyId: "e1", rental, empresaNome: "Backstage Pro", kind, financial: null });
+
+    const options = printHtmlDocumentMock.mock.calls.at(-1)?.[0];
+    expect(options).toEqual(expect.objectContaining({
+      companyId: "e1",
+      purpose: "cupom",
+      dynamicHeight: true,
+    }));
+    expect(options.html({ widthMm: 58 })).toContain("width: 58mm");
   });
 });

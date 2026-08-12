@@ -1,12 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { rasterizeHtmlToPngBytesMock, printImagesToWindowsPrinterMock } = vi.hoisted(() => ({
-  rasterizeHtmlToPngBytesMock: vi.fn(),
-  printImagesToWindowsPrinterMock: vi.fn(),
-}));
+const { printHtmlBatchMock } = vi.hoisted(() => ({ printHtmlBatchMock: vi.fn() }));
 vi.mock("./printer-service", () => ({
-  rasterizeHtmlToPngBytes: rasterizeHtmlToPngBytesMock,
-  printImagesToWindowsPrinter: printImagesToWindowsPrinterMock,
+  printHtmlBatch: printHtmlBatchMock,
 }));
 // JsBarcode measures text via a real canvas 2D context to lay out the
 // human-readable value under the bars - jsdom has none (same gap as
@@ -20,7 +16,8 @@ vi.mock("jsbarcode", () => ({
   },
 }));
 
-import { openLabelPrintWindow, printLabelBatchDesktop, printLabelRequest, renderLabelMarkup } from "./material-label-print";
+import type { BobinaPrintProfile } from "./label-layout-engine";
+import { buildBobinaPrintHtml, buildLabelPrintHtml, printBobinaTestPage, printLabelBatch, renderLabelMarkup } from "./material-label-print";
 import type { LabelMaterialSnapshot, LabelModelSnapshot, LabelPrintBatch } from "./material-label-types";
 
 const model: LabelModelSnapshot = {
@@ -66,33 +63,23 @@ describe("renderLabelMarkup", () => {
   });
 });
 
-describe("printLabelRequest", () => {
-  it("throws the pop-up-blocked message instead of writing anything when there's no target window", () => {
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
-    expect(() => printLabelRequest({ modelo_snapshot: model } as LabelPrintBatch, null)).toThrow(/pop-up|bloqueou/i);
-    openSpy.mockRestore();
-  });
-
+describe("buildLabelPrintHtml", () => {
   it("writes one <article class=label> per physical label (quantity expanded), not per batch item", () => {
     const batch: LabelPrintBatch = {
       id: "batch-1", modelo_id: model.id, modelo_snapshot: model, quantidade_materiais: 1,
       quantidade_etiquetas: 3, solicitada_em: "2026-01-01T00:00:00Z", solicitante_nome: "Tester", reimpressao_de_id: null,
       itens: [{ id: "item-1", solicitacao_id: "batch-1", material_id: material.id, ordem: 0, quantidade: 3, material_snapshot: material }],
     };
-    let written = "";
-    const popup = { document: { open: vi.fn(), write: (html: string) => { written = html; }, close: vi.fn() } } as unknown as Window;
-
-    printLabelRequest(batch, popup);
+    const written = buildLabelPrintHtml(batch);
 
     expect(written.match(/class="label"/g)).toHaveLength(3);
     expect(written).toContain("@page { size: 50mm 30mm; margin: 0; }");
   });
 });
 
-describe("printLabelBatchDesktop", () => {
+describe("printLabelBatch", () => {
   beforeEach(() => {
-    rasterizeHtmlToPngBytesMock.mockReset().mockResolvedValue(new Uint8Array([1, 2, 3]));
-    printImagesToWindowsPrinterMock.mockReset().mockResolvedValue(undefined);
+    printHtmlBatchMock.mockReset().mockResolvedValue(undefined);
   });
 
   it("rasterizes once per batch item (not once per physical label) and forwards each item's quantity", async () => {
@@ -102,18 +89,16 @@ describe("printLabelBatchDesktop", () => {
       itens: [{ id: "item-1", solicitacao_id: "batch-1", material_id: material.id, ordem: 0, quantidade: 5, material_snapshot: material }],
     };
 
-    await printLabelBatchDesktop("LABEL", batch);
+    const configuredPrinter = { finalidade: "etiqueta", nome_impressora: "LABEL", ativo: true } as never;
+    await printLabelBatch("company-1", batch, configuredPrinter);
 
-    expect(rasterizeHtmlToPngBytesMock).toHaveBeenCalledTimes(1);
-    expect(rasterizeHtmlToPngBytesMock).toHaveBeenCalledWith(
-      expect.objectContaining({ widthMm: 50, heightMm: 30 }),
-    );
-    expect(printImagesToWindowsPrinterMock).toHaveBeenCalledWith(
-      "LABEL",
-      [{ pngBytes: new Uint8Array([1, 2, 3]), quantity: 5 }],
-      "Etiquetas - lote batch-1",
-      expect.objectContaining({ failed: expect.stringMatching(/etiqueta/i) }),
-    );
+    expect(printHtmlBatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: "company-1",
+      purpose: "etiqueta",
+      configuredPrinter,
+      jobs: [expect.objectContaining({ widthMm: 50, heightMm: 30, quantity: 5 })],
+      webHtml: expect.stringContaining('class="label"'),
+    }));
   });
 
   it("rasterizes items in `ordem`, regardless of the array's original order", async () => {
@@ -126,23 +111,162 @@ describe("printLabelBatchDesktop", () => {
         { id: "item-1", solicitacao_id: "batch-1", material_id: material.id, ordem: 0, quantidade: 1, material_snapshot: material },
       ],
     };
-    const seenNames: string[] = [];
-    rasterizeHtmlToPngBytesMock.mockImplementation(async ({ html }: { html: string }) => {
-      seenNames.push(html.includes("Segundo") ? "Segundo" : "Furadeira");
-      return new Uint8Array([0]);
-    });
-
-    await printLabelBatchDesktop("LABEL", batch);
-
-    expect(seenNames).toEqual(["Furadeira", "Segundo"]);
+    await printLabelBatch("company-1", batch);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
+    expect(jobs[0].html).toContain("Furadeira");
+    expect(jobs[1].html).toContain("Segundo");
   });
 });
 
-describe("openLabelPrintWindow", () => {
-  it("opens a blank popup window sized for the print preview", () => {
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
-    openLabelPrintWindow();
-    expect(openSpy).toHaveBeenCalledWith("", "_blank", "popup,width=900,height=700");
-    openSpy.mockRestore();
+const twoColumnProfile: BobinaPrintProfile = {
+  largura_etiqueta_mm: 50, altura_etiqueta_mm: 30, colunas: 2,
+  espacamento_horizontal_mm: 4, espacamento_vertical_mm: 2,
+  margem_esquerda_mm: 2, margem_direita_mm: 2, margem_superior_mm: 2, margem_inferior_mm: 2,
+  largura_midia_mm: null, offset_horizontal_mm: 0, offset_vertical_mm: 0,
+  dpi: "automatico", dpi_personalizado: null, orientacao: "retrato",
+};
+
+const productA: LabelMaterialSnapshot = { ...material, id: "a", nome: "Produto A" };
+const productB: LabelMaterialSnapshot = { ...material, id: "b", nome: "Produto B" };
+const productC: LabelMaterialSnapshot = { ...material, id: "c", nome: "Produto C" };
+const productD: LabelMaterialSnapshot = { ...material, id: "d", nome: "Produto D" };
+
+function batchFromItems(items: { material: LabelMaterialSnapshot; quantity: number }[]): LabelPrintBatch {
+  return {
+    id: "batch-1", modelo_id: model.id, modelo_snapshot: model,
+    quantidade_materiais: items.length, quantidade_etiquetas: items.reduce((total, item) => total + item.quantity, 0),
+    solicitada_em: "2026-01-01T00:00:00Z", solicitante_nome: "Tester", reimpressao_de_id: null,
+    itens: items.map((item, index) => ({
+      id: `item-${index}`, solicitacao_id: "batch-1", material_id: item.material.id,
+      ordem: index, quantidade: item.quantity, material_snapshot: item.material,
+    })),
+  };
+}
+
+describe("printLabelBatch with a multi-column bobina profile", () => {
+  beforeEach(() => {
+    printHtmlBatchMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("composes [A,B] then [C,D] for 4 distinct items on a 2-column bobina, not one label per full-width page", async () => {
+    const batch = batchFromItems([
+      { material: productA, quantity: 1 }, { material: productB, quantity: 1 },
+      { material: productC, quantity: 1 }, { material: productD, quantity: 1 },
+    ]);
+    await printLabelBatch("company-1", batch, undefined, twoColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string; quantity: number }>;
+    expect(jobs).toHaveLength(2);
+    expect(jobs[0].html).toContain("Produto A");
+    expect(jobs[0].html).toContain("Produto B");
+    expect(jobs[0].html.indexOf("Produto A")).toBeLessThan(jobs[0].html.indexOf("Produto B"));
+    expect(jobs[1].html).toContain("Produto C");
+    expect(jobs[1].html).toContain("Produto D");
+    expect(jobs.every((job) => job.quantity === 1)).toBe(true);
+  });
+
+  it("pads the last row with an empty cell (not a duplicate label) for an odd quantity in a 2-column bobina", async () => {
+    const batch = batchFromItems([
+      { material: productA, quantity: 1 }, { material: productB, quantity: 1 }, { material: productC, quantity: 1 },
+    ]);
+    await printLabelBatch("company-1", batch, undefined, twoColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1].html).toContain("Produto C");
+    expect(jobs[1].html.match(/class="label"/g)).toHaveLength(1);
+  });
+
+  it("collapses N/columns identical rows of one repeated item into a single rasterize call with quantity=N/columns", async () => {
+    const batch = batchFromItems([{ material: productA, quantity: 6 }]);
+    await printLabelBatch("company-1", batch, undefined, twoColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ quantity: number }>;
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].quantity).toBe(3);
+  });
+
+  it("produces a different row count for the identical batch under a different column count (troca de perfil)", async () => {
+    const batch = batchFromItems([{ material: productA, quantity: 1 }, { material: productB, quantity: 1 }]);
+
+    await printLabelBatch("company-1", batch, undefined, { ...twoColumnProfile, colunas: 1 });
+    expect((printHtmlBatchMock.mock.calls.at(-1)?.[0].jobs as unknown[])).toHaveLength(2);
+
+    await printLabelBatch("company-1", batch, undefined, twoColumnProfile);
+    expect((printHtmlBatchMock.mock.calls.at(-1)?.[0].jobs as unknown[])).toHaveLength(1);
+  });
+
+  it("falls back to the legacy single-column layout (byte-identical widthMm/heightMm) when no profile is given", async () => {
+    const batch = batchFromItems([{ material: productA, quantity: 2 }]);
+    await printLabelBatch("company-1", batch);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ widthMm: number; heightMm: number; quantity: number }>;
+    expect(jobs).toEqual([expect.objectContaining({ widthMm: 50, heightMm: 30, quantity: 2 })]);
+  });
+
+  it("rotates cell content for a paisagem profile without changing the row's declared physical size", async () => {
+    const landscapeProfile: BobinaPrintProfile = { ...twoColumnProfile, orientacao: "paisagem" };
+    const batch = batchFromItems([{ material: productA, quantity: 1 }, { material: productB, quantity: 1 }]);
+
+    await printLabelBatch("company-1", batch, undefined, twoColumnProfile);
+    const portraitJob = (printHtmlBatchMock.mock.calls.at(-1)?.[0].jobs as Array<{ widthMm: number; heightMm: number }>)[0];
+
+    await printLabelBatch("company-1", batch, undefined, landscapeProfile);
+    const jobs = printHtmlBatchMock.mock.calls.at(-1)?.[0].jobs as Array<{ html: string; widthMm: number; heightMm: number }>;
+    expect(jobs[0].html).toContain("rotate(90deg)");
+    expect(jobs[0].widthMm).toBe(portraitJob.widthMm);
+    expect(jobs[0].heightMm).toBe(portraitJob.heightMm);
+  });
+
+  it("does not rotate content for the default retrato orientation", async () => {
+    const batch = batchFromItems([{ material: productA, quantity: 1 }]);
+    await printLabelBatch("company-1", batch, undefined, twoColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
+    expect(jobs[0].html).not.toContain("rotate(90deg)");
+  });
+
+  it.each([["300", 300 / 96], ["203", 203 / 96]] as const)(
+    "derives rasterScale %s DPI -> %s from the profile, forwarded to the job",
+    async (dpi, expectedScale) => {
+      const batch = batchFromItems([{ material: productA, quantity: 1 }]);
+      await printLabelBatch("company-1", batch, undefined, { ...twoColumnProfile, dpi });
+      const jobs = printHtmlBatchMock.mock.calls.at(-1)?.[0].jobs as Array<{ rasterScale: number }>;
+      expect(jobs[0].rasterScale).toBeCloseTo(expectedScale, 5);
+    },
+  );
+});
+
+describe("buildBobinaPrintHtml (web/browser multi-row document)", () => {
+  it("writes one .row per chunk with no dedup, even when consecutive rows are identical", () => {
+    const html = buildBobinaPrintHtml(twoColumnProfile, model, [productA, productA, productA, productA], "Lote teste");
+    expect(html.match(/class="row"/g)).toHaveLength(2);
+    expect(html.match(/class="label"/g)).toHaveLength(4);
+  });
+
+  it("sizes @page to the full row footprint (margins + columns + gaps), not a single cell", () => {
+    const html = buildBobinaPrintHtml(twoColumnProfile, model, [productA], "Lote teste");
+    expect(html).toContain("@page { size: 108mm 34mm; margin: 0; }");
+  });
+});
+
+describe("printBobinaTestPage", () => {
+  beforeEach(() => {
+    printHtmlBatchMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("prints one labeled cell per column (TESTE / size / Coluna N) through the same pipeline as a real batch", async () => {
+    await printBobinaTestPage("company-1", twoColumnProfile);
+    expect(printHtmlBatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: "company-1", purpose: "etiqueta", documentName: "Teste de etiqueta",
+    }));
+    const options = printHtmlBatchMock.mock.calls[0][0] as { jobs: Array<{ html: string; quantity: number }> };
+    expect(options.jobs).toHaveLength(1);
+    expect(options.jobs[0].quantity).toBe(1);
+    expect(options.jobs[0].html).toContain("TESTE");
+    expect(options.jobs[0].html).toContain("Coluna 1");
+    expect(options.jobs[0].html).toContain("Coluna 2");
+    expect(options.jobs[0].html.match(/class="label"/g)).toHaveLength(2);
+  });
+
+  it("forwards the configured printer through to the shared pipeline", async () => {
+    const configuredPrinter = { finalidade: "etiqueta", nome_impressora: "LABEL", ativo: true } as never;
+    await printBobinaTestPage("company-1", twoColumnProfile, configuredPrinter);
+    expect(printHtmlBatchMock).toHaveBeenCalledWith(expect.objectContaining({ configuredPrinter }));
   });
 });

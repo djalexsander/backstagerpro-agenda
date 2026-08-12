@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, DollarSign, Calendar, FileText, Image,
-  ArrowRight, BarChart3, Users, ClipboardList, Music, Lock
+  ArrowRight, BarChart3, Users, ClipboardList, Music, Lock, Printer
 } from "lucide-react";
 import { useModuleAccess } from "@/components/ModuleGate";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
@@ -34,9 +34,9 @@ export default function Relatorios() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportType>("dashboard");
-  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>("pdf");
+  const [selectedFormat, setSelectedFormat] = useState<ExportFormat | "print">("pdf");
 
-  const handleOpenExportModal = (reportType: ReportType, format: ExportFormat) => {
+  const handleOpenExportModal = (reportType: ReportType, format: ExportFormat | "print") => {
     setSelectedReport(reportType);
     setSelectedFormat(format);
     setModalOpen(true);
@@ -179,6 +179,17 @@ export default function Relatorios() {
                       }}
                     >
                       <Image className="h-3 w-3" /> PNG
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] px-2 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenExportModal(report.id, "print");
+                      }}
+                    >
+                      <Printer className="h-3 w-3" /> Imprimir
                     </Button>
                   </div>
                 </div>

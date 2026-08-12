@@ -17,6 +17,7 @@ import { getRentalsFinancialSummary, listMaintenanceExpenses, listReceivables } 
 import type { FinancialMaintenanceSection, FinancialRentalsSection } from "@/lib/pdf-export";
 import type { FinancialLedgerStatus, MaintenanceExpenseEntry, ReceivableEntry } from "@/lib/financial-ledger-types";
 import { toDatetimeLocalValue } from "@/lib/datetime";
+import { buildA4DocumentHtml, type A4Metric, type A4TableSection } from "@/lib/a4-document-print";
 
 type EventRow = Tables<"events">;
 type EventDayRow = Tables<"event_days">;
@@ -93,6 +94,10 @@ interface ExportExecutionParams {
    * use it; other report types ignore the flag.
    */
   includeRentals?: boolean;
+}
+
+interface PrintExecutionParams extends Omit<ExportExecutionParams, "exportFormat" | "branding"> {
+  companyName: string;
 }
 
 interface ReportDateRange {
@@ -641,4 +646,162 @@ export async function executeReportExport({
     eventDate: filters.mode === "evento" ? firstEvent.date : undefined,
   });
   await exportAgendaPDF(events, branding, exportFormat, buildNameOpts(fileName));
+}
+
+const printMoney = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function printDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value.length === 10 ? `${value}T12:00:00` : value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR");
+}
+
+async function sendA4Report({
+  empresaId,
+  companyName,
+  title,
+  subtitle,
+  metrics,
+  sections,
+}: {
+  empresaId: string;
+  companyName: string;
+  title: string;
+  subtitle?: string;
+  metrics?: A4Metric[];
+  sections: A4TableSection[];
+}) {
+  const { printHtmlDocument } = await import("@/lib/printer-service");
+  await printHtmlDocument({
+    companyId: empresaId,
+    purpose: "documento",
+    documentName: title,
+    widthMm: 210,
+    heightMm: 297,
+    html: buildA4DocumentHtml({ companyName, title, subtitle, metrics, sections }),
+  });
+}
+
+/** A4 counterpart to executeReportExport. It reuses the same tenant-scoped
+ * fetchers and filters but generates semantic HTML for the canonical print
+ * transport instead of saving a PDF/PNG file. */
+export async function executeReportPrint({
+  empresaId,
+  companyName,
+  reportType,
+  filters,
+  includeRentals,
+}: PrintExecutionParams): Promise<void> {
+  const validationError = validateReportFilters(filters);
+  if (validationError) throw new Error(validationError);
+  const range = getReportDateRange(filters);
+
+  if (reportType === "evento") {
+    const { event, eventDays, teamMembers } = await fetchEventReportData(empresaId, filters.eventId!);
+    await sendA4Report({
+      empresaId,
+      companyName,
+      title: `Relatório do evento - ${event.name}`,
+      subtitle: `${printDate(event.date)} · ${event.venue || "Local não informado"} · ${event.city || "Cidade não informada"}`,
+      metrics: [
+        { label: "Artista", value: event.artist || "—" },
+        { label: "Status", value: event.status },
+        { label: "Equipe", value: teamMembers.length },
+      ],
+      sections: [
+        {
+          title: "Programação",
+          columns: ["Dia", "Data", "Artista", "Horário", "Observações"],
+          rows: eventDays.map((day) => [day.day_number, printDate(day.date), day.artist, day.show_time, day.observations]),
+        },
+        {
+          title: "Equipe",
+          columns: ["Nome", "Função"],
+          rows: teamMembers.map((member) => [member.nome, member.funcao]),
+        },
+      ],
+    });
+    return;
+  }
+
+  if (reportType === "equipe") {
+    const rows = await fetchTeamReportRows(empresaId, filters);
+    await sendA4Report({
+      empresaId, companyName, title: REPORT_TITLES.equipe, subtitle: range.title,
+      metrics: [{ label: "Profissionais", value: rows.length }],
+      sections: [{
+        columns: ["Nome", "Função", "Tipo", "Eventos", "Cachê", "Alimentação"],
+        rows: rows.map((row) => [row.nome, row.funcao, row.tipo, row.eventos, printMoney.format(row.cacheAcumulado), printMoney.format(row.alimentacaoAcumulada)]),
+      }],
+    });
+    return;
+  }
+
+  if (reportType === "operacional") {
+    const rows = await fetchOperationalReportRows(empresaId, filters);
+    await sendA4Report({
+      empresaId, companyName, title: REPORT_TITLES.operacional, subtitle: range.title,
+      metrics: [{ label: "Eventos", value: rows.length }],
+      sections: [{
+        columns: ["Evento", "Data", "Local", "Status", "Equipe", "Checklist"],
+        rows: rows.map((row) => [row.name, printDate(row.date), `${row.venue || "—"} / ${row.city || "—"}`, row.status, row.teamCount, `${row.checklistDone}/${row.checklistTotal}`]),
+      }],
+    });
+    return;
+  }
+
+  if (reportType === "financeiro") {
+    const financials = await fetchFinancialsForExport(empresaId, filters);
+    const rentals = includeRentals ? await fetchRentalsForFinancialReport(empresaId, filters) : null;
+    const maintenance = includeRentals ? await fetchMaintenanceForFinancialReport(empresaId, filters) : null;
+    if (!financials.length && !rentals?.entries.length && !maintenance?.entries.length) {
+      throw new Error("Nenhum dado financeiro foi encontrado para os filtros selecionados.");
+    }
+    const eventExpenses = financials.reduce((sum, row) => sum + (row.cache ?? 0) + (row.food ?? 0) + (row.lodging ?? 0) + (row.transport ?? 0) + (row.other_costs ?? 0), 0);
+    const sections: A4TableSection[] = [{
+      title: "Eventos",
+      columns: ["Evento", "Data", "Cachê", "Alimentação", "Hospedagem", "Transporte", "Outros"],
+      rows: financials.map((row) => [row.events?.name, printDate(row.events?.date), printMoney.format(row.cache ?? 0), printMoney.format(row.food ?? 0), printMoney.format(row.lodging ?? 0), printMoney.format(row.transport ?? 0), printMoney.format(row.other_costs ?? 0)]),
+    }];
+    if (rentals) sections.push({
+      title: "Locações",
+      columns: ["Cliente", "Descrição", "Valor", "Recebido", "Status"],
+      rows: rentals.entries.map((row) => [row.cliente_nome_fantasia || row.cliente_nome, row.descricao, printMoney.format(row.valor_original), printMoney.format(row.valor_recebido), row.status]),
+    });
+    if (maintenance) sections.push({
+      title: "Manutenções",
+      columns: ["Ordem", "Material", "Descrição", "Valor", "Conclusão"],
+      rows: maintenance.entries.map((row) => [row.ordem_numero, row.material_nome, row.descricao, printMoney.format(row.valor_original), printDate(row.concluida_em)]),
+    });
+    await sendA4Report({
+      empresaId, companyName, title: REPORT_TITLES.financeiro, subtitle: range.title,
+      metrics: [
+        { label: "Despesas de eventos", value: printMoney.format(eventExpenses) },
+        { label: "A receber em locações", value: printMoney.format(rentals?.summary.valorAReceber ?? 0) },
+        { label: "Manutenções", value: printMoney.format(maintenance?.valorTotal ?? 0) },
+      ],
+      sections,
+    });
+    return;
+  }
+
+  const events = await fetchEventsForExport(empresaId, filters);
+  if (!events.length) throw new Error("Nenhum evento foi encontrado para os filtros selecionados.");
+  const financials = reportType === "dashboard" ? await fetchFinancialsForExport(empresaId, filters) : [];
+  const rentals = reportType === "dashboard" && includeRentals ? await getRentalsFinancialSummary(empresaId) : null;
+  await sendA4Report({
+    empresaId,
+    companyName,
+    title: REPORT_TITLES[reportType],
+    subtitle: range.title,
+    metrics: reportType === "dashboard" ? [
+      { label: "Eventos", value: events.length },
+      { label: "Registros financeiros", value: financials.length },
+      { label: "Locações a receber", value: printMoney.format(rentals?.valorAReceber ?? 0) },
+    ] : [{ label: "Eventos", value: events.length }],
+    sections: [{
+      columns: ["Evento", "Artista", "Data", "Local", "Cidade", "Status"],
+      rows: events.map((event) => [event.name, event.artist, printDate(event.date), event.venue, event.city, event.status]),
+    }],
+  });
 }

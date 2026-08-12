@@ -20,13 +20,35 @@ vi.mock("@/features/update/UpdateService", () => ({
 import {
   isDesktopRuntime,
   isPrinterCurrentlyInstalled,
+  getConfiguredPrinter,
   listPrinterConfigs,
   listSystemPrinters,
-  openPrintWindow,
+  printHtmlDocument,
+  printHtmlInBrowser,
   printImagesToWindowsPrinter,
   rasterizeHtmlToPngBytes,
+  resolveConfiguredPrinter,
+  resolveEffectivePrinterConfig,
   savePrinterConfig,
 } from "./printer-service";
+import { clearTerminalPrinterOverride, saveTerminalPrinterOverride } from "./terminal-printer-config";
+import type { PrinterConfig, PrinterPurpose } from "./printer-types";
+
+function config(purpose: PrinterPurpose, overrides: Partial<PrinterConfig> = {}): PrinterConfig {
+  return {
+    id: `cfg-${purpose}`, empresa_id: "company-1", finalidade: purpose,
+    nome_impressora: `PRINTER-${purpose}`, formato: null, largura_mm: null,
+    altura_mm: null, orientacao: "retrato", ativo: true, configuracoes: {},
+    perfil_bobina_padrao_id: null,
+    ...overrides,
+  };
+}
+
+// Terminal overrides live in localStorage (see terminal-printer-config.ts),
+// which jsdom persists across tests in the same file unless cleared - a
+// leftover override from one test would otherwise silently shadow the next
+// test's plain DB-config expectations.
+beforeEach(() => localStorage.clear());
 
 describe("printer-service RPC calls", () => {
   beforeEach(() => rpc.mockReset());
@@ -59,6 +81,88 @@ describe("printer-service RPC calls", () => {
   it("maps a known error code to a Portuguese message", async () => {
     rpc.mockResolvedValue({ data: null, error: { code: "PR001", message: "raw" } });
     await expect(listPrinterConfigs("company-1")).rejects.toThrow("Selecione a empresa.");
+  });
+});
+
+describe("configured printer resolution", () => {
+  beforeEach(() => rpc.mockReset());
+
+  it.each<PrinterPurpose>(["etiqueta", "cupom", "documento"])("resolves the active %s configuration", async (purpose) => {
+    const expected = config(purpose);
+    rpc.mockResolvedValue({ data: [expected], error: null });
+    await expect(getConfiguredPrinter("company-1", purpose)).resolves.toEqual(expected);
+    expect(rpc).toHaveBeenCalledWith("obter_configuracoes_impressora", { _empresa_id: "company-1" });
+  });
+
+  it("ignores inactive and blank-name configurations", () => {
+    expect(resolveConfiguredPrinter([config("cupom", { ativo: false })], "cupom")).toBeNull();
+    expect(resolveConfiguredPrinter([config("cupom", { nome_impressora: "  " })], "cupom")).toBeNull();
+  });
+
+  it.each([
+    ["etiqueta", /Nenhuma impressora de etiquetas configurada/],
+    ["cupom", /Nenhuma impressora de cupom configurada/],
+    ["documento", /Nenhuma impressora de documentos configurada/],
+  ] as const)("uses the standardized missing message for %s", async (purpose, message) => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    await expect(getConfiguredPrinter("company-1", purpose)).rejects.toThrow(message);
+  });
+});
+
+describe("resolveEffectivePrinterConfig (per-terminal override over the company default)", () => {
+  beforeEach(() => rpc.mockReset());
+
+  it("falls back to the company-wide config when this terminal has no override", () => {
+    const dbConfig = config("cupom");
+    expect(resolveEffectivePrinterConfig("company-1", [dbConfig], "cupom")).toEqual(dbConfig);
+  });
+
+  it("prefers this terminal's local override over the company-wide config", () => {
+    saveTerminalPrinterOverride("company-1", "cupom", {
+      printerName: "POS-LOCAL", format: "80mm", widthMm: 80, heightMm: null,
+      orientation: "retrato", bobinaProfileId: null,
+    });
+    const resolved = resolveEffectivePrinterConfig("company-1", [config("cupom", { nome_impressora: "POS-COMPANY" })], "cupom");
+    expect(resolved?.nome_impressora).toBe("POS-LOCAL");
+  });
+
+  it("reverts to the company-wide config once the local override is cleared", () => {
+    saveTerminalPrinterOverride("company-1", "cupom", {
+      printerName: "POS-LOCAL", format: "80mm", widthMm: 80, heightMm: null,
+      orientation: "retrato", bobinaProfileId: null,
+    });
+    clearTerminalPrinterOverride("company-1", "cupom");
+    const resolved = resolveEffectivePrinterConfig("company-1", [config("cupom", { nome_impressora: "POS-COMPANY" })], "cupom");
+    expect(resolved?.nome_impressora).toBe("POS-COMPANY");
+  });
+
+  it("scopes the override to one purpose - an etiqueta override never shadows cupom's company config", () => {
+    saveTerminalPrinterOverride("company-1", "etiqueta", {
+      printerName: "LABEL-LOCAL", format: "50x30mm", widthMm: 50, heightMm: 30,
+      orientation: "retrato", bobinaProfileId: "profile-1",
+    });
+    const resolved = resolveEffectivePrinterConfig("company-1", [config("cupom", { nome_impressora: "POS-COMPANY" })], "cupom");
+    expect(resolved?.nome_impressora).toBe("POS-COMPANY");
+  });
+
+  it("scopes the override to one company - never leaks across companies for a master admin switching between them", () => {
+    saveTerminalPrinterOverride("company-a", "cupom", {
+      printerName: "POS-A", format: "80mm", widthMm: 80, heightMm: null,
+      orientation: "retrato", bobinaProfileId: null,
+    });
+    const resolved = resolveEffectivePrinterConfig("company-b", [config("cupom", { nome_impressora: "POS-B" })], "cupom");
+    expect(resolved?.nome_impressora).toBe("POS-B");
+  });
+
+  it("getConfiguredPrinter (the function every real print job resolves through) also prefers the local override", async () => {
+    rpc.mockResolvedValue({ data: [config("cupom", { nome_impressora: "POS-COMPANY" })], error: null });
+    saveTerminalPrinterOverride("company-1", "cupom", {
+      printerName: "POS-LOCAL", format: "80mm", widthMm: 80, heightMm: null,
+      orientation: "retrato", bobinaProfileId: null,
+    });
+    await expect(getConfiguredPrinter("company-1", "cupom")).resolves.toEqual(
+      expect.objectContaining({ nome_impressora: "POS-LOCAL" }),
+    );
   });
 });
 
@@ -130,26 +234,22 @@ describe("isPrinterCurrentlyInstalled", () => {
   });
 });
 
-describe("openPrintWindow", () => {
-  it("opens a popup and writes the given HTML into it, triggering the browser's print flow (web fallback)", () => {
-    const popup = {
-      document: { open: vi.fn(), write: vi.fn(), close: vi.fn(), title: "" },
-    };
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+describe("printHtmlInBrowser", () => {
+  it("prints through a same-origin iframe and removes it without using window.open", async () => {
+    delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+    const openSpy = vi.spyOn(window, "open");
+    const promise = printHtmlInBrowser("<!doctype html><html><body>recibo</body></html>", "Recibo");
+    const iframe = document.querySelector("iframe[aria-hidden='true']") as HTMLIFrameElement;
+    expect(iframe).not.toBeNull();
+    const focusSpy = vi.spyOn(iframe.contentWindow!, "focus").mockImplementation(() => undefined);
+    const printSpy = vi.spyOn(iframe.contentWindow!, "print").mockImplementation(() => undefined);
+    iframe.dispatchEvent(new Event("load"));
+    await promise;
 
-    const result = openPrintWindow("<html>conteúdo</html>", "recibo");
-
-    expect(openSpy).toHaveBeenCalledWith("", "_blank", "popup,width=900,height=700");
-    expect(popup.document.write).toHaveBeenCalledWith("<html>conteúdo</html>");
-    expect(popup.document.close).toHaveBeenCalled();
-    expect(result).toBe(popup);
-
-    openSpy.mockRestore();
-  });
-
-  it("throws a clear, actionable error instead of silently failing when the browser blocks the popup", () => {
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
-    expect(() => openPrintWindow("<html></html>")).toThrow(/pop-up/i);
+    expect(focusSpy).toHaveBeenCalled();
+    expect(printSpy).toHaveBeenCalled();
+    expect(document.body.contains(iframe)).toBe(false);
+    expect(openSpy).not.toHaveBeenCalled();
     openSpy.mockRestore();
   });
 });
@@ -194,6 +294,98 @@ describe("rasterizeHtmlToPngBytes", () => {
     expect(captured).not.toBeNull();
     expect(document.body.contains(captured)).toBe(false);
   });
+
+  it.each([58, 80])("uses a configured %smm cupom width and measures height dynamically", async (widthMm) => {
+    (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {};
+    rpc.mockResolvedValue({ data: [config("cupom", { largura_mm: widthMm })], error: null });
+    let captured: HTMLElement | null = null;
+    html2canvasMock.mockImplementation(async (element?: HTMLElement) => {
+      if (element) captured = element;
+      return { toBlob: (callback: (blob: unknown) => void) => callback({ arrayBuffer: async () => new Uint8Array([1]).buffer }) };
+    });
+    invoke.mockResolvedValue(undefined);
+
+    await printHtmlDocument({
+      companyId: "company-1", purpose: "cupom", documentName: "Cupom", dynamicHeight: true,
+      html: ({ widthMm: resolvedWidth }) => `<p>${resolvedWidth}mm</p>`,
+    });
+
+    expect(captured!.style.width).toBe(`${widthMm}mm`);
+    expect(captured!.style.height).not.toBe("");
+    expect(invoke).toHaveBeenCalledWith("print_label_batch", expect.objectContaining({
+      jobs: [expect.objectContaining({ widthMm, heightMm: expect.any(Number) })],
+    }));
+    delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+  });
+});
+
+describe("printHtmlBatch job.rasterScale", () => {
+  const originalTauri = (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+
+  beforeEach(() => {
+    (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {};
+    invoke.mockReset();
+    html2canvasMock.mockReset();
+  });
+  afterEach(() => {
+    (window as unknown as { __TAURI__?: unknown }).__TAURI__ = originalTauri;
+  });
+
+  it("forwards a job's rasterScale as html2canvas's scale option (higher DPI bobina profiles)", async () => {
+    rpc.mockResolvedValue({ data: [config("etiqueta")], error: null });
+    let capturedScale: number | undefined;
+    html2canvasMock.mockImplementation(async (_element?: HTMLElement, options?: { scale?: number }) => {
+      capturedScale = options?.scale;
+      return { toBlob: (callback: (blob: unknown) => void) => callback({ arrayBuffer: async () => new Uint8Array([1]).buffer }) };
+    });
+    invoke.mockResolvedValue(undefined);
+
+    await printHtmlDocument({
+      companyId: "company-1", purpose: "etiqueta", documentName: "Etiqueta",
+      widthMm: 50, heightMm: 30, rasterScale: 300 / 96, html: "<p>etiqueta</p>",
+    });
+
+    expect(capturedScale).toBeCloseTo(300 / 96, 5);
+  });
+
+  it("omits the scale option (rasterizeHtmlToPngImage's own default) when no job specifies one", async () => {
+    rpc.mockResolvedValue({ data: [config("etiqueta")], error: null });
+    let capturedOptions: { scale?: number } | undefined;
+    html2canvasMock.mockImplementation(async (_element?: HTMLElement, options?: { scale?: number }) => {
+      capturedOptions = options;
+      return { toBlob: (callback: (blob: unknown) => void) => callback({ arrayBuffer: async () => new Uint8Array([1]).buffer }) };
+    });
+    invoke.mockResolvedValue(undefined);
+
+    await printHtmlDocument({
+      companyId: "company-1", purpose: "etiqueta", documentName: "Etiqueta",
+      widthMm: 50, heightMm: 30, html: "<p>etiqueta</p>",
+    });
+
+    expect(capturedOptions?.scale).toBe(4); // rasterizeHtmlToPngImage's own default, untouched
+  });
+});
+
+describe("savePrinterConfig bobina profile link", () => {
+  beforeEach(() => rpc.mockReset());
+
+  it("forwards bobinaProfileId as _perfil_bobina_padrao_id", async () => {
+    rpc.mockResolvedValue({ data: config("etiqueta"), error: null });
+    await savePrinterConfig("company-1", { purpose: "etiqueta", bobinaProfileId: "profile-1" });
+    expect(rpc).toHaveBeenCalledWith(
+      "salvar_configuracao_impressora",
+      expect.objectContaining({ _perfil_bobina_padrao_id: "profile-1" }),
+    );
+  });
+
+  it("omits the link when no bobina profile is selected", async () => {
+    rpc.mockResolvedValue({ data: config("etiqueta"), error: null });
+    await savePrinterConfig("company-1", { purpose: "etiqueta" });
+    expect(rpc).toHaveBeenCalledWith(
+      "salvar_configuracao_impressora",
+      expect.objectContaining({ _perfil_bobina_padrao_id: undefined }),
+    );
+  });
 });
 
 describe("printImagesToWindowsPrinter", () => {
@@ -219,7 +411,7 @@ describe("printImagesToWindowsPrinter", () => {
     expect(invoke).toHaveBeenCalledWith("print_label_batch", {
       printerName: "LABEL",
       documentName: "Etiquetas - lote 1",
-      jobs: [{ pngBytes: [1, 2, 3], quantity: 3 }],
+      jobs: [{ pngBytes: [1, 2, 3], quantity: 3, widthMm: undefined, heightMm: undefined }],
     });
   });
 
