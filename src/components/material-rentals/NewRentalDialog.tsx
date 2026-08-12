@@ -8,13 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createMaterialRental, saveRentalCustomer } from "@/lib/material-rental-service";
+import { toDatetimeLocalValue } from "@/lib/datetime";
 import type { CustodyResponsibleOption } from "@/lib/checkin-checkout-types";
 import type { CustomerOption } from "@/lib/material-rental-types";
 
+// Delegates the local-time conversion to the shared, tested helper instead
+// of reimplementing the same getTimezoneOffset subtraction independently
+// (was previously duplicated here, byte-for-byte the same math as
+// toDatetimeLocalValue - see src/lib/datetime.ts).
 function localDateTime(hoursAhead: number) {
-  const date = new Date(Date.now() + hoursAhead * 60 * 60 * 1000);
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
+  return toDatetimeLocalValue(new Date(Date.now() + hoursAhead * 60 * 60 * 1000));
 }
 
 export function NewRentalDialog({

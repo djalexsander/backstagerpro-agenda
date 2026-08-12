@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CheckinDialog } from "./CheckinDialog";
+import { toDatetimeLocalValue } from "@/lib/datetime";
 import type { CustodyOperationView } from "@/lib/checkin-checkout-types";
 import type { StockLocation } from "@/lib/stock-types";
 
@@ -100,14 +101,17 @@ describe("CheckinDialog effective date/time", () => {
   });
 
   it("fills the current local date/time when the dialog opens", () => {
-    vi.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(180); // UTC-3
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-06T15:00:00.000Z"));
+    const now = new Date("2026-08-06T15:00:00.000Z");
+    vi.setSystemTime(now);
 
     renderDialog();
 
+    // Expected value computed via the same helper the component itself
+    // uses (toDatetimeLocalValue), instead of a clock string hardcoded for
+    // one specific timezone - holds under any timezone Vitest runs in.
     expect(screen.getByLabelText(/Data\/hora do retorno/i)).toHaveValue(
-      "2026-08-06T12:00",
+      toDatetimeLocalValue(now),
     );
   });
 

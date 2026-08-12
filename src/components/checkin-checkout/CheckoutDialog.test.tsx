@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CheckoutDialog } from "./CheckoutDialog";
+import { toDatetimeLocalValue } from "@/lib/datetime";
 import type {
   CustodyMaterialSearchResult,
   CustodyResponsibleOption,
@@ -87,14 +88,19 @@ describe("CheckoutDialog effective date/time", () => {
   });
 
   it("fills the current local date/time when the dialog opens", () => {
-    vi.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(180); // UTC-3
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-06T15:00:00.000Z"));
+    const now = new Date("2026-08-06T15:00:00.000Z");
+    vi.setSystemTime(now);
 
     renderDialog();
 
+    // Expected value computed via the same helper the component itself
+    // uses (toDatetimeLocalValue), instead of a clock string hardcoded for
+    // one specific timezone - this holds regardless of which timezone
+    // Vitest actually runs under (UTC-3 locally, UTC on GitHub Actions
+    // runners, or anything else), with no timezone pinned or assumed here.
     expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveValue(
-      "2026-08-06T12:00",
+      toDatetimeLocalValue(now),
     );
   });
 
@@ -117,10 +123,11 @@ describe("CheckoutDialog effective date/time", () => {
 
   it("captures a new 'now' each time the same dialog instance is closed and reopened", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-06T15:00:00.000Z"));
+    const firstMoment = new Date("2026-08-06T15:00:00.000Z");
+    vi.setSystemTime(firstMoment);
     const { rerenderOpen } = renderDialog();
     expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveValue(
-      "2026-08-06T12:00",
+      toDatetimeLocalValue(firstMoment),
     );
 
     // Close it (component stays mounted, as it does on the real pages -
@@ -129,11 +136,15 @@ describe("CheckoutDialog effective date/time", () => {
 
     // Time passes while it's closed - the field must not update while
     // hidden, only when it's opened again.
-    vi.setSystemTime(new Date("2026-08-06T15:07:00.000Z"));
+    const secondMoment = new Date("2026-08-06T15:07:00.000Z");
+    vi.setSystemTime(secondMoment);
     rerenderOpen(true);
 
+    // Same helper, evaluated against the *new* "now" - this fails exactly
+    // as before if the component ever stops recapturing "now" on reopen,
+    // while staying correct under any timezone the test runs in.
     expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveValue(
-      "2026-08-06T12:07",
+      toDatetimeLocalValue(secondMoment),
     );
   });
 });
