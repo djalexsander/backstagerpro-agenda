@@ -25,6 +25,8 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2.5.4"
 image = { version = "0.25", default-features = false, features = ["png"] }
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"
 
 # Direct dependency only on Windows: GDI/spooler bindings used to print
 # label bitmaps through the driver-configured printer (src/printing.rs).

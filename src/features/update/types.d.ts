@@ -10,15 +10,10 @@ declare module "virtual:pwa-register" {
   }): (reloadPage?: boolean) => Promise<void>;
 }
 
-// Tauri plugin stubs (only available in Tauri runtime)
-declare module "@tauri-apps/plugin-updater" {
-  export function check(): Promise<{
-    available: boolean;
-    version?: string;
-    downloadAndInstall: () => Promise<void>;
-  } | null>;
-}
-
-declare module "@tauri-apps/plugin-process" {
-  export function relaunch(): Promise<void>;
-}
+// @tauri-apps/plugin-updater and @tauri-apps/plugin-process are real
+// dependencies now (see package.json) and ship their own accurate types
+// (node_modules/@tauri-apps/plugin-{updater,process}/dist-js/index.d.ts) -
+// the hand-written stubs that used to live here, from when these were
+// dynamically imported optional packages that might not be installed, are
+// gone. They'd shadowed the real Update.close()/download()/install() shape
+// with an incomplete one otherwise.

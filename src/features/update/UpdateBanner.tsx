@@ -1,10 +1,10 @@
 import { useUpdate } from "./UpdateProvider";
-import { Download, X, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Download, X, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const UpdateBanner = () => {
-  const { updateAvailable, isUpdating, newVersion, installUpdate, dismissUpdate } = useUpdate();
+  const { updateAvailable, isUpdating, newVersion, updateError, installUpdate, dismissUpdate } = useUpdate();
 
   return (
     <AnimatePresence>
@@ -59,6 +59,13 @@ export const UpdateBanner = () => {
                 </button>
               )}
             </div>
+
+            {updateError && (
+              <div className="flex items-center justify-center gap-2 px-4 pb-2 text-xs text-amber-200">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span>{updateError}</span>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

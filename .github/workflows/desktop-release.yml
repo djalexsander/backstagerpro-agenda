@@ -1,0 +1,84 @@
+name: Desktop Release
+
+# Builds, signs and publishes the Windows desktop installer whenever a
+# vX.Y.Z tag is pushed - workflow_dispatch is also enabled for a controlled
+# manual re-run (e.g. retrying a failed release without pushing a new tag).
+# Deliberately NOT triggered on every push to main: a release build takes
+# real CI minutes and, more importantly, an unattended publish would ship
+# an update to every installed client with update_mode=auto.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Compile Rust (fast fail before the full release build)
+        working-directory: src-tauri
+        run: cargo check
+
+      # tauri-action runs `npm run build` itself (tauri.conf.json's
+      # build.beforeBuildCommand) as part of the Tauri build lifecycle, so
+      # there is no separate "npm run build" step here - that would just
+      # rebuild the frontend a second time for nothing.
+      #
+      # createUpdaterArtifacts:true in tauri.conf.json makes the bundler
+      # produce a .sig next to every installer; uploadUpdaterJson (default
+      # true, set explicitly here for clarity) then makes tauri-action
+      # assemble those into the single latest.json the updater endpoint
+      # serves. Both signing secrets are required - if either is missing
+      # tauri-action fails the build instead of silently shipping an
+      # unsigned/unverifiable update.
+      #
+      # releaseDraft:true is deliberate: GitHub's /releases/latest API (what
+      # the updater endpoint in tauri.conf.json resolves against) excludes
+      # both drafts and prereleases, so a freshly-built release stays
+      # invisible to every installed client's update check until a human
+      # reviews the generated assets and clicks "Publish" on GitHub. Flip to
+      # false only once this pipeline has been validated end-to-end with a
+      # real test release.
+      - name: Build, sign and publish (Tauri)
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Backstage Pro ${{ github.ref_name }}"
+          releaseBody: "Ver detalhes das mudanças no histórico de commits."
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true

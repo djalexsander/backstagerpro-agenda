@@ -11,6 +11,9 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "whatsapp://*" }]
-    }
+    },
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "process:allow-restart"
   ]
 }

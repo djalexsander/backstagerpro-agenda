@@ -44,7 +44,26 @@ export const installPWAUpdate = async (): Promise<void> => {
   }
 };
 
-// Tauri functions use globalThis to avoid static imports
+/**
+ * Distinguishes the one failure mode worth telling the user apart from
+ * every other: once downloadAndInstall() has already succeeded, the update
+ * itself is safely on disk - only the automatic restart failed (OS blocked
+ * it, a file lock, etc.). That's a "please restart manually" message, not
+ * an "update failed, try again" one. Every other failure (no internet,
+ * endpoint unreachable, malformed latest.json, bad signature, interrupted
+ * download - see tauri-plugin-updater's Error enum) is serialized by the
+ * Rust side as a plain message string with no stable discriminant, so
+ * those all collapse into the generic "download" stage instead of being
+ * guessed apart by matching on message text.
+ */
+export class UpdateInstallError extends Error {
+  constructor(public readonly stage: "download" | "relaunch", cause: unknown) {
+    super(stage === "relaunch" ? "Falha ao reiniciar automaticamente após instalar a atualização." : "Falha ao baixar/instalar a atualização.");
+    this.name = "UpdateInstallError";
+    this.cause = cause;
+  }
+}
+
 export const checkForTauriUpdate = async (): Promise<{
   available: boolean;
   version?: string;
@@ -52,14 +71,23 @@ export const checkForTauriUpdate = async (): Promise<{
   if (!isTauri()) return { available: false };
 
   try {
-    // Dynamic import via new Function to avoid Vite/Rolldown resolution
-    const mod = await new Function('return import("@tauri-apps/plugin-updater")')();
-    const update = await mod.check();
-    if (update?.available) {
-      return { available: true, version: update.version };
-    }
-    return { available: false };
+    const { check } = await import("@tauri-apps/plugin-updater");
+    // check() resolves to null when there's no update (not an object with
+    // `available: false` - `Update.available` is deprecated upstream and is
+    // always true on a non-null result, so testing the return value itself
+    // is the correct/current idiom).
+    const update = await check();
+    if (!update) return { available: false };
+    const version = update.version;
+    // Not proceeding to install from this call - release the Rust-side
+    // resource now instead of letting it leak until GC, since this runs
+    // again on every 5-minute poll (see UpdateProvider.tsx).
+    await update.close();
+    return { available: true, version };
   } catch (err) {
+    // Deliberately silent to the user: this runs unattended every 5
+    // minutes, and a transient network blip shouldn't nag anyone. Full
+    // detail still goes to console for debugging.
     console.warn("[UpdateService] Erro ao verificar atualização Tauri:", err);
     return { available: false };
   }
@@ -68,16 +96,22 @@ export const checkForTauriUpdate = async (): Promise<{
 export const installTauriUpdate = async (): Promise<void> => {
   if (!isTauri()) return;
 
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+  if (!update) return;
+
   try {
-    const updaterMod = await new Function('return import("@tauri-apps/plugin-updater")')();
-    const update = await updaterMod.check();
-    if (update?.available) {
-      await update.downloadAndInstall();
-      const processMod = await new Function('return import("@tauri-apps/plugin-process")')();
-      await processMod.relaunch();
-    }
+    await update.downloadAndInstall();
   } catch (err) {
-    console.error("[UpdateService] Erro ao instalar atualização Tauri:", err);
-    throw err;
+    console.error("[UpdateService] Falha ao baixar/instalar a atualização:", err);
+    throw new UpdateInstallError("download", err);
+  }
+
+  try {
+    const { relaunch } = await import("@tauri-apps/plugin-process");
+    await relaunch();
+  } catch (err) {
+    console.error("[UpdateService] Atualização instalada, mas falha ao reiniciar automaticamente:", err);
+    throw new UpdateInstallError("relaunch", err);
   }
 };
