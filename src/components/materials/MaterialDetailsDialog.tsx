@@ -19,6 +19,7 @@ import { formatBrazilianCurrency } from "@/lib/material-domain";
 import { MaterialPhotoGallery } from "./MaterialPhotoGallery";
 import { MaterialPhotoImage } from "./MaterialPhotoImage";
 import { MaterialIdentificationCard } from "./MaterialIdentificationCard";
+import { MaterialRfidSection } from "./MaterialRfidSection";
 import { getMaterialStockSnapshot } from "@/lib/stock-service";
 import { STOCK_MOVEMENT_LABELS } from "@/lib/stock-domain";
 import { getMaterialMaintenanceSummary } from "@/lib/equipment-maintenance-service";
@@ -175,6 +176,8 @@ export function MaterialDetailsDialog({
   canManageStock = false,
   canViewMaintenance = false,
   canPrintLabels = false,
+  canViewRfid = false,
+  canManageRfid = false,
   onChanged,
 }: {
   material: MaterialWithRelations | null;
@@ -186,6 +189,8 @@ export function MaterialDetailsDialog({
   canManageStock?: boolean;
   canViewMaintenance?: boolean;
   canPrintLabels?: boolean;
+  canViewRfid?: boolean;
+  canManageRfid?: boolean;
   onChanged: () => Promise<void>;
 }) {
   if (!material) return null;
@@ -284,6 +289,15 @@ export function MaterialDetailsDialog({
           canGenerate={canGenerateIdentification}
           onChanged={onChanged}
         />
+
+        {canViewRfid && (
+          <MaterialRfidSection
+            material={material}
+            companyId={companyId}
+            canView={canViewRfid}
+            canManage={canManageRfid}
+          />
+        )}
 
         <MaterialStockSection
           material={material}

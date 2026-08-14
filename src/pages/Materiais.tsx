@@ -65,6 +65,8 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getMaterialPermissions } from "@/lib/material-permissions";
 import { getStockPermissions } from "@/lib/stock-permissions";
+import { getRfidPermissions } from "@/lib/rfid-permissions";
+import { useModulePermission } from "@/hooks/useModulePermission";
 import { buildA4DocumentHtml } from "@/lib/a4-document-print";
 import { printHtmlDocument } from "@/lib/printer-service";
 
@@ -111,6 +113,27 @@ export default function Materiais() {
       hasModule(MODULE_KEYS.CONTROLE_ESTOQUE),
     companyReadOnly: empresaReadOnly,
     companySelected: !!empresaId,
+  });
+  const { permission: rfidGrant } = useModulePermission({
+    companyId: empresaId,
+    featureKey: MODULE_KEYS.RFID_MATERIAIS,
+    role,
+  });
+  const rfidPermissions = getRfidPermissions({
+    role,
+    moduleEnabled:
+      hasModule(MODULE_KEYS.GESTAO_MATERIAIS) &&
+      hasModule(MODULE_KEYS.RFID_MATERIAIS),
+    companyReadOnly: empresaReadOnly,
+    companySelected: !!empresaId,
+    granular: rfidGrant
+      ? {
+          canView: rfidGrant.canView,
+          canCreate: rfidGrant.canCreate,
+          canEdit: rfidGrant.canEdit,
+          canDelete: rfidGrant.canDelete,
+        }
+      : null,
   });
   const canManage =
     permissions.criar ||
@@ -708,6 +731,8 @@ export default function Materiais() {
         canManageStock={stockPermissions.movimentar}
         canViewMaintenance={isMasterAdmin || hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS)}
         canPrintLabels={isMasterAdmin || hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS)}
+        canViewRfid={rfidPermissions.visualizar}
+        canManageRfid={rfidPermissions.vincularTag}
         onChanged={invalidateMaterials}
       />
 

@@ -180,6 +180,7 @@ const FEATURE_KEY_CATEGORY: Record<string, string> = {
   locacao_materiais: "materiais-operacoes",
   manutencao_equipamentos: "materiais-operacoes",
   etiquetas_materiais: "materiais-operacoes",
+  rfid_materiais: "materiais-operacoes",
   financeiro_avancado: "administracao",
   documentos_avancados: "administracao",
   checklist_tecnico: "administracao",

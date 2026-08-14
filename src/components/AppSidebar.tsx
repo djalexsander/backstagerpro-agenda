@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { ChevronDown, LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags, Printer } from "lucide-react";
+import { ChevronDown, LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags, Printer, Radio } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import { canShowRentalNavigation } from "@/lib/material-rental-permissions";
 import { canShowClientsNavigation } from "@/lib/client-permissions";
 import { canShowMaintenanceNavigation } from "@/lib/equipment-maintenance-permissions";
 import { canShowMaterialLabelsNavigation } from "@/lib/material-label-permissions";
+import { canShowRfidNavigation } from "@/lib/rfid-permissions";
 import appVersion from "../../package.json";
 
 const APP_VERSION = appVersion.version;
@@ -151,6 +152,10 @@ export function AppSidebar() {
     isMasterAdmin,
     moduleEnabled: hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS),
   });
+  const hasRfidAccess = canShowRfidNavigation({
+    isMasterAdmin,
+    moduleEnabled: hasModule(MODULE_KEYS.RFID_MATERIAIS),
+  });
 
   // Itens administrativos que exigem módulo específico (ou acesso master
   // irrestrito). Mesma lógica de gate que já existia - só reorganizada em
@@ -205,6 +210,7 @@ export function AppSidebar() {
         ...(hasRentalAccess ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }] : []),
         ...(hasMaintenanceAccess ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }] : []),
         ...(hasLabelsAccess ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }] : []),
+        ...(hasRfidAccess ? [{ title: "RFID UHF", url: "/rfid", icon: Radio }] : []),
       ],
     },
     { id: "administracao", label: "Administração", items: administracaoItems },

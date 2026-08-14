@@ -35,6 +35,7 @@ import Locacoes from "@/pages/Locacoes";
 import Clientes from "@/pages/Clientes";
 import Manutencoes from "@/pages/Manutencoes";
 import Etiquetas from "@/pages/Etiquetas";
+import RfidConferencia from "@/pages/RfidConferencia";
 import ConfiguracoesImpressoras from "@/pages/ConfiguracoesImpressoras";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
@@ -173,6 +174,17 @@ const App = () => (
                         mode="lock"
                       >
                         <Etiquetas />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/rfid"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.RFID_MATERIAIS}
+                        mode="lock"
+                      >
+                        <RfidConferencia />
                       </ModuleGate>
                     }
                   />

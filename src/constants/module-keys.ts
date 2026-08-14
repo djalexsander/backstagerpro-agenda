@@ -51,6 +51,8 @@ export const MODULE_KEYS = {
   ETIQUETAS_MATERIAIS: "etiquetas_materiais",
   /** Relatórios consolidados da área de materiais (planejado) */
   RELATORIOS_MATERIAIS: "relatorios_materiais",
+  /** Identificação e conferência em lote de materiais por tags RFID UHF */
+  RFID_MATERIAIS: "rfid_materiais",
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];
