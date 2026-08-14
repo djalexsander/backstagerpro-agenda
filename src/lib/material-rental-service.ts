@@ -43,12 +43,12 @@ function throwRentalError(error: RpcError | null, context: string): never {
   throw new Error(message);
 }
 
-export async function listRentalCustomers(companyId: string, search = "") {
+export async function listRentalCustomers(companyId: string, search = "", limit = 150) {
   const { data, error } = await callRpc("listar_clientes", {
     _empresa_id: companyId,
     _busca: search || undefined,
     _somente_ativos: true,
-    _limite: 150,
+    _limite: limit,
   });
   if (error) throwRentalError(error, "list customers");
   return (data ?? []) as CustomerOption[];

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { CustomerCombobox } from "@/components/material-rentals/CustomerCombobox";
 import { createMaterialRental, saveRentalCustomer } from "@/lib/material-rental-service";
 import { toDatetimeLocalValue } from "@/lib/datetime";
 import type { CustodyResponsibleOption } from "@/lib/checkin-checkout-types";
@@ -37,7 +38,8 @@ export function NewRentalDialog({
   onCreated: (rentalId: string) => Promise<void> | void;
   onCustomerCreated: () => Promise<void> | void;
 }) {
-  const [customerId, setCustomerId] = useState("");
+  const [customer, setCustomer] = useState<CustomerOption | null>(null);
+  const customerId = customer?.id ?? "";
   const [withdrawalAt, setWithdrawalAt] = useState(() => localDateTime(24));
   const [returnAt, setReturnAt] = useState(() => localDateTime(72));
   const [responsible, setResponsible] = useState("");
@@ -46,6 +48,7 @@ export function NewRentalDialog({
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const createRequestId = useRef(crypto.randomUUID());
+  const customerNameInputRef = useRef<HTMLInputElement>(null);
 
   const defaultResponsible = useMemo(
     () => responsibles.find((item) => item.tipo === "usuario") ?? responsibles[0],
@@ -66,7 +69,11 @@ export function NewRentalDialog({
         name: customerName.trim(),
       });
       await onCustomerCreated();
-      setCustomerId(created.id);
+      // Usa o registro recém-criado diretamente, sem depender de ele já
+      // estar na lista `customers` recarregada - evita um cliente
+      // "sumido" no combobox caso a empresa tenha mais clientes do que o
+      // topo carregado por padrão.
+      setCustomer(created);
       setCustomerName("");
       toast.success("Cliente cadastrado no cadastro canônico.");
     } catch (error) {
@@ -119,19 +126,30 @@ export function NewRentalDialog({
         <form className="space-y-4" onSubmit={submit}>
           <div className="space-y-2">
             <Label>Cliente</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-              <SelectContent>
-                {customers.map((customer) => (
-                  <SelectItem key={customer.id} value={customer.id}>
-                    {customer.nome_fantasia || customer.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CustomerCombobox
+              companyId={companyId}
+              customers={customers}
+              selected={customer}
+              onSelect={setCustomer}
+              onCreateNew={(typedText) => {
+                setCustomerName(typedText);
+                customerNameInputRef.current?.focus();
+              }}
+            />
             <div className="flex gap-2">
-              <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Ou cadastre rapidamente um novo cliente" />
-              <Button type="button" variant="outline" onClick={addCustomer} disabled={creatingCustomer || !customerName.trim()}>
+              <Input
+                ref={customerNameInputRef}
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                placeholder="Ou cadastre rapidamente um novo cliente"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                aria-label="Cadastrar cliente"
+                onClick={addCustomer}
+                disabled={creatingCustomer || !customerName.trim()}
+              >
                 {creatingCustomer ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               </Button>
             </div>
