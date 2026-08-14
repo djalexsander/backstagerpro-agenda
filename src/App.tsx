@@ -36,6 +36,7 @@ import Clientes from "@/pages/Clientes";
 import Manutencoes from "@/pages/Manutencoes";
 import Etiquetas from "@/pages/Etiquetas";
 import RfidConferencia from "@/pages/RfidConferencia";
+import RastreabilidadeMateriais from "@/pages/RastreabilidadeMateriais";
 import ConfiguracoesImpressoras from "@/pages/ConfiguracoesImpressoras";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
@@ -185,6 +186,17 @@ const App = () => (
                         mode="lock"
                       >
                         <RfidConferencia />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/rastreabilidade"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.GESTAO_MATERIAIS}
+                        mode="lock"
+                      >
+                        <RastreabilidadeMateriais />
                       </ModuleGate>
                     }
                   />

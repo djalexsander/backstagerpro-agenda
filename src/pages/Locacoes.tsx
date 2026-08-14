@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { AlertTriangle, CalendarCheck, CalendarClock, Loader2, PackageOpen, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,10 +30,14 @@ export default function Locacoes() {
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.LOCACAO_MATERIAIS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS) && hasModule(MODULE_KEYS.CONTROLE_ESTOQUE) && hasModule(MODULE_KEYS.CHECKIN_CHECKOUT);
   const permissions = getRentalPermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(initialFilters);
   const [newOpen, setNewOpen] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // Deep-link de outras telas (ex: Rastreabilidade de Materiais) abrindo
+  // direto o detalhe de uma locação - mesmo padrão de ?material= em
+  // Etiquetas.tsx: só o valor inicial, não reativo a mudanças posteriores.
+  const [detailId, setDetailId] = useState<string | null>(() => searchParams.get("locacao"));
   useEffect(() => setPage(1), [filters]);
 
   const rentalsState = useMaterialRentals({ companyId, page, pageSize: PAGE_SIZE, filters, enabled: permissions.visualizar });
