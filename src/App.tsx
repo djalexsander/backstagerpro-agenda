@@ -26,8 +26,7 @@ import Backups from "@/pages/Backups";
 import Documentos from "@/pages/Documentos";
 import Funcionarios from "@/pages/Funcionarios";
 import Relatorios from "@/pages/Relatorios";
-import PainelOperacional from "@/pages/PainelOperacional";
-import ChecklistCentral from "@/pages/ChecklistCentral";
+import OperacaoEvento from "@/pages/OperacaoEvento";
 import Materiais from "@/pages/Materiais";
 import Estoque from "@/pages/Estoque";
 import CheckinCheckout from "@/pages/CheckinCheckout";
@@ -99,8 +98,11 @@ const App = () => (
                   <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
                   <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
                   <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />
-                  <Route path="/painel-operacional" element={<ProtectedRoute adminOnly><PainelOperacional /></ProtectedRoute>} />
-                  <Route path="/checklist" element={<ProtectedRoute adminOnly><ChecklistCentral /></ProtectedRoute>} />
+                  <Route path="/operacao-evento" element={<ProtectedRoute adminOnly><OperacaoEvento /></ProtectedRoute>} />
+                  {/* Compatibilidade: rotas antigas/favoritos continuam funcionando,
+                      redirecionando para a aba equivalente na entrada única nova. */}
+                  <Route path="/painel-operacional" element={<Navigate to="/operacao-evento?aba=painel" replace />} />
+                  <Route path="/checklist" element={<Navigate to="/operacao-evento?aba=checklist" replace />} />
                   <Route
                     path="/materiais"
                     element={

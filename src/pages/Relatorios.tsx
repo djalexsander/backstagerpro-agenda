@@ -81,7 +81,7 @@ export default function Relatorios() {
       description: "Painel operacional com equipe escalada e progresso de checklist por evento.",
       icon: ClipboardList,
       available: hasOperacional,
-      navigateTo: "/painel-operacional",
+      navigateTo: "/operacao-evento?aba=painel",
       lockedReason: "Requer o módulo Painel Operacional",
     },
     {

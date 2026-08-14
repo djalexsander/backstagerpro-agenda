@@ -110,4 +110,52 @@ describe("AppSidebar grouping", () => {
     expect(screen.getAllByText("Financeiro").length).toBe(2);
     expect(screen.getByText("Painel Master")).toBeInTheDocument();
   });
+
+  describe("Operação do Evento (Painel Operacional + Checklist consolidados)", () => {
+    it("never shows Painel Operacional or Checklist as standalone entries, regardless of module state", () => {
+      mockUseAuth.mockReturnValue(baseAuth());
+      mockUseCompanyModules.mockReturnValue({ hasModule: () => true });
+
+      renderSidebar();
+
+      expect(screen.queryByText("Painel Operacional")).not.toBeInTheDocument();
+      expect(screen.queryByText("Checklist")).not.toBeInTheDocument();
+    });
+
+    it("shows the single 'Operação do Evento' entry inside Materiais & Operações when only Painel Operacional is active", () => {
+      mockUseAuth.mockReturnValue(baseAuth());
+      mockUseCompanyModules.mockReturnValue({ hasModule: (key: string) => key === "painel_operacional" });
+
+      renderSidebar();
+
+      expect(screen.getByText("Operação do Evento")).toBeInTheDocument();
+    });
+
+    it("shows 'Operação do Evento' when only Checklist Técnico is active (the other module being off doesn't hide the merged entry)", () => {
+      mockUseAuth.mockReturnValue(baseAuth());
+      mockUseCompanyModules.mockReturnValue({ hasModule: (key: string) => key === "checklist_tecnico" });
+
+      renderSidebar();
+
+      expect(screen.getByText("Operação do Evento")).toBeInTheDocument();
+    });
+
+    it("hides 'Operação do Evento' entirely for a non-master user when neither module is active", () => {
+      mockUseAuth.mockReturnValue(baseAuth());
+      mockUseCompanyModules.mockReturnValue({ hasModule: () => false });
+
+      renderSidebar();
+
+      expect(screen.queryByText("Operação do Evento")).not.toBeInTheDocument();
+    });
+
+    it("shows 'Operação do Evento' for master_admin even with no company module active", () => {
+      mockUseAuth.mockReturnValue(baseAuth({ isMasterAdmin: true, isAdminEmpresa: false, role: "master_admin" }));
+      mockUseCompanyModules.mockReturnValue({ hasModule: () => false });
+
+      renderSidebar();
+
+      expect(screen.getByText("Operação do Evento")).toBeInTheDocument();
+    });
+  });
 });

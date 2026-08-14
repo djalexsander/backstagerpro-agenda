@@ -161,6 +161,15 @@ export function AppSidebar() {
     isMasterAdmin,
     moduleEnabled: hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
   });
+  // Painel Operacional + Checklist viraram uma única entrada operacional
+  // ("Operação do Evento") - aparece se qualquer um dos dois módulos estiver
+  // ativo (cada aba continua se auto-limitando por dentro via
+  // useModuleAccess em PainelOperacional.tsx/ChecklistCentral.tsx, então
+  // agrupar aqui não concede acesso extra a nenhum dos dois).
+  const hasOperationalEventAccess =
+    isMasterAdmin ||
+    hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) ||
+    hasModule(MODULE_KEYS.CHECKLIST_TECNICO);
 
   // Itens administrativos que exigem módulo específico (ou acesso master
   // irrestrito). Mesma lógica de gate que já existia - só reorganizada em
@@ -173,8 +182,6 @@ export function AppSidebar() {
         { title: "Documentos", url: "/documentos", icon: FileText },
         { title: "Funcionários", url: "/funcionarios", icon: HardHat },
         { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-        { title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard },
-        { title: "Checklist", url: "/checklist", icon: ClipboardList },
       ]
     : [
         ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
@@ -182,8 +189,6 @@ export function AppSidebar() {
         ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
         ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
         ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Relatórios", url: "/relatorios", icon: BarChart3 }] : []),
-        ...(hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) ? [{ title: "Painel Operacional", url: "/painel-operacional", icon: LayoutDashboard }] : []),
-        ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) ? [{ title: "Checklist", url: "/checklist", icon: ClipboardList }] : []),
       ];
 
   const configuracoesItems: NavItem[] = [
@@ -215,6 +220,7 @@ export function AppSidebar() {
         ...(hasRentalAccess ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }] : []),
         ...(hasMaintenanceAccess ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }] : []),
         ...(hasLabelsAccess ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }] : []),
+        ...(hasOperationalEventAccess ? [{ title: "Operação do Evento", url: "/operacao-evento", icon: ClipboardList }] : []),
         ...(hasRfidAccess ? [{ title: "RFID UHF", url: "/rfid", icon: Radio }] : []),
         ...(hasTraceabilityAccess ? [{ title: "Rastreabilidade", url: "/rastreabilidade", icon: Route }] : []),
       ],
