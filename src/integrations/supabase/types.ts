@@ -4130,6 +4130,14 @@ export type Database = {
         Args: { _actor_id: string; _plan_id?: string; _selection_type: string }
         Returns: Json
       }
+      company_set_user_role: {
+        Args: {
+          _full_name: string
+          _role: string
+          _target_user_id: string
+        }
+        Returns: Json
+      }
       company_has_active_module: {
         Args: { _empresa_id: string; _feature_key: string }
         Returns: boolean

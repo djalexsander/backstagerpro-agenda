@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, User, Plus, Pencil, Trash2 } from "lucide-react";
-import { normalizeAppRole, selectHighestPriorityRole } from "@/lib/user-role";
+import { selectHighestPriorityRole } from "@/lib/user-role";
 import { UserModulePermissionsFields } from "@/components/users/UserModulePermissionsFields";
 import {
   buildEmptyPermissionRows,
@@ -91,15 +91,11 @@ export default function UserManagement() {
         .map((profile) => {
           const userRoles = roles?.filter((item) => item.user_id === profile.user_id) ?? [];
           const selectedRole = selectHighestPriorityRole(userRoles) || "usuario";
-          const selectedRoleRecord = userRoles.find(
-            (item) => normalizeAppRole(item.role) === selectedRole,
-          );
           return {
             ...profile,
             full_name: profile.full_name || profile.user_id,
             email: profile.email || "",
             role: selectedRole,
-            roleId: selectedRoleRecord?.id,
           };
         })
         .filter((listedUser) => listedUser.role !== "master_admin");
@@ -109,24 +105,17 @@ export default function UserManagement() {
 
   const updateRole = useMutation({
     mutationFn: async ({
-      roleId,
       newRole,
       userId,
       newName,
       permissions,
-    }: { roleId?: string; newRole: string; userId: string; newName: string; permissions: ModulePermissionEntry[] }) => {
-      // Update role
-      if (roleId) {
-        const roleRes = await supabase.from("user_roles").update({ role: newRole as any }).eq("id", roleId);
-        if (roleRes.error) throw roleRes.error;
-      } else {
-        // Try upsert if no roleId
-        const roleRes = await supabase.from("user_roles").upsert({ user_id: userId, role: newRole as any } as any, { onConflict: "user_id,role" } as any);
-        if (roleRes.error) throw roleRes.error;
-      }
-      // Update profile
-      const profileRes = await supabase.from("profiles").update({ full_name: newName } as any).eq("user_id", userId);
-      if (profileRes.error) throw profileRes.error;
+    }: { newRole: string; userId: string; newName: string; permissions: ModulePermissionEntry[] }) => {
+      const { error: roleError } = await supabase.rpc("company_set_user_role", {
+        _target_user_id: userId,
+        _role: newRole,
+        _full_name: newName,
+      });
+      if (roleError) throw roleError;
       // empresa_usuarios.perfil is synchronized by a database trigger.
 
       // Role must already be "usuario" in the DB before set_user_module_permissions
@@ -335,7 +324,6 @@ export default function UserManagement() {
               onClick={() =>
                 editUser &&
                 updateRole.mutate({
-                  roleId: editUser.roleId,
                   newRole: editRole,
                   userId: editUser.user_id,
                   newName: editName,
