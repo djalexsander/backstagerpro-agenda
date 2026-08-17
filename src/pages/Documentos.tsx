@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,7 @@ import jsPDF from "jspdf";
 import { addBrandingHeader } from "@/lib/pdf-branding";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
+import { resolveDocumentTemplateContent } from "@/lib/document-placeholders";
 
 const TIPOS_DOCUMENTO = [
   { value: "contrato", label: "Contrato de Show" },
@@ -125,10 +126,6 @@ Nome:
 CPF:
 Função:`,
 };
-
-function fmtCurrency(n: number | null) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
-}
 
 export default function Documentos() {
   const { toast } = useToast();
@@ -287,55 +284,28 @@ export default function Documentos() {
     setEditorOpen(true);
   };
 
-  const replaceVariables = (content: string, eventId: string): string => {
-    const event = events.find((e) => e.id === eventId);
-    if (!event) return content;
-
-    // Fetch financials for event
-    let result = content;
-    const replacements: Record<string, string> = {
-      "{{evento_nome}}": event.name || "",
-      "{{evento_data}}": event.date ? format(parseISO(event.date), "dd/MM/yyyy", { locale: ptBR }) : "",
-      "{{evento_cidade}}": event.city || "",
-      "{{evento_local}}": event.venue || "",
-      "{{artista}}": event.artist || "",
-      "{{horario_show}}": event.show_time || "",
-      "{{empresa_nome}}": empresa?.nome_empresa || "",
-      "{{data_atual}}": format(new Date(), "dd/MM/yyyy", { locale: ptBR }),
-      "{{observacoes}}": event.observations || "",
-      "{{cache}}": "",
-      "{{transporte}}": "",
-      "{{alimentacao}}": "",
-      "{{hospedagem}}": "",
-    };
-
-    Object.entries(replacements).forEach(([key, value]) => {
-      result = result.split(key).join(value);
-    });
-
-    return result;
-  };
-
   const generateDocument = useMutation({
     mutationFn: async () => {
       if (!selectedTemplate || !selectedEventId) throw new Error("Selecione template e evento");
 
-      // Fetch financial data for the event
-      const { data: fin } = await supabase
-        .from("financials")
-        .select("cache, transport, food, lodging")
-        .eq("event_id", selectedEventId)
-        .single();
-
-      let content = replaceVariables(selectedTemplate.conteudo, selectedEventId);
-      if (fin) {
-        content = content.split("{{cache}}").join(fmtCurrency(fin.cache));
-        content = content.split("{{transporte}}").join(fmtCurrency(fin.transport));
-        content = content.split("{{alimentacao}}").join(fmtCurrency(fin.food));
-        content = content.split("{{hospedagem}}").join(fmtCurrency(fin.lodging));
-      }
-
       const event = events.find((e) => e.id === selectedEventId);
+      if (!event) throw new Error("Evento selecionado não encontrado");
+
+      const content = await resolveDocumentTemplateContent({
+        templateContent: selectedTemplate.conteudo,
+        event,
+        companyName: empresa?.nome_empresa || "",
+        loadFinancial: async () => {
+          const { data, error } = await supabase
+            .from("financials")
+            .select("cache, transport, food, lodging")
+            .eq("event_id", selectedEventId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+      });
+
       const docNome = `${selectedTemplate.nome} - ${event?.name || "Evento"} - ${format(new Date(), "dd/MM/yyyy")}`;
 
       const { error } = await supabase.from("generated_documents").insert({
