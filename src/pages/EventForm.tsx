@@ -22,10 +22,12 @@ import {
   uploadEventFile,
 } from "@/lib/event-file-service";
 import { assertEventFileAdministrator } from "@/lib/event-file-security";
+import { reconcileEventDays } from "@/lib/event-days-service";
 
 type EventStatus = Database["public"]["Enums"]["event_status"];
 
 interface DayForm {
+  id?: string;
   date: string;
   artist: string;
   show_time: string;
@@ -33,6 +35,7 @@ interface DayForm {
   riderFile: File | null;
   existingRiderId?: string;
   existingRiderName?: string;
+  existingRiderPath?: string;
 }
 
 interface MaterialFile {
@@ -76,7 +79,7 @@ export default function EventForm() {
   const [selectedFuncionarios, setSelectedFuncionarios] = useState<string[]>([]);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
 
-  const { data: existingEvent } = useQuery({
+  const { data: existingEvent, isLoading: isLoadingExistingEvent } = useQuery({
     queryKey: ["event", id],
     enabled: !!isEditing,
     queryFn: async () => {
@@ -86,7 +89,7 @@ export default function EventForm() {
     },
   });
 
-  const { data: existingDays = [] } = useQuery({
+  const { data: existingDays = [], isLoading: isLoadingExistingDays } = useQuery({
     queryKey: ["event-days", id],
     enabled: !!isEditing,
     queryFn: async () => {
@@ -100,7 +103,7 @@ export default function EventForm() {
     },
   });
 
-  const { data: existingFiles = [] } = useQuery({
+  const { data: existingFiles = [], isLoading: isLoadingExistingFiles } = useQuery({
     queryKey: ["event-files", id],
     enabled: !!isEditing,
     queryFn: async () => {
@@ -157,6 +160,7 @@ export default function EventForm() {
       const mapped = existingDays.map((d) => {
         const file = existingFiles.find((f) => f.event_day_id === d.id && f.file_type !== "material_list");
         return {
+          id: d.id,
           date: d.date || "",
           artist: d.artist || "",
           show_time: d.show_time?.slice(0, 5) || "",
@@ -164,6 +168,7 @@ export default function EventForm() {
           riderFile: null,
           existingRiderId: file?.id,
           existingRiderName: file?.file_name,
+          existingRiderPath: file?.file_path,
         } as DayForm;
       });
       setDays(mapped);
@@ -205,7 +210,12 @@ export default function EventForm() {
     setDays((prev) => prev.map((d, i) => i === index ? { ...d, [key]: value } : d));
   };
 
-  const uploadDayRider = async (file: File, eventId: string, eventDayId: string) => {
+  const uploadDayRider = async (
+    file: File,
+    eventId: string,
+    eventDayId: string,
+    replacement?: { id: string; file_path: string },
+  ) => {
     if (!empresaId) throw new Error("Empresa não identificada");
     await uploadEventFile({
       eventId,
@@ -215,6 +225,7 @@ export default function EventForm() {
       fileType: "artist_rider",
       kind: "day",
       role,
+      replacement,
     });
   };
 
@@ -318,34 +329,57 @@ export default function EventForm() {
       };
 
       let eventId: string;
+      let persistedDays: Array<{ id: string }>;
+      const desiredDays = days.map((day, index) => ({
+        id: day.id,
+        day_number: index + 1,
+        date: day.date || null,
+        artist: day.artist || "",
+        show_time: day.show_time || null,
+        observations: day.observations || null,
+      }));
+      const confirmLinkedFileRemoval = (linkedFileCount: number, removedDayCount: number) =>
+        window.confirm(
+          `Remover ${removedDayCount} dia(s) também excluirá ${linkedFileCount} rider(s) vinculado(s). Deseja continuar?`,
+        );
 
       if (isEditing) {
-        const { error } = await supabase.from("events").update(payload as any).eq("id", id!);
-        if (error) throw error;
         eventId = id!;
-        await supabase.from("event_days").delete().eq("event_id", eventId);
+        persistedDays = await reconcileEventDays({
+          eventId,
+          empresaId,
+          existingDays,
+          desiredDays,
+          role,
+          confirmLinkedFileRemoval,
+        });
+
+        const { error } = await supabase.from("events").update(payload as any).eq("id", eventId);
+        if (error) throw error;
       } else {
         const { data, error } = await supabase.from("events").insert(payload as any).select("id").single();
         if (error) throw error;
         eventId = data.id;
+        persistedDays = await reconcileEventDays({
+          eventId,
+          empresaId,
+          existingDays: [],
+          desiredDays,
+          role,
+        });
       }
 
-      // Create event_days
       for (let i = 0; i < days.length; i++) {
         const day = days[i];
-        const { data: dayData, error: dayError } = await supabase.from("event_days").insert({
-          event_id: eventId,
-          day_number: i + 1,
-          date: day.date || null,
-          artist: day.artist || "",
-          show_time: day.show_time || null,
-          observations: day.observations || null,
-          empresa_id: empresaId,
-        } as any).select("id").single();
-        if (dayError) throw dayError;
-
-        if (day.riderFile && dayData) {
-          await uploadDayRider(day.riderFile, eventId, dayData.id);
+        if (day.riderFile) {
+          await uploadDayRider(
+            day.riderFile,
+            eventId,
+            persistedDays[i].id,
+            day.existingRiderId && day.existingRiderPath
+              ? { id: day.existingRiderId, file_path: day.existingRiderPath }
+              : undefined,
+          );
         }
       }
 
@@ -776,7 +810,15 @@ export default function EventForm() {
 
         <div className="flex gap-3 justify-end">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancelar</Button>
-          <Button type="submit" disabled={saving}>
+          <Button
+            type="submit"
+            disabled={
+              saving ||
+              (!!isEditing && (
+                isLoadingExistingEvent || isLoadingExistingDays || isLoadingExistingFiles
+              ))
+            }
+          >
             {saving ? "Salvando..." : isEditing ? "Atualizar" : "Criar Evento"}
           </Button>
         </div>

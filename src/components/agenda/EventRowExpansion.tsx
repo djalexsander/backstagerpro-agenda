@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Save, Music, Clock, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { reconcileEventDays } from "@/lib/event-days-service";
 
 interface EventRowExpansionProps {
   eventId: string;
@@ -25,7 +26,7 @@ interface DayForm {
 }
 
 export function EventRowExpansion({ eventId, numDays, empresaId }: EventRowExpansionProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, role } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dayForms, setDayForms] = useState<DayForm[]>([]);
@@ -61,22 +62,25 @@ export function EventRowExpansion({ eventId, numDays, empresaId }: EventRowExpan
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      for (const day of dayForms) {
-        const payload = {
-          event_id: eventId,
-          empresa_id: empresaId,
+      if (isLoading) throw new Error("Dias do evento ainda estão carregando");
+      await reconcileEventDays({
+        eventId,
+        empresaId,
+        existingDays: eventDays,
+        desiredDays: dayForms.map((day) => ({
+          id: day.id,
           day_number: day.day_number,
           date: day.date || null,
           artist: day.artist || "",
           show_time: day.show_time || null,
           observations: day.observations || null,
-        };
-        if (day.id) {
-          await supabase.from("event_days").update(payload).eq("id", day.id);
-        } else {
-          await supabase.from("event_days").insert(payload);
-        }
-      }
+        })),
+        role,
+        confirmLinkedFileRemoval: (linkedFileCount, removedDayCount) =>
+          window.confirm(
+            `Remover ${removedDayCount} dia(s) também excluirá ${linkedFileCount} rider(s) vinculado(s). Deseja continuar?`,
+          ),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-days-expansion", eventId] });
