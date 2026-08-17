@@ -5316,6 +5316,10 @@ export type Database = {
         Args: { _requested_company_id: string; _write: boolean }
         Returns: string
       }
+      restore_company_backup: {
+        Args: { _empresa_id: string; _payload: Json }
+        Returns: Json
+      }
       salvar_cliente: {
         Args: {
           _cliente_id?: string

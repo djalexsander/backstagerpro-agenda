@@ -114,54 +114,11 @@ export async function restoreBackup(
   const payload = prepareBackupForRestore(rawPayload, empresaId);
 
   try {
-    // 1. Delete current data (order matters for FK constraints)
-    const { data: currentEvents, error: currentEventsError } = await supabase
-      .from("events")
-      .select("id")
-      .eq("empresa_id", empresaId);
-    if (currentEventsError) throw currentEventsError;
-    const currentIds = (currentEvents || []).map((event) => event.id);
-
-    if (currentIds.length > 0) {
-      const fileDelete = await supabase
-        .from("event_files")
-        .delete()
-        .in("event_id", currentIds);
-      if (fileDelete.error) throw fileDelete.error;
-      const dayDelete = await supabase
-        .from("event_days")
-        .delete()
-        .in("event_id", currentIds);
-      if (dayDelete.error) throw dayDelete.error;
-      const financialDelete = await supabase
-        .from("financials")
-        .delete()
-        .in("event_id", currentIds);
-      if (financialDelete.error) throw financialDelete.error;
-    }
-    const eventDelete = await supabase
-      .from("events")
-      .delete()
-      .eq("empresa_id", empresaId);
-    if (eventDelete.error) throw eventDelete.error;
-
-    // 2. Insert backup data in correct order
-    if (payload.data.eventos.length) {
-      const { error } = await supabase.from("events").insert(payload.data.eventos);
-      if (error) throw error;
-    }
-    if (payload.data.event_days.length) {
-      const { error } = await supabase.from("event_days").insert(payload.data.event_days);
-      if (error) throw error;
-    }
-    if (payload.data.event_files.length) {
-      const { error } = await supabase.from("event_files").insert(payload.data.event_files);
-      if (error) throw error;
-    }
-    if (payload.data.financials.length) {
-      const { error } = await supabase.from("financials").insert(payload.data.financials);
-      if (error) throw error;
-    }
+    const { error } = await supabase.rpc("restore_company_backup", {
+      _empresa_id: empresaId,
+      _payload: payload as unknown as Json,
+    });
+    if (error) throw error;
   } catch (err) {
     console.error("[BackupService] Erro no restore:", err);
     throw new Error(`Falha ao restaurar backup: ${(err as Error).message}`);
