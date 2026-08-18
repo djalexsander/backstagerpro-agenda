@@ -5,6 +5,20 @@ import type { ReactNode } from "react";
 import { useCheckinCheckout } from "./useCheckinCheckout";
 
 vi.mock("@/lib/checkin-checkout-service", () => ({
+  // Kept in sync by hand with the real export (checkin-checkout-service.ts)
+  // - this file fully replaces the module, so the real constant is never
+  // loaded here.
+  CUSTODY_INVALIDATION_QUERY_KEYS: [
+    "material-custodies",
+    "material-custody-indicators",
+    "stock-materials",
+    "stock-movements",
+    "stock-indicators",
+    "materials",
+    "material-rentals",
+    "material-rental-indicators",
+    "material-rental-detail",
+  ],
   listCustodyOperations: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   getCustodyIndicators: vi.fn().mockResolvedValue({
     itens_fora: 0,

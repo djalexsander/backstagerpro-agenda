@@ -30,6 +30,7 @@ import OperacaoEvento from "@/pages/OperacaoEvento";
 import Materiais from "@/pages/Materiais";
 import Estoque from "@/pages/Estoque";
 import CheckinCheckout from "@/pages/CheckinCheckout";
+import ScannerRemoto from "@/pages/ScannerRemoto";
 import Locacoes from "@/pages/Locacoes";
 import Clientes from "@/pages/Clientes";
 import Manutencoes from "@/pages/Manutencoes";
@@ -133,6 +134,17 @@ const App = () => (
                         mode="lock"
                       >
                         <CheckinCheckout />
+                      </ModuleGate>
+                    }
+                  />
+                  <Route
+                    path="/scanner-remoto"
+                    element={
+                      <ModuleGate
+                        featureKey={MODULE_KEYS.CHECKIN_CHECKOUT}
+                        mode="lock"
+                      >
+                        <ScannerRemoto />
                       </ModuleGate>
                     }
                   />

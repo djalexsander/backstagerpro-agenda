@@ -4,7 +4,23 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }));
-vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: rpcMock } }));
+// This page now also opens a realtime subscription (useCompanyRealtime, for
+// Scanner Remoto multiterminal sync) - unrelated to what these tests cover
+// (the identification field/camera integration), so the fake channel here
+// only needs to not crash on .on()/.subscribe(), never actually connect.
+vi.mock("@/integrations/supabase/client", () => {
+  const fakeChannel = {
+    on: () => fakeChannel,
+    subscribe: () => fakeChannel,
+  };
+  return {
+    supabase: {
+      rpc: rpcMock,
+      channel: () => fakeChannel,
+      removeChannel: () => {},
+    },
+  };
+});
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     role: "admin_empresa",

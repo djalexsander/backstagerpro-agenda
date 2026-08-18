@@ -19,6 +19,24 @@ import type {
   CustodyWriteOffInput,
 } from "./checkin-checkout-types";
 
+// Single source of truth for "what else needs to refetch after a custody
+// row changes" - shared between this module's own callers (useCheckinCheckout's
+// invalidateCustody, run after a local mutation) and the realtime domain
+// registry (src/lib/realtime/realtime-domains.ts, run after a Postgres
+// Changes event from any terminal). Keeping one array instead of two avoids
+// them drifting apart.
+export const CUSTODY_INVALIDATION_QUERY_KEYS = [
+  "material-custodies",
+  "material-custody-indicators",
+  "stock-materials",
+  "stock-movements",
+  "stock-indicators",
+  "materials",
+  "material-rentals",
+  "material-rental-indicators",
+  "material-rental-detail",
+] as const;
+
 function throwCustodyError(error: unknown, context: string): never {
   const translated = translateCustodyError(error);
   if (!translated.handled) {

@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { ChevronDown, LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags, Printer, Radio, Route } from "lucide-react";
+import { ChevronDown, LayoutDashboard, Calendar, DollarSign, Users, LogOut, Music, Building2, Globe, Settings, ScrollText, CreditCard, Database, FileText, HardHat, Package, FileCheck, Wallet, BarChart3, ClipboardList, Layers, Warehouse, ScanLine, CalendarRange, Wrench, Tags, Printer, Radio, Route, Smartphone } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -217,6 +217,10 @@ export function AppSidebar() {
         ...(hasMaterialsAccess ? [{ title: "Materiais", url: "/materiais", icon: Package }] : []),
         ...(hasStockAccess ? [{ title: "Estoque", url: "/estoque", icon: Warehouse }] : []),
         ...(hasCustodyAccess ? [{ title: "Check-in / Check-out", url: "/checkin-checkout", icon: ScanLine }] : []),
+        // Mesmo acesso de Check-in/Check-out (hasCustodyAccess) - Scanner
+        // Remoto não é um módulo separado, é o mesmo Check-in/Check-out
+        // operado por um celular/PWA.
+        ...(hasCustodyAccess ? [{ title: "Scanner Remoto", url: "/scanner-remoto", icon: Smartphone }] : []),
         ...(hasRentalAccess ? [{ title: "Locações", url: "/locacoes", icon: CalendarRange }] : []),
         ...(hasMaintenanceAccess ? [{ title: "Manutenções", url: "/manutencoes", icon: Wrench }] : []),
         ...(hasLabelsAccess ? [{ title: "Etiquetas", url: "/etiquetas", icon: Tags }] : []),

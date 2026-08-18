@@ -34,10 +34,12 @@ import { CancelCheckoutDialog } from "@/components/checkin-checkout/CancelChecko
 import { CustodyHistoryDialog } from "@/components/checkin-checkout/CustodyHistoryDialog";
 import { CustodyWriteOffDialog } from "@/components/checkin-checkout/CustodyWriteOffDialog";
 import { RentalOperationsQueue } from "@/components/checkin-checkout/RentalOperationsQueue";
+import { RemoteScannerSessionsPanel } from "@/components/checkin-checkout/RemoteScannerSessionsPanel";
 import { RentalDetailDialog } from "@/components/material-rentals/RentalDetailDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useCheckinCheckout } from "@/hooks/useCheckinCheckout";
+import { useCompanyRealtime } from "@/hooks/useCompanyRealtime";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getCustodyPermissions } from "@/lib/checkin-checkout-permissions";
 import {
@@ -156,6 +158,12 @@ export default function CheckinCheckout() {
     accessEnabled: permissions.visualizar,
   });
 
+  // Same tables Scanner Remoto (src/pages/ScannerRemoto.tsx) touches - a
+  // check-in/check-out or locação change made from a phone/PWA terminal
+  // shows up here without a manual reload, and vice versa. See
+  // src/lib/realtime/realtime-domains.ts for what each domain invalidates.
+  useCompanyRealtime(companyId, ["material_custodias", "material_locacoes", "materiais"]);
+
   useEffect(() => setHistoryPage(1), [historyFilters]);
 
   // Central identification function - manual typing, USB/Bluetooth scanner
@@ -263,6 +271,8 @@ export default function CheckinCheckout() {
         <h1 className="text-2xl font-bold">Check-in / Check-out</h1>
         <p className="text-muted-foreground">Custódia física integrada ao saldo e ao ledger oficial.</p>
       </div>
+
+      {permissions.visualizar && companyId && <RemoteScannerSessionsPanel companyId={companyId} />}
 
       <Card className="border-primary/30">
         <CardHeader><CardTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5" /> Escanear ou buscar material</CardTitle></CardHeader>

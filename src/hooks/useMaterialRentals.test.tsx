@@ -5,6 +5,18 @@ import type { ReactNode } from "react";
 import { useMaterialRentals } from "./useMaterialRentals";
 
 vi.mock("@/lib/material-rental-service", () => ({
+  // Kept in sync by hand with the real export (material-rental-service.ts)
+  // - this file fully replaces the module, so the real constant is never
+  // loaded here.
+  RENTAL_INVALIDATION_QUERY_KEYS: [
+    "material-rentals",
+    "material-rental-indicators",
+    "material-rental-detail",
+    "material-custodies",
+    "stock-materials",
+    "stock-movements",
+    "rental-customers",
+  ],
   listMaterialRentals: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   getRentalIndicators: vi.fn().mockResolvedValue({
     em_andamento: 0,

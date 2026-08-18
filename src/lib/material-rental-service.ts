@@ -43,6 +43,20 @@ function throwRentalError(error: RpcError | null, context: string): never {
   throw new Error(message);
 }
 
+// Single source of truth for "what else needs to refetch after a rental row
+// changes" - shared between useMaterialRentals' own invalidateRentals (run
+// after a local mutation) and the realtime domain registry (src/lib/realtime/
+// realtime-domains.ts, run after a Postgres Changes event from any terminal).
+export const RENTAL_INVALIDATION_QUERY_KEYS = [
+  "material-rentals",
+  "material-rental-indicators",
+  "material-rental-detail",
+  "material-custodies",
+  "stock-materials",
+  "stock-movements",
+  "rental-customers",
+] as const;
+
 export async function listRentalCustomers(companyId: string, search = "", limit = 150) {
   const { data, error } = await callRpc("listar_clientes", {
     _empresa_id: companyId,
