@@ -19,6 +19,13 @@ export interface ModuleDependencyValidationResult {
   missingDependencies: string[];
 }
 
+/** Same entitlement-state rule used by the Master catalog. */
+export function doesCompanyModuleBlockPurchase(
+  status: CompanyModuleEntitlementStatus | string,
+): boolean {
+  return status === "active" || status === "pending";
+}
+
 export function validateModuleDependenciesForActivation({
   moduleDependencies,
   activeModuleFeatureKeys,

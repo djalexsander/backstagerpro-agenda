@@ -24,6 +24,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
 import { generatePixPayload } from "@/lib/pix";
+import { getSelfServiceAvailableModules } from "@/lib/self-service-module-availability";
 
 export default function PlanoAssinatura() {
   const { empresaId } = useAuth();
@@ -245,19 +246,17 @@ export default function PlanoAssinatura() {
 
   const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
 
-  // Available modules
-  const pendingRequestIds = new Set(moduleRequests.filter((r: any) => r.status === "pending").map((r: any) => r.module_id));
-  const pendingBatchModuleIds = useMemo(() => {
-    const ids = new Set<string>();
-    batchRequests
-      .filter((b: any) => b.status === "pending" || b.status === "paid")
-      .forEach((b: any) => {
-        (b.module_batch_request_items || []).forEach((item: any) => ids.add(item.module_id));
-      });
-    return ids;
-  }, [batchRequests]);
-  const activeModuleIds = new Set(allModules.filter(m => m.status !== "cancelled" && m.status !== "rejected").map(m => m.module_id));
-  const availableModules = catalog.filter(c => !activeModuleIds.has(c.id) && !pendingRequestIds.has(c.id) && !pendingBatchModuleIds.has(c.id));
+  // A provisioned empresa_modules row is only a placeholder. The canonical
+  // entitlement states (active/pending) and in-flight commercial records are
+  // what make a catalog module unavailable for another purchase.
+  const availableModules = useMemo(() => getSelfServiceAvailableModules({
+    companyId: empresaId,
+    catalog,
+    companyModules: allModules,
+    moduleRequests,
+    batchRequests,
+    modulePayments,
+  }), [empresaId, catalog, allModules, moduleRequests, batchRequests, modulePayments]);
 
   const selectedModules = catalog.filter(c => selectedModuleIds.has(c.id));
 
