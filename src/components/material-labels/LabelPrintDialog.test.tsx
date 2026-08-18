@@ -21,7 +21,8 @@ const {
 }));
 
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
-vi.mock("@/lib/printer-service", () => ({
+vi.mock("@/lib/printer-service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/printer-service")>()),
   isDesktopRuntime: isDesktopRuntimeMock,
   getConfiguredPrinter: getConfiguredPrinterMock,
   listPrinterConfigs: listPrinterConfigsMock,
@@ -40,6 +41,8 @@ vi.mock("@/lib/material-label-print", () => ({
 import { LabelPrintDialog } from "./LabelPrintDialog";
 import type { BobinaProfile } from "@/lib/bobina-profile-types";
 import type { LabelBatchSelection, LabelMaterial, LabelModel, LabelPrintBatch } from "@/lib/material-label-types";
+import type { PrinterConfig } from "@/lib/printer-types";
+import { clearTerminalPrinterOverride, saveTerminalPrinterOverride } from "@/lib/terminal-printer-config";
 
 const model: LabelModel = {
   id: "model-1", empresa_id: "company-1", nome: "Padrão", descricao: null,
@@ -83,7 +86,7 @@ const fakeRecord: LabelPrintBatch = {
 function renderDialog(overrides?: Partial<{ onPrinted: () => Promise<void>; onOpenChange: (open: boolean) => void }>) {
   const onPrinted = overrides?.onPrinted ?? vi.fn().mockResolvedValue(undefined);
   const onOpenChange = overrides?.onOpenChange ?? vi.fn();
-  render(
+  const rendered = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
       <LabelPrintDialog
         open
@@ -96,15 +99,31 @@ function renderDialog(overrides?: Partial<{ onPrinted: () => Promise<void>; onOp
       />
     </QueryClientProvider>,
   );
-  return { onPrinted, onOpenChange };
+  return { onPrinted, onOpenChange, unmount: rendered.unmount };
 }
 
 function clickPrint() {
   fireEvent.click(screen.getByRole("button", { name: /registrar lote e imprimir/i }));
 }
 
+function labelPrinterConfig(profileId: string | null, printerName = "LABEL-COMPANY"): PrinterConfig {
+  return {
+    id: "printer-config-1", empresa_id: "company-1", finalidade: "etiqueta",
+    nome_impressora: printerName, formato: "50x30mm", largura_mm: 50, altura_mm: 30,
+    orientacao: "retrato", ativo: true, configuracoes: {}, perfil_bobina_padrao_id: profileId,
+  };
+}
+
+function saveLocalLabelProfile(profileId: string, printerName = "LABEL-LOCAL") {
+  saveTerminalPrinterOverride("company-1", "etiqueta", {
+    printerName, format: "50x30mm", widthMm: 50, heightMm: 30,
+    orientation: "retrato", bobinaProfileId: profileId,
+  });
+}
+
 describe("LabelPrintDialog", () => {
   beforeEach(() => {
+    localStorage.clear();
     toastMock.mockReset();
     isDesktopRuntimeMock.mockReset();
     getConfiguredPrinterMock.mockReset();
@@ -191,6 +210,7 @@ function bobinaProfile(overrides: Partial<BobinaProfile> = {}): BobinaProfile {
 
 describe("LabelPrintDialog bobina profile resolution", () => {
   beforeEach(() => {
+    localStorage.clear();
     toastMock.mockReset();
     isDesktopRuntimeMock.mockReset().mockReturnValue(false);
     getConfiguredPrinterMock.mockReset();
@@ -201,7 +221,7 @@ describe("LabelPrintDialog bobina profile resolution", () => {
 
   it("resolves the profile linked to the etiqueta printer config and forwards it to printLabelBatch", async () => {
     const linked = bobinaProfile({ id: "profile-linked" });
-    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", perfil_bobina_padrao_id: "profile-linked" }]);
+    listPrinterConfigsMock.mockResolvedValue([labelPrinterConfig("profile-linked")]);
     listBobinaProfilesMock.mockResolvedValue([bobinaProfile({ id: "profile-other", padrao: true }), linked]);
     renderDialog();
 
@@ -213,7 +233,7 @@ describe("LabelPrintDialog bobina profile resolution", () => {
 
   it("falls back to the company's default profile when the printer has none linked yet", async () => {
     const defaultProfile = bobinaProfile({ id: "profile-default", padrao: true });
-    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", perfil_bobina_padrao_id: null }]);
+    listPrinterConfigsMock.mockResolvedValue([labelPrinterConfig(null)]);
     listBobinaProfilesMock.mockResolvedValue([defaultProfile]);
     renderDialog();
 
@@ -224,7 +244,7 @@ describe("LabelPrintDialog bobina profile resolution", () => {
   });
 
   it("shows the bobina's layout preview (columns from the resolved profile), not the old one-card-per-material grid", async () => {
-    listPrinterConfigsMock.mockResolvedValue([{ finalidade: "etiqueta", perfil_bobina_padrao_id: "profile-1" }]);
+    listPrinterConfigsMock.mockResolvedValue([labelPrinterConfig("profile-1")]);
     listBobinaProfilesMock.mockResolvedValue([bobinaProfile()]);
     renderDialog();
 
@@ -234,5 +254,52 @@ describe("LabelPrintDialog bobina profile resolution", () => {
     // da etiqueta" sample also renders the material's name as a field.
     const grid = await screen.findByTestId("bobina-preview");
     expect(within(grid).getAllByText("Furadeira")).toHaveLength(2);
+  });
+
+  it("uses this terminal's local bobina profile for both preview and the real desktop batch", async () => {
+    const companyProfile = bobinaProfile({ id: "profile-company", nome: "Bobina empresa", padrao: true });
+    const localProfile = bobinaProfile({ id: "profile-local", nome: "Bobina terminal", colunas: 3 });
+    const localPrinter = labelPrinterConfig("profile-local", "LABEL-LOCAL");
+    saveLocalLabelProfile("profile-local");
+    isDesktopRuntimeMock.mockReturnValue(true);
+    getConfiguredPrinterMock.mockResolvedValue(localPrinter);
+    listPrinterConfigsMock.mockResolvedValue([labelPrinterConfig("profile-company")]);
+    listBobinaProfilesMock.mockResolvedValue([companyProfile, localProfile]);
+    renderDialog();
+
+    expect(await screen.findByText(/Layout na bobina .* Bobina terminal/)).toBeInTheDocument();
+    clickPrint();
+
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, localPrinter, localProfile));
+  });
+
+  it("lets two terminal-local selections resolve different profiles without changing the company fallback", async () => {
+    const companyProfile = bobinaProfile({ id: "profile-company", nome: "Bobina empresa", padrao: true });
+    const terminalAProfile = bobinaProfile({ id: "profile-a", nome: "Bobina terminal A" });
+    const terminalBProfile = bobinaProfile({ id: "profile-b", nome: "Bobina terminal B" });
+    const companyConfig = labelPrinterConfig("profile-company");
+    listPrinterConfigsMock.mockResolvedValue([companyConfig]);
+    listBobinaProfilesMock.mockResolvedValue([companyProfile, terminalAProfile, terminalBProfile]);
+    isDesktopRuntimeMock.mockReturnValue(true);
+
+    saveLocalLabelProfile("profile-a", "LABEL-A");
+    const printerA = labelPrinterConfig("profile-a", "LABEL-A");
+    getConfiguredPrinterMock.mockResolvedValueOnce(printerA);
+    const first = renderDialog();
+    expect(await screen.findByText(/Layout na bobina .* Bobina terminal A/)).toBeInTheDocument();
+    clickPrint();
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, printerA, terminalAProfile));
+    first.unmount();
+
+    saveLocalLabelProfile("profile-b", "LABEL-B");
+    const printerB = labelPrinterConfig("profile-b", "LABEL-B");
+    getConfiguredPrinterMock.mockResolvedValueOnce(printerB);
+    renderDialog();
+    expect(await screen.findByText(/Layout na bobina .* Bobina terminal B/)).toBeInTheDocument();
+    clickPrint();
+    await waitFor(() => expect(printLabelBatchMock).toHaveBeenCalledWith("company-1", fakeRecord, printerB, terminalBProfile));
+
+    clearTerminalPrinterOverride("company-1", "etiqueta");
+    expect(companyConfig.perfil_bobina_padrao_id).toBe("profile-company");
   });
 });

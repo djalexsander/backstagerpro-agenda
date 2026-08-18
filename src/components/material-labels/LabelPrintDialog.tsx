@@ -11,7 +11,7 @@ import { labelBatchTotal, labelModelToSnapshot, materialToLabelSnapshot } from "
 import { printLabelBatch } from "@/lib/material-label-print";
 import { registerLabelPrintBatch } from "@/lib/material-label-service";
 import type { LabelBatchSelection, LabelModel } from "@/lib/material-label-types";
-import { getConfiguredPrinter, isDesktopRuntime, listPrinterConfigs } from "@/lib/printer-service";
+import { getConfiguredPrinter, isDesktopRuntime, listPrinterConfigs, resolveEffectivePrinterConfig } from "@/lib/printer-service";
 import { LabelCanvas } from "./LabelCanvas";
 
 const MAX_PREVIEW_ROWS = 24;
@@ -41,7 +41,8 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
     queryFn: () => listBobinaProfiles(companyId),
     enabled: open && Boolean(companyId),
   });
-  const linkedProfileId = printerConfigsQuery.data?.find((config) => config.finalidade === "etiqueta")?.perfil_bobina_padrao_id;
+  const effectivePrinterConfig = resolveEffectivePrinterConfig(companyId, printerConfigsQuery.data ?? [], "etiqueta");
+  const linkedProfileId = effectivePrinterConfig?.perfil_bobina_padrao_id;
   const bobinaProfiles = bobinaProfilesQuery.data ?? [];
   const resolvedProfile = resolveBobinaProfile(bobinaProfiles, linkedProfileId) ?? bobinaProfiles.find((candidate) => candidate.padrao) ?? null;
   const effectiveProfile = model ? (resolvedProfile ?? legacyProfileFromModel(model)) : null;
@@ -70,8 +71,13 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
       const configuredPrinter = isDesktopRuntime()
         ? await getConfiguredPrinter(companyId, "etiqueta")
         : undefined;
+      const printProfile = configuredPrinter
+        ? resolveBobinaProfile(bobinaProfiles, configuredPrinter.perfil_bobina_padrao_id)
+          ?? bobinaProfiles.find((candidate) => candidate.padrao)
+          ?? null
+        : resolvedProfile;
       const record = await registerLabelPrintBatch(companyId, { model, items, clientUuid });
-      await printLabelBatch(companyId, record, configuredPrinter, resolvedProfile);
+      await printLabelBatch(companyId, record, configuredPrinter, printProfile);
       return record;
     },
     onSuccess: async () => { await onPrinted(); toast({ title: "Lote de impressão solicitado", description: "Uma única solicitação registrou todos os materiais e snapshots." }); onOpenChange(false); },
