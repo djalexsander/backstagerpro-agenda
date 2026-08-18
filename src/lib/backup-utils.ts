@@ -15,11 +15,17 @@ import type { Tables } from "@/integrations/supabase/types";
 // absent key as "leave this table untouched" rather than "restore to
 // empty". Never default a missing collection to `[]` anywhere in this file
 // - that would silently turn into a destructive wipe for old backups once
-// sent to the RPC. RFID/etiquetas, impressoras/bobinas, binários do
-// Storage, usuários/permissões e módulos/assinaturas/pagamentos continuam
-// fora do escopo do backup (ver Backups.tsx e o comentário no topo da
-// migration 20260818120000_extend_operational_core_backup.sql).
-export const BACKUP_VERSION = "1.2";
+// sent to the RPC. 1.3 adds RFID (rfid_tags, rfid_read_sessions),
+// etiquetas/impressão (etiqueta_modelos, etiqueta_impressoes,
+// etiqueta_solicitacoes, etiqueta_solicitacao_itens) and the company's
+// SHARED printer/bobina configuration (empresa_bobina_perfis,
+// empresa_impressora_config) (P1-10C). Local per-terminal printer
+// overrides live in localStorage/desktop config and are NOT part of the
+// backup. Binários do Storage, usuários/permissões e
+// módulos/assinaturas/pagamentos continuam fora do escopo do backup (ver
+// Backups.tsx e o comentário no topo da migration
+// 20260818150000_extend_backup_rfid_labels_printing.sql).
+export const BACKUP_VERSION = "1.3";
 export const BACKUP_SYSTEM = "Backstage Pro";
 export const MAX_AUTO_BACKUPS = 10;
 export const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -67,6 +73,18 @@ export interface BackupData {
   financeiro_lancamentos?: Tables<"financeiro_lancamentos">[];
   financeiro_parcelas?: Tables<"financeiro_parcelas">[];
   financeiro_recebimentos?: Tables<"financeiro_recebimentos">[];
+  // Present on every backup created from 1.3 onward (P1-10C, RFID +
+  // etiquetas/impressão + configuração compartilhada de bobina/impressora).
+  // Optional in the type only to accept payloads restored/imported from
+  // before 1.3.
+  rfid_tags?: Tables<"rfid_tags">[];
+  rfid_read_sessions?: Tables<"rfid_read_sessions">[];
+  etiqueta_modelos?: Tables<"etiqueta_modelos">[];
+  etiqueta_impressoes?: Tables<"etiqueta_impressoes">[];
+  etiqueta_solicitacoes?: Tables<"etiqueta_solicitacoes">[];
+  etiqueta_solicitacao_itens?: Tables<"etiqueta_solicitacao_itens">[];
+  empresa_bobina_perfis?: Tables<"empresa_bobina_perfis">[];
+  empresa_impressora_config?: Tables<"empresa_impressora_config">[];
 }
 
 /** Collection keys added in 1.1. Kept in one place so normalize/validate/
@@ -104,9 +122,24 @@ const OPERATIONAL_CORE_COLLECTION_KEYS = [
   "financeiro_recebimentos",
 ] as const satisfies readonly (keyof BackupData)[];
 
+/** Collection keys added in 1.3 (P1-10C: RFID, etiquetas/impressão,
+ * configuração compartilhada de bobina/impressora). Same absent-means-
+ * untouched rule as the arrays above. */
+const RFID_LABELS_PRINTING_COLLECTION_KEYS = [
+  "rfid_tags",
+  "rfid_read_sessions",
+  "etiqueta_modelos",
+  "etiqueta_impressoes",
+  "etiqueta_solicitacoes",
+  "etiqueta_solicitacao_itens",
+  "empresa_bobina_perfis",
+  "empresa_impressora_config",
+] as const satisfies readonly (keyof BackupData)[];
+
 const ALL_OPTIONAL_COLLECTION_KEYS = [
   ...OPTIONAL_COLLECTION_KEYS,
   ...OPERATIONAL_CORE_COLLECTION_KEYS,
+  ...RFID_LABELS_PRINTING_COLLECTION_KEYS,
 ] as const satisfies readonly (keyof BackupData)[];
 
 export interface BackupPayload {
@@ -342,6 +375,14 @@ export function prepareBackupForRestore(
       financeiro_lancamentos: withForcedEmpresaId(normalized.data.financeiro_lancamentos, empresaId),
       financeiro_parcelas: withForcedEmpresaId(normalized.data.financeiro_parcelas, empresaId),
       financeiro_recebimentos: withForcedEmpresaId(normalized.data.financeiro_recebimentos, empresaId),
+      rfid_tags: withForcedEmpresaId(normalized.data.rfid_tags, empresaId),
+      rfid_read_sessions: withForcedEmpresaId(normalized.data.rfid_read_sessions, empresaId),
+      etiqueta_modelos: withForcedEmpresaId(normalized.data.etiqueta_modelos, empresaId),
+      etiqueta_impressoes: withForcedEmpresaId(normalized.data.etiqueta_impressoes, empresaId),
+      etiqueta_solicitacoes: withForcedEmpresaId(normalized.data.etiqueta_solicitacoes, empresaId),
+      etiqueta_solicitacao_itens: withForcedEmpresaId(normalized.data.etiqueta_solicitacao_itens, empresaId),
+      empresa_bobina_perfis: withForcedEmpresaId(normalized.data.empresa_bobina_perfis, empresaId),
+      empresa_impressora_config: withForcedEmpresaId(normalized.data.empresa_impressora_config, empresaId),
     },
   };
 }

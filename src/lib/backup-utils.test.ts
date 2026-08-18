@@ -146,6 +146,51 @@ function sampleFullData(empresaId = tenantA): BackupData {
   };
 }
 
+// Includes the eight 1.3 RFID/labels/printing collections (P1-10C) on top
+// of sampleFullData(), one minimal row each - same purpose as
+// sampleFullData() itself: presence/absence and tenant-override behavior,
+// not real FK modeling (pgTAP's job).
+function sampleCompleteData(empresaId = tenantA): BackupData {
+  return {
+    ...sampleFullData(empresaId),
+    rfid_tags: [
+      { id: "tag-1", empresa_id: empresaId, material_id: "material-1", epc: "ABCDEF01" },
+    ] as NonNullable<BackupData["rfid_tags"]>,
+    rfid_read_sessions: [
+      { id: "session-1", empresa_id: empresaId, tipo: "inventario", responsavel_user_id: "00000000-0000-0000-0000-000000000001" },
+    ] as NonNullable<BackupData["rfid_read_sessions"]>,
+    etiqueta_modelos: [
+      { id: "modelo-1", empresa_id: empresaId, nome: "Modelo Padrão", largura_mm: 60, altura_mm: 40 },
+    ] as NonNullable<BackupData["etiqueta_modelos"]>,
+    etiqueta_impressoes: [
+      {
+        id: "impressao-1", empresa_id: empresaId, material_id: "material-1", quantidade: 1,
+        modelo_snapshot: {}, material_snapshot: {}, solicitada_por: "00000000-0000-0000-0000-000000000001",
+        solicitante_nome: "Fulano", client_uuid: "client-uuid-9", payload_hash: "hash-9",
+      },
+    ] as NonNullable<BackupData["etiqueta_impressoes"]>,
+    etiqueta_solicitacoes: [
+      {
+        id: "solicitacao-1", empresa_id: empresaId, modelo_snapshot: {}, quantidade_materiais: 1,
+        quantidade_etiquetas: 1, solicitada_por: "00000000-0000-0000-0000-000000000001",
+        solicitante_nome: "Fulano", client_uuid: "client-uuid-10", payload_hash: "hash-10",
+      },
+    ] as NonNullable<BackupData["etiqueta_solicitacoes"]>,
+    etiqueta_solicitacao_itens: [
+      {
+        id: "solicitacao-item-1", empresa_id: empresaId, solicitacao_id: "solicitacao-1",
+        material_id: "material-1", ordem: 1, quantidade: 1, material_snapshot: {},
+      },
+    ] as NonNullable<BackupData["etiqueta_solicitacao_itens"]>,
+    empresa_bobina_perfis: [
+      { id: "perfil-1", empresa_id: empresaId, nome: "Perfil Padrão", largura_etiqueta_mm: 60, altura_etiqueta_mm: 40 },
+    ] as NonNullable<BackupData["empresa_bobina_perfis"]>,
+    empresa_impressora_config: [
+      { id: "config-1", empresa_id: empresaId, finalidade: "etiqueta" },
+    ] as NonNullable<BackupData["empresa_impressora_config"]>,
+  };
+}
+
 describe("backup payload utilities", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -162,7 +207,7 @@ describe("backup payload utilities", () => {
     );
 
     expect(payload.versao).toBe(BACKUP_VERSION);
-    expect(BACKUP_VERSION).toBe("1.2"); // P1-10 bumped "1.0"->"1.1"; P1-10B bumped "1.1"->"1.2"
+    expect(BACKUP_VERSION).toBe("1.3"); // P1-10 "1.0"->"1.1"; P1-10B "1.1"->"1.2"; P1-10C "1.2"->"1.3"
     expect(payload.sistema).toBe(BACKUP_SYSTEM);
     expect(payload.meta).toMatchObject({
       empresa_id: tenantA,
@@ -240,6 +285,14 @@ describe("backup payload utilities", () => {
       financeiro_lancamentos: null,
       financeiro_parcelas: null,
       financeiro_recebimentos: null,
+      rfid_tags: null,
+      rfid_read_sessions: null,
+      etiqueta_modelos: null,
+      etiqueta_impressoes: null,
+      etiqueta_solicitacoes: null,
+      etiqueta_solicitacao_itens: null,
+      empresa_bobina_perfis: null,
+      empresa_impressora_config: null,
     });
   });
 
@@ -275,22 +328,37 @@ describe("backup payload utilities", () => {
     expect(summary.financeiro_lancamentos).toBe(1);
     expect(summary.financeiro_parcelas).toBe(1);
     expect(summary.financeiro_recebimentos).toBe(1);
+    // sampleFullData() does not add the 1.3 collections - those stay null.
+    expect(summary.rfid_tags).toBeNull();
   });
 
-  it("overrides foreign tenant IDs on every 1.1 and 1.2 collection before a restore", () => {
+  it("summarizes the eight 1.3 RFID/labels/printing collections as real counts, not null, when present", () => {
+    const payload = buildBackupPayload(tenantA, "auto", sampleCompleteData());
+    const summary = getBackupSummary(payload);
+    expect(summary.rfid_tags).toBe(1);
+    expect(summary.rfid_read_sessions).toBe(1);
+    expect(summary.etiqueta_modelos).toBe(1);
+    expect(summary.etiqueta_impressoes).toBe(1);
+    expect(summary.etiqueta_solicitacoes).toBe(1);
+    expect(summary.etiqueta_solicitacao_itens).toBe(1);
+    expect(summary.empresa_bobina_perfis).toBe(1);
+    expect(summary.empresa_impressora_config).toBe(1);
+  });
+
+  it("overrides foreign tenant IDs on every 1.1, 1.2 and 1.3 collection before a restore", () => {
     const restored = prepareBackupForRestore(
-      buildBackupPayload(tenantA, "manual", sampleFullData(tenantA)),
+      buildBackupPayload(tenantA, "manual", sampleCompleteData(tenantA)),
       tenantB,
     );
 
     expect(restored.meta.empresa_id).toBe(tenantB);
     for (const [key, rows] of Object.entries(restored.data)) {
-      expect(rows, `data.${key} should have been populated by sampleFullData`).toBeDefined();
+      expect(rows, `data.${key} should have been populated by sampleCompleteData`).toBeDefined();
       expect((rows ?? []).every((row) => row.empresa_id === tenantB)).toBe(true);
     }
   });
 
-  it("never turns an absent 1.1 or 1.2 collection into an empty array during restore prep", () => {
+  it("never turns an absent 1.1, 1.2 or 1.3 collection into an empty array during restore prep", () => {
     // sampleData() (unlike sampleExtendedData()/sampleFullData()) has none
     // of the newer keys at all - this is what an old backup looks like. If
     // any of these ever became `[]` here, restore_company_backup would read
@@ -323,6 +391,14 @@ describe("backup payload utilities", () => {
     expect(restored.data.financeiro_lancamentos).toBeUndefined();
     expect(restored.data.financeiro_parcelas).toBeUndefined();
     expect(restored.data.financeiro_recebimentos).toBeUndefined();
+    expect(restored.data.rfid_tags).toBeUndefined();
+    expect(restored.data.rfid_read_sessions).toBeUndefined();
+    expect(restored.data.etiqueta_modelos).toBeUndefined();
+    expect(restored.data.etiqueta_impressoes).toBeUndefined();
+    expect(restored.data.etiqueta_solicitacoes).toBeUndefined();
+    expect(restored.data.etiqueta_solicitacao_itens).toBeUndefined();
+    expect(restored.data.empresa_bobina_perfis).toBeUndefined();
+    expect(restored.data.empresa_impressora_config).toBeUndefined();
     // The original four are unaffected by any of this.
     expect(restored.data.eventos).toHaveLength(1);
   });
@@ -353,14 +429,29 @@ describe("backup payload utilities", () => {
     expect(normalized.data.financeiro_lancamentos).toBeUndefined();
   });
 
-  it("keeps 1.1 and 1.2 collections intact when normalizing an already-current payload", () => {
-    const payload = buildBackupPayload(tenantA, "manual", sampleFullData(tenantA));
+  it("normalizes a pre-1.3 (1.2) payload without inventing the RFID/labels/printing collections", () => {
+    const normalized = normalizeBackup({
+      versao: "1.2",
+      sistema: BACKUP_SYSTEM,
+      meta: { empresa_id: tenantA, tipo: "manual", data_backup: "2026-08-18T00:00:00.000Z" },
+      data: sampleFullData(tenantA),
+    });
+
+    expect(normalized.data.materiais).toHaveLength(1);
+    expect(normalized.data.rfid_tags).toBeUndefined();
+    expect(normalized.data.empresa_impressora_config).toBeUndefined();
+  });
+
+  it("keeps 1.1, 1.2 and 1.3 collections intact when normalizing an already-current payload", () => {
+    const payload = buildBackupPayload(tenantA, "manual", sampleCompleteData(tenantA));
     const normalized = normalizeBackup(payload);
 
     expect(normalized.data.clientes).toHaveLength(1);
     expect(normalized.data.generated_documents).toHaveLength(1);
     expect(normalized.data.materiais).toHaveLength(1);
     expect(normalized.data.financeiro_recebimentos).toHaveLength(1);
+    expect(normalized.data.rfid_tags).toHaveLength(1);
+    expect(normalized.data.empresa_impressora_config).toHaveLength(1);
   });
 
   it("accepts a payload that omits every 1.1 collection as still valid", () => {
@@ -394,6 +485,23 @@ describe("backup payload utilities", () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual(
       expect.arrayContaining([expect.stringMatching(/data\.materiais/)]),
+    );
+  });
+
+  it("accepts a payload that omits every 1.3 RFID/labels/printing collection as still valid", () => {
+    const result = validateBackup(buildBackupPayload(tenantA, "manual", sampleFullData()));
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a present-but-malformed 1.3 collection", () => {
+    const payload = buildBackupPayload(tenantA, "manual", sampleCompleteData());
+    // @ts-expect-error -- deliberately malformed for the test
+    payload.data.rfid_tags = { not: "an array" };
+
+    const result = validateBackup(payload);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([expect.stringMatching(/data\.rfid_tags/)]),
     );
   });
 

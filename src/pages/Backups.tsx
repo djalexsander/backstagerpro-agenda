@@ -190,8 +190,10 @@ export default function Backups() {
             Cobre eventos, financeiro de eventos, clientes, funcionários, equipe e checklist de cada evento, documentos/contratos,
             e o núcleo operacional de materiais: catálogo e categorias, estoque (localizações, saldos e movimentações),
             custódia/check-in/check-out, locações de materiais e manutenções de equipamento, incluindo o financeiro vinculado a essas duas áreas.
+            Também cobre RFID (tags e sessões de conferência), etiquetas (modelos, solicitações de impressão e histórico) e a configuração de impressora/bobina compartilhada da empresa.
             Anexos e fotos (riders, logos, fotos de materiais etc.) são incluídos apenas pela referência salva no banco — o arquivo em si permanece no armazenamento e não é copiado por este backup.
-            RFID/etiquetas, configuração de impressoras, usuários/permissões e módulos/assinatura da plataforma não fazem parte deste backup.
+            Preferências de impressora salvas localmente em cada terminal (navegador/desktop) não fazem parte deste backup — apenas a configuração compartilhada da empresa.
+            Usuários/permissões e módulos/assinatura da plataforma não fazem parte deste backup.
           </p>
         </div>
       </div>
@@ -485,6 +487,23 @@ export default function Backups() {
                     {importPreview.summary.materiais === null && importPreview.summary.clientes !== null && (
                       <p className="text-xs text-muted-foreground pt-1">
                         Este backup é de uma versão anterior: materiais, estoque, custódia, locações, manutenções e o financeiro vinculado a elas não estão incluídos e não serão alterados pela restauração.
+                      </p>
+                    )}
+                    {importPreview.summary.rfid_tags !== null && (
+                      <>
+                        <p>• {importPreview.summary.rfid_tags} tag(s) RFID</p>
+                        <p>• {importPreview.summary.rfid_read_sessions} sessão(ões) de conferência RFID</p>
+                        <p>• {importPreview.summary.etiqueta_modelos} modelo(s) de etiqueta</p>
+                        <p>• {importPreview.summary.etiqueta_impressoes} impressão(ões) de etiqueta (histórico)</p>
+                        <p>• {importPreview.summary.etiqueta_solicitacoes} solicitação(ões) de etiqueta</p>
+                        <p>• {importPreview.summary.etiqueta_solicitacao_itens} item(ns) de solicitação de etiqueta</p>
+                        <p>• {importPreview.summary.empresa_bobina_perfis} perfil(is) de bobina</p>
+                        <p>• {importPreview.summary.empresa_impressora_config} configuração(ões) de impressora</p>
+                      </>
+                    )}
+                    {importPreview.summary.rfid_tags === null && importPreview.summary.materiais !== null && (
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Este backup é de uma versão anterior: RFID, etiquetas/impressão e configuração de impressora/bobina não estão incluídos e não serão alterados pela restauração.
                       </p>
                     )}
                   </div>
