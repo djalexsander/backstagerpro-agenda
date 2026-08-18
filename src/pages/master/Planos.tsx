@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Shield, Sparkles, Clock, Package, AlertTriangle, Info } from "lucide-react";
 import {
   classifySubscriptionPlan,
+  isCommercialBasePlan,
   isLifetimePlan,
   type SubscriptionPlanCategory,
 } from "@/lib/subscription-license";
@@ -42,6 +43,18 @@ const PERIODICIDADE_LABELS: Record<string, string> = {
   anual: "Anual",
   vitalicio: "Vitalício",
 };
+
+function normalizePlanSaveError(error: any): Error {
+  if (
+    error?.code === "23505" &&
+    String(error?.message).includes("planos_single_active_commercial_base_idx")
+  ) {
+    return new Error(
+      "JÃ¡ existe um plano base comercial ativo. Edite ou inative o plano existente antes de criar outro.",
+    );
+  }
+  return error instanceof Error ? error : new Error(String(error?.message || error));
+}
 
 export default function Planos() {
   const { toast } = useToast();
@@ -77,8 +90,15 @@ export default function Planos() {
   });
 
   const trialPlanos = planos.filter((p) => classifySubscriptionPlan(p) === "trial");
-  const basePlanos = planos.filter((p) => classifySubscriptionPlan(p) === "base");
-  const legadoPlanos = planos.filter((p) => classifySubscriptionPlan(p) === "legado");
+  const basePlanos = planos.filter(isCommercialBasePlan);
+  const lifetimePlanos = planos.filter(isLifetimePlan);
+  const legadoPlanos = planos.filter(
+    (p) =>
+      classifySubscriptionPlan(p) !== "trial" &&
+      !isCommercialBasePlan(p) &&
+      !isLifetimePlan(p),
+  );
+  const baseCreationBlocked = basePlanos.length > 0;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -98,12 +118,21 @@ export default function Planos() {
           : form.disponivel_novo_cadastro,
         categoria: isTrial ? "trial" : "plano_base",
       };
+      const wouldBeActiveCommercialBase = isCommercialBasePlan(payload);
+      const hasOtherActiveCommercialBase = planos.some(
+        (plan) => plan.id !== editItem?.id && isCommercialBasePlan(plan),
+      );
+      if (wouldBeActiveCommercialBase && hasOtherActiveCommercialBase) {
+        throw new Error(
+          "JÃ¡ existe um plano base comercial ativo. Edite ou inative o plano existente antes de criar outro.",
+        );
+      }
       if (editItem) {
         const { error } = await supabase.from("planos").update(payload as any).eq("id", editItem.id);
-        if (error) throw error;
+        if (error) throw normalizePlanSaveError(error);
       } else {
         const { error } = await supabase.from("planos").insert(payload as any);
-        if (error) throw error;
+        if (error) throw normalizePlanSaveError(error);
       }
     },
     onSuccess: () => {
@@ -200,7 +229,16 @@ export default function Planos() {
             Modelo: Plano Base + Módulos adicionais
           </p>
         </div>
-        <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" /> Novo Plano</Button>
+        <div className="text-right">
+          <Button size="sm" onClick={openAdd} disabled={baseCreationBlocked}>
+            <Plus className="h-4 w-4 mr-1" /> Novo Plano
+          </Button>
+          {baseCreationBlocked && (
+            <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+              JÃ¡ existe um plano base ativo. Edite ou inative o plano existente para substituÃ­-lo.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Explicação do modelo */}
@@ -260,6 +298,32 @@ export default function Planos() {
                 </TableRow>
               </TableHeader>
               <TableBody>{trialPlanos.map((p) => renderPlanoRow(p, "trial"))}</TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {/* VitalÃ­cio segue como licenÃ§a administrativa separada. */}
+      {lifetimePlanos.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" /> VitalÃ­cio
+          </h2>
+          <div className="rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Periodicidade</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>MÃ¡x. UsuÃ¡rios</TableHead>
+                  <TableHead>MÃ¡x. Eventos</TableHead>
+                  <TableHead>Empresas</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">AÃ§Ãµes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>{lifetimePlanos.map((p) => renderPlanoRow(p, "base"))}</TableBody>
             </Table>
           </div>
         </div>

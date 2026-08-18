@@ -31,6 +31,10 @@ export default function PagamentoPlano() {
         .from("planos")
         .select("*")
         .eq("id", planoId!)
+        .eq("ativo", true)
+        .eq("disponivel_novo_cadastro", true)
+        .eq("categoria", "plano_base")
+        .in("periodicidade", ["mensal", "anual"])
         .single();
       if (error) throw error;
       return data;

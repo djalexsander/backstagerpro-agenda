@@ -25,6 +25,7 @@ import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
 import { generatePixPayload } from "@/lib/pix";
 import { getSelfServiceAvailableModules } from "@/lib/self-service-module-availability";
+import { ensureSingleCommercialBasePlan } from "@/lib/subscription-license";
 
 export default function PlanoAssinatura() {
   const { empresaId } = useAuth();
@@ -78,11 +79,13 @@ export default function PlanoAssinatura() {
         .from("planos")
         .select("*")
         .eq("ativo", true)
+        .eq("categoria", "plano_base")
         .eq("disponivel_novo_cadastro", true)
         .gt("valor", 0)
+        .in("periodicidade", ["mensal", "anual"])
         .order("valor", { ascending: true });
       if (error) throw error;
-      return data;
+      return ensureSingleCommercialBasePlan(data || []);
     },
   });
 

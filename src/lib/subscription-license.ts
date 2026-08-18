@@ -14,6 +14,38 @@ export interface ClassifiableSubscriptionPlan extends SubscriptionPlanLike {
   disponivel_novo_cadastro: boolean;
 }
 
+export interface CommercialBasePlanLike extends SubscriptionPlanLike {
+  id?: string;
+  categoria?: string | null;
+  ativo: boolean;
+}
+
+export const COMMERCIAL_BASE_PERIODICITIES = ["mensal", "anual"] as const;
+
+export function isCommercialBasePlan(
+  plan: CommercialBasePlanLike | null | undefined,
+): boolean {
+  return Boolean(
+    plan?.ativo &&
+      plan.categoria === "plano_base" &&
+      COMMERCIAL_BASE_PERIODICITIES.includes(
+        plan.periodicidade as (typeof COMMERCIAL_BASE_PERIODICITIES)[number],
+      ),
+  );
+}
+
+export function ensureSingleCommercialBasePlan<T extends CommercialBasePlanLike>(
+  plans: readonly T[],
+): T[] {
+  const basePlans = plans.filter(isCommercialBasePlan);
+  if (basePlans.length > 1) {
+    throw new Error(
+      "ConfiguraÃ§Ã£o invÃ¡lida: existe mais de um plano base comercial ativo.",
+    );
+  }
+  return basePlans;
+}
+
 export function isLifetimePlan(
   plan: SubscriptionPlanLike | null | undefined,
 ): boolean {

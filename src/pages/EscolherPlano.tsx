@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Music, Calendar, Users, HardDrive, Gift, CreditCard, CheckCircle, Sparkles, Shield, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
+import { ensureSingleCommercialBasePlan } from "@/lib/subscription-license";
 
 export default function EscolherPlano() {
   const { empresaId, refreshProfile } = useAuth();
@@ -45,12 +46,15 @@ export default function EscolherPlano() {
         .from("planos")
         .select("*")
         .eq("ativo", true)
+        .eq("categoria", "plano_base")
         .gt("valor", 0)
-        .neq("periodicidade", "vitalicio")
+        .in("periodicidade", ["mensal", "anual"])
         .order("valor", { ascending: true });
       if (error) throw error;
-      // Filter to only plans available for new signups
-      return (data || []).filter((p: any) => p.disponivel_novo_cadastro !== false);
+      const available = (data || []).filter(
+        (p: any) => p.disponivel_novo_cadastro !== false,
+      );
+      return ensureSingleCommercialBasePlan(available);
     },
   });
 
