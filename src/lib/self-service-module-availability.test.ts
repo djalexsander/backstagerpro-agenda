@@ -159,4 +159,24 @@ describe("self-service module availability", () => {
       "active", "pending", "inactive", "cancelled", "rejected",
     ].filter(doesCompanyModuleBlockPurchase)).toEqual(["active", "pending"]);
   });
+
+  it("does not offer inactive commercial entries while keeping real modules available", () => {
+    const nonCommercial = [
+      "agenda_compartilhada",
+      "equipe_permissoes",
+      "notificacoes_premium",
+      "relatorios_materiais",
+    ].map((featureKey, index) => ({
+      ...catalogModule(`non-commercial-${index}`, featureKey),
+      ativo: false,
+    }));
+
+    const result = available({ catalog: [...catalog, ...nonCommercial] });
+
+    expect(result).toEqual([
+      "gestao_materiais",
+      "documentos_avancados",
+      "rfid_materiais",
+    ]);
+  });
 });

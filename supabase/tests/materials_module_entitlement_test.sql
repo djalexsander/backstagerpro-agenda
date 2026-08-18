@@ -32,11 +32,9 @@ SELECT ok(
   'the stage-one base module is globally available'
 );
 
--- All six were "planned":true/inactive when this test was first written
--- (Stage 1); each has since shipped its own stage migration and flipped to
--- ativo=true. This now guards the opposite direction - that none of them
--- silently regresses back to disabled - rather than re-asserting a
--- point-in-time implementation snapshot that is no longer true.
+-- Five modules planned in Stage 1 have shipped dedicated functionality.
+-- relatorios_materiais deliberately remains a stable historical key but is
+-- no longer commercially active until it has a dedicated implementation.
 SELECT is(
   (
     SELECT count(*)
@@ -46,13 +44,12 @@ SELECT is(
       'checkin_checkout',
       'locacao_materiais',
       'manutencao_equipamentos',
-      'etiquetas_materiais',
-      'relatorios_materiais'
+      'etiquetas_materiais'
     )
       AND ativo = true
   ),
-  6::bigint,
-  'every material module planned in Stage 1 has since been released'
+  5::bigint,
+  'every implemented material module planned in Stage 1 is released'
 );
 
 SELECT is(

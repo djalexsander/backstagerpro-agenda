@@ -17,9 +17,9 @@ export const MODULE_KEYS = {
   FINANCEIRO_AVANCADO: "financeiro_avancado",
   /** Relatórios e exportações especiais */
   RELATORIOS: "relatorios",
-  /** Agenda compartilhada entre empresas */
+  /** @deprecated Catálogo histórico; não possui feature dedicada vendável. */
   AGENDA_COMPARTILHADA: "agenda_compartilhada",
-  /** Equipe e permissões */
+  /** @deprecated Administração de equipe já é coberta pelo núcleo do produto. */
   EQUIPE_PERMISSOES: "equipe_permissoes",
   /** Checklist técnico para eventos */
   CHECKLIST_TECNICO: "checklist_tecnico",
@@ -29,7 +29,7 @@ export const MODULE_KEYS = {
   PAINEL_OPERACIONAL: "painel_operacional",
   /** @deprecated Descontinuado — funcionalidade incorporada ao módulo RELATORIOS */
   EXPORTACOES_ESPECIAIS: "exportacoes_especiais",
-  /** Notificações premium */
+  /** @deprecated Catálogo histórico; não possui feature dedicada vendável. */
   NOTIFICACOES_PREMIUM: "notificacoes_premium",
   /** Pacote extra de usuários */
   EXTRA_USUARIOS: "extra_usuarios",
@@ -49,7 +49,7 @@ export const MODULE_KEYS = {
   MANUTENCAO_EQUIPAMENTOS: "manutencao_equipamentos",
   /** Modelos, impressão e histórico de etiquetas físicas (planejado) */
   ETIQUETAS_MATERIAIS: "etiquetas_materiais",
-  /** Relatórios consolidados da área de materiais (planejado) */
+  /** @deprecated Catálogo histórico; relatórios dedicados ainda não implementados. */
   RELATORIOS_MATERIAIS: "relatorios_materiais",
   /** Identificação e conferência em lote de materiais por tags RFID UHF */
   RFID_MATERIAIS: "rfid_materiais",
