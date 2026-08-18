@@ -14,12 +14,58 @@ const mocks = vi.hoisted(() => ({
   tableResults: new Map<string, { data: unknown; error: Error | null }>(),
 }));
 
+type Row = Record<string, unknown>;
+
+// Resolves a possibly dot-qualified column path against a row, following
+// nested/embedded-resource objects (e.g. "events.date" reads row.events.date)
+// - the same shape PostgREST returns for an embedded !inner join, and the
+// same path syntax report-export-service.ts uses to filter one.
+function readField(row: Row, path: string): unknown {
+  if (!path.includes(".")) return row[path];
+  const [head, ...rest] = path.split(".");
+  const nested = row[head];
+  return nested && typeof nested === "object" ? readField(nested as Row, rest.join(".")) : undefined;
+}
+
+// A predicate is skipped (never excludes the row) when the fixture simply
+// never set that field - most fixtures in this file predate P1-12 and only
+// bother setting the columns their own test cares about. This keeps every
+// pre-existing fixture working unchanged while still giving the new
+// date-range/pagination/tenant-isolation tests real, meaningful filtering:
+// those tests always set the field(s) they're asserting on, so the
+// leniency never masks the behavior they're checking.
+function lenientPredicate(path: string, matches: (actual: unknown) => boolean) {
+  return (row: Row) => {
+    const actual = readField(row, path);
+    return actual === undefined || matches(actual);
+  };
+}
+
 function createQuery(table: string) {
+  const filters: Array<(row: Row) => boolean> = [];
+  let rangeFrom: number | null = null;
+  let rangeTo: number | null = null;
+  let singleMode = false;
+
   const builder = {
     select() {
       return builder;
     },
-    eq() {
+    eq(column: string, value: unknown) {
+      filters.push(lenientPredicate(column, (actual) => actual === value));
+      return builder;
+    },
+    gte(column: string, value: unknown) {
+      filters.push(lenientPredicate(column, (actual) => String(actual) >= String(value)));
+      return builder;
+    },
+    lte(column: string, value: unknown) {
+      filters.push(lenientPredicate(column, (actual) => String(actual) <= String(value)));
+      return builder;
+    },
+    in(column: string, values: readonly unknown[]) {
+      const set = new Set(values);
+      filters.push(lenientPredicate(column, (actual) => set.has(actual)));
       return builder;
     },
     order() {
@@ -28,10 +74,13 @@ function createQuery(table: string) {
     limit() {
       return builder;
     },
-    in() {
+    range(from: number, to: number) {
+      rangeFrom = from;
+      rangeTo = to;
       return builder;
     },
     single() {
+      singleMode = true;
       return builder;
     },
     then<
@@ -45,10 +94,17 @@ function createQuery(table: string) {
         | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
     ) {
-      const result = mocks.tableResults.get(table) ?? {
-        data: [],
-        error: null,
-      };
+      const stored = mocks.tableResults.get(table) ?? { data: [], error: null };
+      let result: { data: unknown; error: Error | null };
+      if (stored.error) {
+        result = stored;
+      } else {
+        const raw = stored.data;
+        let rows: Row[] = Array.isArray(raw) ? (raw as Row[]) : raw ? [raw as Row] : [];
+        for (const predicate of filters) rows = rows.filter(predicate);
+        if (rangeFrom !== null && rangeTo !== null) rows = rows.slice(rangeFrom, rangeTo + 1);
+        result = singleMode ? { data: rows[0] ?? null, error: null } : { data: rows, error: null };
+      }
       return Promise.resolve(result).then(onfulfilled, onrejected);
     },
   };
@@ -90,6 +146,7 @@ vi.mock("@/lib/financial-ledger-service", () => ({
 import {
   buildExportFileName,
   executeReportExport,
+  fetchAllPages,
   getReportDateRange,
   validateReportFilters,
 } from "./report-export-service";
@@ -848,5 +905,241 @@ describe("report export filters and naming", () => {
       [{ nome: "Ana", funcao: "Técnica" }],
       "pdf",
     );
+  });
+
+  // P1-12: these are the regression tests for the actual bug - a
+  // ".limit(1000)" query with no period filter, then a JS-side date filter
+  // applied to whatever page came back. The mock now really slices by
+  // .range() and really filters by .eq/.gte/.lte/.in (see createQuery
+  // above), so these fail against the old implementation and pass against
+  // the fix.
+  describe("P1-12: period filters run in the query, not after a capped fetch", () => {
+    it("does not truncate a report at 1000 rows - every matching event is included, not just the first page", async () => {
+      const events = Array.from({ length: 1500 }, (_, i) => ({
+        id: `evt-${i}`,
+        empresa_id: empresaId,
+        name: `Evento ${i}`,
+        date: "2026-07-15",
+      }));
+      mocks.tableResults.set("events", { data: events, error: null });
+
+      await executeReportExport({
+        empresaId,
+        reportType: "agenda",
+        exportFormat: "pdf",
+        filters: {
+          mode: "periodo",
+          startDate: new Date(2026, 6, 1),
+          endDate: new Date(2026, 6, 31),
+        },
+      });
+
+      expect(mocks.agendaPdf).toHaveBeenCalledTimes(1);
+      const [reportedEvents] = mocks.agendaPdf.mock.calls[0];
+      expect(reportedEvents).toHaveLength(1500);
+      expect(reportedEvents.some((e: { id: string }) => e.id === "evt-1499")).toBe(true);
+    });
+
+    it("finds an old-period event even sitting behind 1200 more-recent ones - the exact shape the old .limit(1000)+JS-filter bug silently dropped", async () => {
+      const recentEvents = Array.from({ length: 1200 }, (_, i) => ({
+        id: `recent-${i}`,
+        empresa_id: empresaId,
+        name: `Recente ${i}`,
+        date: "2026-08-01", // outside the queried (old) period
+      }));
+      const oldEvent = {
+        id: "old-event",
+        empresa_id: empresaId,
+        name: "Evento Antigo",
+        date: "2020-01-15",
+      };
+      // Ordered by date desc in the real query, the oldest row is the LAST
+      // one considered - a hard 1000-row cap applied before any date filter
+      // would drop it before the (broken) JS-side filter ever saw it.
+      mocks.tableResults.set("events", { data: [...recentEvents, oldEvent], error: null });
+
+      await executeReportExport({
+        empresaId,
+        reportType: "agenda",
+        exportFormat: "pdf",
+        filters: {
+          mode: "periodo",
+          startDate: new Date(2020, 0, 1),
+          endDate: new Date(2020, 0, 31),
+        },
+      });
+
+      expect(mocks.agendaPdf).toHaveBeenCalledTimes(1);
+      const [reportedEvents] = mocks.agendaPdf.mock.calls[0];
+      expect(reportedEvents).toEqual([expect.objectContaining({ id: "old-event" })]);
+    });
+
+    it("sums financial totals correctly across a dataset spanning more than one page", async () => {
+      const financials = Array.from({ length: 1200 }, (_, i) => ({
+        id: `f-${i}`,
+        event_id: `e-${i}`,
+        cache: 10,
+        events: { name: `Evento ${i}`, date: "2026-07-15" },
+      }));
+      mocks.tableResults.set("financials", { data: financials, error: null });
+
+      await executeReportExport({
+        empresaId,
+        reportType: "financeiro",
+        exportFormat: "pdf",
+        filters: {
+          mode: "periodo",
+          startDate: new Date(2026, 6, 1),
+          endDate: new Date(2026, 6, 31),
+        },
+      });
+
+      const [reportedFinancials] = mocks.financialPdf.mock.calls[0];
+      expect(reportedFinancials).toHaveLength(1200);
+      const total = reportedFinancials.reduce((sum: number, row: { cache: number }) => sum + row.cache, 0);
+      expect(total).toBe(12000);
+    });
+
+    it("the dashboard's all-time trend also does not truncate past 1000 financial records", async () => {
+      mocks.tableResults.set("events", { data: [], error: null });
+      const allFinancials = Array.from({ length: 1100 }, (_, i) => ({
+        id: `f-${i}`,
+        event_id: `e-${i}`,
+        cache: 1,
+        events: { name: `Evento ${i}`, date: "2020-01-01" }, // deliberately outside the report's own period
+      }));
+      mocks.tableResults.set("financials", { data: allFinancials, error: null });
+
+      await executeReportExport({
+        empresaId,
+        reportType: "dashboard",
+        exportFormat: "pdf",
+        filters: {
+          mode: "periodo",
+          startDate: new Date(2026, 6, 1),
+          endDate: new Date(2026, 6, 31),
+        },
+      });
+
+      const [data] = mocks.dashboardPdf.mock.calls[0];
+      expect(data.financials).toEqual([]); // none of them are in the selected period
+      expect(data.allFinancials).toHaveLength(1100); // but the all-time trend still sees every one
+    });
+
+    it("registro fora do período não entra, mesmo com dataset grande", async () => {
+      const events = [
+        ...Array.from({ length: 1050 }, (_, i) => ({
+          id: `in-${i}`,
+          empresa_id: empresaId,
+          name: `Dentro ${i}`,
+          date: "2026-07-15",
+        })),
+        { id: "out-of-range", empresa_id: empresaId, name: "Fora", date: "2026-09-01" },
+      ];
+      mocks.tableResults.set("events", { data: events, error: null });
+
+      await executeReportExport({
+        empresaId,
+        reportType: "agenda",
+        exportFormat: "pdf",
+        filters: {
+          mode: "periodo",
+          startDate: new Date(2026, 6, 1),
+          endDate: new Date(2026, 6, 31),
+        },
+      });
+
+      const [reportedEvents] = mocks.agendaPdf.mock.calls[0];
+      expect(reportedEvents).toHaveLength(1050);
+      expect(reportedEvents.some((e: { id: string }) => e.id === "out-of-range")).toBe(false);
+    });
+
+    it("an empty report for the period is really empty, not a truncated fragment of a larger dataset", async () => {
+      const events = Array.from({ length: 1300 }, (_, i) => ({
+        id: `unrelated-${i}`,
+        empresa_id: empresaId,
+        name: `Evento ${i}`,
+        date: "2026-01-01", // none of these fall in the queried period
+      }));
+      mocks.tableResults.set("events", { data: events, error: null });
+
+      await expect(
+        executeReportExport({
+          empresaId,
+          reportType: "agenda",
+          exportFormat: "pdf",
+          filters: {
+            mode: "periodo",
+            startDate: new Date(2026, 6, 1),
+            endDate: new Date(2026, 6, 31),
+          },
+        }),
+      ).rejects.toThrow(/nenhum evento/i);
+
+      expect(mocks.agendaPdf).not.toHaveBeenCalled();
+    });
+
+    it("isolamento por empresa: outra empresa nunca aparece no relatório, mesmo quando ambas têm eventos no período", async () => {
+      mocks.tableResults.set("events", {
+        data: [
+          { id: "own-event", empresa_id: empresaId, name: "Nosso evento", date: "2026-07-10" },
+          { id: "other-event", empresa_id: "11111111-1111-4111-8111-111111111111", name: "Evento de outra empresa", date: "2026-07-12" },
+        ],
+        error: null,
+      });
+
+      await executeReportExport({
+        empresaId,
+        reportType: "agenda",
+        exportFormat: "pdf",
+        filters: {
+          mode: "periodo",
+          startDate: new Date(2026, 6, 1),
+          endDate: new Date(2026, 6, 31),
+        },
+      });
+
+      const [reportedEvents] = mocks.agendaPdf.mock.calls[0];
+      expect(reportedEvents).toEqual([expect.objectContaining({ id: "own-event" })]);
+    });
+  });
+
+  // P1-12 complemento: the MAX_PAGES/PAGE_SIZE circuit breaker itself must
+  // never present a capped result as if it were the complete one. These
+  // exercise fetchAllPages directly with a hand-rolled fetchPage, instead
+  // of building a 50,000-row fixture through the Supabase mock, since the
+  // behavior under test lives entirely inside fetchAllPages's own loop.
+  describe("fetchAllPages: the safety ceiling never returns a silently partial result", () => {
+    const PAGE_SIZE = 1000;
+    const MAX_PAGES = 50;
+
+    function fullPagesUpTo(totalRows: number) {
+      return vi.fn(async (from: number, to: number) => {
+        const size = to - from + 1;
+        const remaining = Math.max(0, totalRows - from);
+        const count = Math.min(size, remaining);
+        return { data: Array.from({ length: count }, (_, i) => ({ id: from + i })), error: null };
+      });
+    }
+
+    it("dataset abaixo do freio: returns every row normally, exactly once each", async () => {
+      const fetchPage = fullPagesUpTo(1500);
+      const rows = await fetchAllPages(fetchPage);
+      expect(rows).toHaveLength(1500);
+      expect(new Set(rows.map((r: { id: number }) => r.id)).size).toBe(1500);
+      expect(fetchPage).toHaveBeenCalledTimes(2); // one full page + one short page
+    });
+
+    it("dataset maior que o freio: throws an explicit, clear error instead of silently returning the first 50,000 rows", async () => {
+      // Every one of the MAX_PAGES pages comes back completely full, so
+      // fetchAllPages never sees the short-page signal that means "that
+      // was genuinely the last one" - there is more data than it can
+      // safely walk.
+      const fetchPage = fullPagesUpTo(MAX_PAGES * PAGE_SIZE + 1);
+      await expect(fetchAllPages(fetchPage)).rejects.toThrow(
+        /limite técnico de segurança de 50000 registros/i,
+      );
+      expect(fetchPage).toHaveBeenCalledTimes(MAX_PAGES);
+    });
   });
 });

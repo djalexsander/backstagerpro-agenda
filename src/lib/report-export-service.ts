@@ -236,51 +236,138 @@ function isWithinSelectedRange(date: string | null | undefined, start?: string, 
   return true;
 }
 
-async function fetchEventsForExport(empresaId: string, filters: ExportFilters) {
-  let query = supabase
-    .from("events")
-    .select("id, artist, city, created_at, created_by, date, empresa_id, id, logistics_departure, material_list, name, num_days, observations, show_time, status, updated_at, venue")
-    .eq("empresa_id", empresaId)
-    .order("date", { ascending: false })
-    .limit(1000);
+// ─── Safe, unbounded pagination for direct table queries ──────────────────
+//
+// P1-12: every fetcher below used to run a single ".limit(1000)" query with
+// no period filter, then filter by date in JS - once a company passed ~1000
+// total rows, a report for an older period could come back incomplete or
+// silently empty, because the rows that matched the period were never in
+// the single page fetched (typically the 1000 *most recent* rows, since the
+// query was ordered by date desc). The fix has two independent parts: (1)
+// the date range the user actually chose is now a real filter in the query
+// itself (.gte/.lte, or an embedded-resource filter through an events!inner
+// join for tables with no date column of their own - see fetchFinancialsForExport),
+// applied BEFORE any page is fetched; (2) whatever still matches - which can
+// legitimately be more than 1000 rows for a wide/all-time query - is walked
+// page by page instead of being capped, so a large-but-correct result is
+// never silently truncated either (section 5/6 of the request this fixes:
+// no arbitrary cap, safe pagination instead).
+const PAGE_SIZE = 1000;
+// Defensive circuit breaker against a genuinely infinite loop (e.g. a
+// misbehaving sort that keeps returning the same page), not a new business
+// limit: 50 pages * 1000 rows/page is 50,000 rows, far beyond any
+// realistic per-company report size today.
+const MAX_PAGES = 50;
 
-  if (filters.mode === "evento" && filters.eventId) {
-    query = query.eq("id", filters.eventId);
+export async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await fetchPage(from, to);
+    if (error) throw error;
+    const batch = (data ?? []) as T[];
+    rows.push(...batch);
+    // A short page is the only reliable "that was the last one" signal -
+    // return what was collected as the real, complete result.
+    if (batch.length < PAGE_SIZE) return rows;
   }
-
-  const { data, error } = await query;
-
-  if (error) throw error;
-
-  const events = (data ?? []) as EventRow[];
-
-  if (filters.mode === "evento") return events;
-
-  const { start, end } = getReportDateRange(filters);
-  return events.filter((event) => isWithinSelectedRange(event.date, start, end));
+  // Every one of MAX_PAGES pages came back full: there is no way to tell
+  // from here whether that's genuinely the whole result or more rows exist
+  // past this point without fetching yet another page past the safety
+  // ceiling. Silently returning `rows` here would present a dataset capped
+  // at MAX_PAGES * PAGE_SIZE as if it were complete - the exact bug this
+  // pagination exists to prevent, just at a higher threshold - so this
+  // throws instead of ever letting a report be generated from a partial
+  // dataset the caller can't tell is partial.
+  throw new Error(
+    `O relatório excedeu o limite técnico de segurança de ${MAX_PAGES * PAGE_SIZE} registros e não pôde ser gerado com segurança. Reduza o período selecionado e tente novamente.`,
+  );
 }
 
-async function fetchAllFinancialsWithEvents(empresaId: string): Promise<FinancialRow[]> {
-  const { data, error } = await supabase
-    .from("financials")
-    .select("*, events!inner(name, artist, date, venue, city, status)")
-    .eq("empresa_id", empresaId)
-    .limit(1000);
+const EVENT_SELECT = "id, artist, city, created_at, created_by, date, empresa_id, id, logistics_departure, material_list, name, num_days, observations, show_time, status, updated_at, venue";
 
-  if (error) throw error;
-
-  return (data ?? []) as FinancialRow[];
-}
-
-async function fetchFinancialsForExport(empresaId: string, filters: ExportFilters) {
-  const financials = await fetchAllFinancialsWithEvents(empresaId);
-
+async function fetchEventsForExport(empresaId: string, filters: ExportFilters): Promise<EventRow[]> {
   if (filters.mode === "evento") {
-    return financials.filter((financial) => financial.event_id === filters.eventId);
+    let query = supabase
+      .from("events")
+      .select(EVENT_SELECT)
+      .eq("empresa_id", empresaId)
+      .order("date", { ascending: false });
+    if (filters.eventId) query = query.eq("id", filters.eventId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as EventRow[];
+  }
+
+  // period/mensal: the date range the user chose is applied here, in the
+  // query itself, before any pagination - never fetched broadly and
+  // filtered afterward in JS.
+  const { start, end } = getReportDateRange(filters);
+  return fetchAllPages<EventRow>((from, to) => {
+    let query = supabase
+      .from("events")
+      .select(EVENT_SELECT)
+      .eq("empresa_id", empresaId)
+      .order("date", { ascending: false })
+      .order("id", { ascending: true }) // stable tiebreaker: same-date rows would otherwise have no guaranteed relative order across separate page requests
+      .range(from, to);
+    if (start) query = query.gte("date", start);
+    if (end) query = query.lte("date", end);
+    return query;
+  });
+}
+
+/** Genuinely all of the company's financials, every period - used only by
+ * the dashboard's monthly trend section, which needs the full history
+ * regardless of the report's selected period. Still paginated so a company
+ * with more than 1000 financial records never gets a silently-truncated
+ * trend. */
+async function fetchAllFinancialsWithEvents(empresaId: string): Promise<FinancialRow[]> {
+  return fetchAllPages<FinancialRow>((from, to) =>
+    supabase
+      .from("financials")
+      .select("*, events!inner(name, artist, date, venue, city, status)")
+      .eq("empresa_id", empresaId)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+}
+
+// financials has no date column of its own - "period" here has always meant
+// "the linked event's date" (events!inner already required for that join).
+// Filtering events.date directly in the query (PostgREST's embedded-resource
+// filter, valid because of the !inner hint) avoids a second round trip to
+// fetch events first just to get an id list, and keeps evento-mode as the
+// simple direct match it always was.
+async function fetchFinancialsForExport(empresaId: string, filters: ExportFilters): Promise<FinancialRow[]> {
+  if (filters.mode === "evento") {
+    if (!filters.eventId) return [];
+    return fetchAllPages<FinancialRow>((from, to) =>
+      supabase
+        .from("financials")
+        .select("*, events!inner(name, artist, date, venue, city, status)")
+        .eq("empresa_id", empresaId)
+        .eq("event_id", filters.eventId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
   }
 
   const { start, end } = getReportDateRange(filters);
-  return financials.filter((financial) => isWithinSelectedRange(financial.events?.date, start, end));
+  return fetchAllPages<FinancialRow>((from, to) => {
+    let query = supabase
+      .from("financials")
+      .select("*, events!inner(name, artist, date, venue, city, status)")
+      .eq("empresa_id", empresaId)
+      .order("id", { ascending: true })
+      .range(from, to);
+    if (start) query = query.gte("events.date", start);
+    if (end) query = query.lte("events.date", end);
+    return query;
+  });
 }
 
 // ─── Locações (Relatório Financeiro) ───────────────────────────────────
@@ -300,8 +387,12 @@ const RENTAL_STATUSES_EXCLUDED_FROM_CONTRATADO = new Set<FinancialLedgerStatus>(
 
 // listar_contas_receber paginates (100/page max) with no date-range filter -
 // every page is walked here so callers get the company's full receivables
-// set to filter/aggregate themselves, same reasoning as the events/financials
-// ".limit(1000)" fetches above.
+// set to filter/aggregate themselves. Unlike the events/financials fetches
+// above, this one was never capped at a single page (no ".limit()" was ever
+// applied to it), so it doesn't exhibit P1-12's silent-truncation bug -
+// still less efficient than a server-side date filter would be, but out of
+// scope for this fix (see fetchAllMaintenanceExpenses below for the same
+// reasoning).
 export async function fetchAllReceivableEntries(empresaId: string): Promise<ReceivableEntry[]> {
   const allEntries: ReceivableEntry[] = [];
   let page = 1;
@@ -431,17 +522,26 @@ async function fetchTeamReportRows(empresaId: string, filters: ExportFilters): P
     .order("nome");
   if (funcError) throw funcError;
 
-  const { data: assignments, error: assignError } = await supabase
-    .from("event_funcionarios")
-    .select("funcionario_id, events(date)")
-    .eq("empresa_id", empresaId);
-  if (assignError) throw assignError;
-
+  // Same reasoning as fetchFinancialsForExport: event_funcionarios has no
+  // date of its own, so the period is applied to the joined event's date
+  // directly in the query (events!inner + embedded-resource filter),
+  // instead of fetching every assignment for the whole company and
+  // filtering afterward in JS.
   const { start, end } = getReportDateRange(filters);
+  const assignments = await fetchAllPages<{ funcionario_id: string }>((from, to) => {
+    let query = supabase
+      .from("event_funcionarios")
+      .select("funcionario_id, events!inner(date)")
+      .eq("empresa_id", empresaId)
+      .order("id", { ascending: true })
+      .range(from, to);
+    if (start) query = query.gte("events.date", start);
+    if (end) query = query.lte("events.date", end);
+    return query;
+  });
 
   const eventCountByFuncionario = new Map<string, number>();
-  for (const row of (assignments ?? []) as Array<{ funcionario_id: string; events: { date: string } | null }>) {
-    if (!isWithinSelectedRange(row.events?.date, start, end)) continue;
+  for (const row of assignments) {
     eventCountByFuncionario.set(row.funcionario_id, (eventCountByFuncionario.get(row.funcionario_id) ?? 0) + 1);
   }
 
@@ -476,27 +576,36 @@ async function fetchOperationalReportRows(empresaId: string, filters: ExportFilt
 
   if (eventIds.length === 0) return [];
 
-  const { data: assignments, error: assignError } = await supabase
-    .from("event_funcionarios")
-    .select("event_id")
-    .eq("empresa_id", empresaId)
-    .in("event_id", eventIds);
-  if (assignError) throw assignError;
+  // Already scoped to this period's own event ids (fetchEventsForExport is
+  // the one place the date range gets applied) - paginated too, in case one
+  // period covers more assignments/checklist items than a single page.
+  const assignments = await fetchAllPages<{ event_id: string }>((from, to) =>
+    supabase
+      .from("event_funcionarios")
+      .select("event_id")
+      .eq("empresa_id", empresaId)
+      .in("event_id", eventIds)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
-  const { data: checklist, error: checklistError } = await supabase
-    .from("event_checklist_items")
-    .select("event_id, concluido")
-    .eq("empresa_id", empresaId)
-    .in("event_id", eventIds);
-  if (checklistError) throw checklistError;
+  const checklist = await fetchAllPages<{ event_id: string; concluido: boolean }>((from, to) =>
+    supabase
+      .from("event_checklist_items")
+      .select("event_id, concluido")
+      .eq("empresa_id", empresaId)
+      .in("event_id", eventIds)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
   const teamCountByEvent = new Map<string, number>();
-  for (const row of assignments ?? []) {
+  for (const row of assignments) {
     teamCountByEvent.set(row.event_id, (teamCountByEvent.get(row.event_id) ?? 0) + 1);
   }
 
   const checklistByEvent = new Map<string, { total: number; done: number }>();
-  for (const item of checklist ?? []) {
+  for (const item of checklist) {
     const current = checklistByEvent.get(item.event_id) ?? { total: 0, done: 0 };
     current.total += 1;
     if (item.concluido) current.done += 1;

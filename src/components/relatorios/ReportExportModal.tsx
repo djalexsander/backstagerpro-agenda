@@ -21,6 +21,7 @@ import type { ExportFormat } from "@/lib/pdf-export";
 import {
   executeReportExport,
   executeReportPrint,
+  fetchAllPages,
   MONTHS,
   MODES_BY_REPORT,
   REPORT_TITLES,
@@ -80,19 +81,23 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
     });
   }, [reportType]);
 
-  // Load events for "evento específico" mode
+  // Load events for "evento específico" mode - paginated instead of a
+  // single ".limit(1000)" fetch, so a company with more than 1000 events
+  // doesn't silently lose the ability to pick an older one from this list
+  // (P1-12).
   const { data: events = [] } = useQuery({
     queryKey: ["events-export-modal", empresaId],
     queryFn: async () => {
       if (!empresaId) return [];
-      const { data, error } = await supabase
-        .from("events")
-        .select("id, name, artist, date")
-        .eq("empresa_id", empresaId)
-        .order("date", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      return data;
+      return fetchAllPages<{ id: string; name: string; artist: string; date: string }>((from, to) =>
+        supabase
+          .from("events")
+          .select("id, name, artist, date")
+          .eq("empresa_id", empresaId)
+          .order("date", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
     },
     enabled: !!empresaId && open,
   });
