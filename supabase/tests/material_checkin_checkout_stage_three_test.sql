@@ -27,6 +27,16 @@ SELECT has_function(
   ARRAY['uuid','text','uuid','timestamp with time zone','uuid'],
   'explicit cancellation RPC exists'
 );
+SELECT has_function(
+  'public', 'registrar_baixa_custodia_material',
+  ARRAY['uuid','integer','text','text','uuid','text','timestamp with time zone','uuid'],
+  'stock-neutral custody write-off RPC exists'
+);
+SELECT ok(
+  has_function_privilege('authenticated', 'public.registrar_baixa_custodia_material(uuid,integer,text,text,uuid,text,timestamp with time zone,uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.registrar_baixa_custodia_material(uuid,integer,text,text,uuid,text,timestamp with time zone,uuid)', 'EXECUTE'),
+  'write-off RPC is explicit authenticated-only API'
+);
 SELECT ok(
   (SELECT ativo FROM public.module_catalog WHERE feature_key = 'checkin_checkout'),
   'checkin_checkout is released in the canonical catalog'
@@ -425,6 +435,125 @@ SELECT throws_ok(
   'a completed custody rejects duplicate return with a new key'
 );
 
+-- P1-7: loss/damage closes physical custody without a fake check-in or stock entry.
+SELECT lives_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    (SELECT id FROM public.material_custodias WHERE client_uuid = '78000000-0000-4000-8000-000000000001'),
+    1, 'extraviado', 'item perdido durante o transporte',
+    '78300000-0000-4000-8000-000000000001', 'boletim registrado', NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'total loss closes an individual custody'
+);
+SELECT is(
+  (SELECT (status, quantidade_devolvida, quantidade_baixada)::text
+   FROM public.material_custodias WHERE client_uuid = '78000000-0000-4000-8000-000000000001'),
+  '(concluida,0,1)',
+  'loss is accounted separately from physical return'
+);
+SELECT is(
+  (SELECT status_operacional FROM public.materiais WHERE id = '75000000-0000-4000-8000-000000000001'),
+  'extraviado'::public.material_operational_status,
+  'individual lost material receives the existing extraviado status'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.material_custodia_eventos
+    WHERE client_uuid = '78300000-0000-4000-8000-000000000001'
+      AND tipo = 'correcao' AND quantidade = 1 AND movimento_estoque_id IS NULL
+      AND executado_por = auth.uid() AND justificativa = 'item perdido durante o transporte'
+      AND status_operacional_resultante = 'extraviado'),
+  'correction event records actor, reason, classification and no stock movement'
+);
+SELECT lives_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    (SELECT id FROM public.material_custodias WHERE client_uuid = '78000000-0000-4000-8000-000000000001'),
+    1, 'extraviado', 'item perdido durante o transporte',
+    '78300000-0000-4000-8000-000000000001', 'boletim registrado', NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'retry with the same key is idempotent'
+);
+SELECT is(
+  (SELECT count(*) FROM public.material_custodia_eventos WHERE client_uuid = '78300000-0000-4000-8000-000000000001'),
+  1::bigint,
+  'idempotent retry does not apply a second write-off'
+);
+
+SELECT lives_ok(
+  $test$SELECT public.registrar_checkout_material(
+    '75000000-0000-4000-8000-000000000002', 10,
+    '76000000-0000-4000-8000-000000000001', 'funcionario',
+    '77000000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
+    '78300000-0000-4000-8000-000000000002', now() - interval '1 day', 'custody to reconcile',
+    NULL, NULL, NULL, now() - interval '2 days', '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'quantity custody is prepared for partial return and write-off'
+);
+SELECT lives_ok(
+  $test$SELECT public.registrar_checkin_material(
+    (SELECT id FROM public.material_custodias WHERE client_uuid = '78300000-0000-4000-8000-000000000002'),
+    4, '76000000-0000-4000-8000-000000000002', 'bom',
+    '78300000-0000-4000-8000-000000000003', NULL, NULL, NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'physical partial return remains a normal check-in'
+);
+SELECT lives_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    (SELECT id FROM public.material_custodias WHERE client_uuid = '78300000-0000-4000-8000-000000000002'),
+    3, 'avariado', 'tres unidades sem condicao de retorno',
+    '78300000-0000-4000-8000-000000000004', NULL, NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'damage writes off only the informed quantity'
+);
+SELECT is(
+  (SELECT (status, quantidade_devolvida, quantidade_baixada)::text FROM public.material_custodias
+   WHERE client_uuid = '78300000-0000-4000-8000-000000000002'),
+  '(parcial,4,3)',
+  'partial return and partial damage leave only the real remainder open'
+);
+SELECT throws_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    (SELECT id FROM public.material_custodias WHERE client_uuid = '78300000-0000-4000-8000-000000000002'),
+    4, 'extraviado', 'quantidade acima da pendente',
+    '78300000-0000-4000-8000-000000000005', NULL, NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'CI021', 'A quantidade baixada supera a quantidade ainda em custodia.',
+  'write-off above the remaining quantity is blocked'
+);
+SELECT lives_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    (SELECT id FROM public.material_custodias WHERE client_uuid = '78300000-0000-4000-8000-000000000002'),
+    3, 'extraviado', 'saldo restante perdido',
+    '78300000-0000-4000-8000-000000000006', NULL, NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'remaining quantity can be closed after a partial return'
+);
+SELECT is(
+  (SELECT (status, quantidade_devolvida, quantidade_baixada)::text FROM public.material_custodias
+   WHERE client_uuid = '78300000-0000-4000-8000-000000000002'),
+  '(concluida,4,6)',
+  'return plus write-off closes the custody without masking the split'
+);
+SELECT is(
+  (SELECT COALESCE(sum(quantidade), 0)::integer FROM public.estoque_saldos WHERE material_id = '75000000-0000-4000-8000-000000000002'),
+  44,
+  'six written-off units never return to stock'
+);
+SELECT is(
+  ((public.obter_indicadores_custodia('72000000-0000-4000-8000-000000000001')->>'itens_fora')::integer),
+  0,
+  'closed lost and damaged quantities leave the outside indicator'
+);
+SELECT is(
+  ((public.obter_indicadores_custodia('72000000-0000-4000-8000-000000000001')->>'atrasados')::integer),
+  0,
+  'closed loss no longer remains overdue'
+);
+
 SELECT throws_ok(
   $test$SELECT public.registrar_checkout_material(
     '75000000-0000-4000-8000-000000000003', 1,
@@ -560,8 +689,23 @@ SELECT lives_ok(
 );
 RESET ROLE;
 
+CREATE TEMP TABLE p17_cross_tenant_target ON COMMIT DROP AS
+SELECT id FROM public.material_custodias
+WHERE client_uuid = '78000000-0000-4000-8000-000000000014';
+GRANT SELECT ON p17_cross_tenant_target TO authenticated;
+
 SELECT set_config('request.jwt.claim.sub', '73000000-0000-4000-8000-000000000001', true);
 SET LOCAL ROLE authenticated;
+SELECT throws_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    (SELECT id FROM p17_cross_tenant_target),
+    1, 'extraviado', 'tentativa entre empresas',
+    '78300000-0000-4000-8000-000000000007', NULL, NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  'CI005', 'Operacao de custodia nao encontrada.',
+  'company A cannot write off company B custody'
+);
 SELECT is(
   (SELECT count(*) FROM public.material_custodias WHERE empresa_id = '72000000-0000-4000-8000-000000000002'),
   0::bigint,
@@ -575,6 +719,15 @@ SET LOCAL ROLE authenticated;
 SELECT ok(
   (SELECT count(*) FROM public.material_custodias) > 0,
   'ordinary company user can read custody history'
+);
+SELECT throws_ok(
+  $test$SELECT public.registrar_baixa_custodia_material(
+    '00000000-0000-4000-8000-000000000001', 1, 'extraviado', 'sem permissao',
+    '78300000-0000-4000-8000-000000000008', NULL, NULL,
+    '72000000-0000-4000-8000-000000000001'
+  )$test$,
+  '42501', 'Você não tem permissão para esta operação.',
+  'ordinary user cannot write off custody'
 );
 SELECT throws_ok(
   $test$SELECT public.registrar_checkout_material(

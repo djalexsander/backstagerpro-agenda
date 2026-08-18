@@ -92,6 +92,7 @@ export interface RentalCustodyView {
   status: "aberta" | "parcial" | "concluida" | "cancelada";
   quantidade_retirada: number;
   quantidade_devolvida: number;
+  quantidade_baixada: number;
   quantidade_pendente: number;
   retirada_em: string;
   previsao_retorno: string | null;

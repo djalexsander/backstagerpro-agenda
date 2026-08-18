@@ -7,7 +7,8 @@ import {
 // `RAISE ... USING ERRCODE` by the SQL functions originally created in
 // supabase/migrations/20260802160000_material_checkin_checkout_stage_three.sql
 // (registrar_checkout_material, registrar_checkin_material,
-// cancelar_checkout_material). registrar_checkin_material was later
+// cancelar_checkout_material, registrar_baixa_custodia_material).
+// registrar_checkin_material was later
 // redefined in
 // supabase/migrations/20260806080000_fix_rental_status_sync_on_generic_checkin.sql
 // — when looking up a code, check for a later `CREATE OR REPLACE FUNCTION`
@@ -32,6 +33,7 @@ export const CUSTODY_ERROR_MESSAGES = {
   CI015: "Somente check-out sem devoluções pode ser cancelado.",
   CI019: "O histórico de custódia é imutável.",
   CI020: "O vínculo com o movimento de estoque é inválido.",
+  CI021: "A quantidade baixada supera a quantidade ainda em custódia.",
   ST001: "Saldo insuficiente na localização de origem.",
   ST006: "Localização inativa não pode receber materiais.",
   ST013: "A chave idempotente já foi usada com dados diferentes.",

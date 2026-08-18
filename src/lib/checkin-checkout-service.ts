@@ -16,6 +16,7 @@ import type {
   CustodyOperationPage,
   CustodyOperationView,
   CustodyResponsibleOption,
+  CustodyWriteOffInput,
 } from "./checkin-checkout-types";
 
 function throwCustodyError(error: unknown, context: string): never {
@@ -170,4 +171,21 @@ export async function cancelCheckout(
     _data_efetiva: input.effectiveAt || undefined,
   });
   if (error) throwCustodyError(error, "cancel checkout");
+}
+
+export async function registerCustodyWriteOff(
+  companyId: string,
+  input: CustodyWriteOffInput,
+): Promise<void> {
+  const { error } = await supabase.rpc("registrar_baixa_custodia_material", {
+    _empresa_id: companyId,
+    _custodia_id: input.custodyId,
+    _quantidade: input.quantity,
+    _classificacao: input.classification,
+    _justificativa: input.justification.trim(),
+    _client_uuid: input.clientUuid,
+    _observacao: input.note?.trim() || undefined,
+    _data_efetiva: input.effectiveAt || undefined,
+  });
+  if (error) throwCustodyError(error, "register custody write-off");
 }

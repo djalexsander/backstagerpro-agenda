@@ -15,6 +15,7 @@ import {
   CUSTODY_STATUS_LABELS,
 } from "@/lib/checkin-checkout-domain";
 import type { CustodyOperationView } from "@/lib/checkin-checkout-types";
+import { MATERIAL_STATUS_LABELS } from "@/lib/material-types";
 
 const EVENT_LABELS = {
   checkout: "Check-out",
@@ -54,7 +55,7 @@ export function CustodyHistoryDialog({
             <p>Finalidade: <strong>{CUSTODY_PURPOSE_LABELS[operation.finalidade]}</strong></p>
             <p>Condição na saída: <strong>{CUSTODY_CONDITION_LABELS[operation.condicao_saida]}</strong></p>
             <p>Status: <strong>{CUSTODY_STATUS_LABELS[operation.status]}</strong></p>
-            <p>Quantidade: <strong>{operation.quantidade_devolvida} de {operation.quantidade_retirada} retornada(s)</strong></p>
+            <p>Quantidade: <strong>{operation.quantidade_devolvida} retornada(s) · {operation.quantidade_baixada} baixada(s) de {operation.quantidade_retirada}</strong></p>
             <p>Origem: <strong>{operation.localizacao_origem_nome}</strong></p>
             {operation.observacao_saida && <p className="sm:col-span-2">Observação de saída: {operation.observacao_saida}</p>}
           </div>
@@ -77,7 +78,10 @@ export function CustodyHistoryDialog({
               {event.ocorrencia && <p className="text-destructive">Ocorrência: {event.ocorrencia}</p>}
               {event.observacao && <p>Observação: {event.observacao}</p>}
               {event.justificativa && <p>Justificativa: {event.justificativa}</p>}
-              <p className="mt-1 font-mono text-xs text-muted-foreground">Movimento: {event.movimento_estoque_id}</p>
+              {event.status_operacional_resultante && <p>Classificação da baixa: {MATERIAL_STATUS_LABELS[event.status_operacional_resultante]}</p>}
+              {event.movimento_estoque_id
+                ? <p className="mt-1 font-mono text-xs text-muted-foreground">Movimento: {event.movimento_estoque_id}</p>
+                : event.tipo === "correcao" && <p className="mt-1 text-xs text-muted-foreground">Sem entrada no estoque.</p>}
             </div>
           ))}
         </div>

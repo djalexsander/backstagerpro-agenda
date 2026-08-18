@@ -22,6 +22,7 @@ export interface OpenCustodySummary {
   id: string;
   quantidade_retirada: number;
   quantidade_devolvida: number;
+  quantidade_baixada: number;
   quantidade_pendente: number;
   responsavel_nome: string;
   retirada_em: string;
@@ -58,6 +59,7 @@ export interface CustodyOperationView {
   tipo_controle: MaterialControlType;
   quantidade_retirada: number;
   quantidade_devolvida: number;
+  quantidade_baixada: number;
   quantidade_pendente: number;
   localizacao_origem_id: string;
   localizacao_origem_nome: string;
@@ -96,10 +98,11 @@ export interface CustodyEventView {
   ocorrencia: string | null;
   observacao: string | null;
   justificativa: string | null;
+  status_operacional_resultante: MaterialOperationalStatus | null;
   data_efetiva: string;
   executado_por: string;
   executor_nome: string;
-  movimento_estoque_id: string;
+  movimento_estoque_id: string | null;
   created_at: string;
 }
 
@@ -158,6 +161,21 @@ export interface CheckinInput {
 export interface CancelCheckoutInput {
   custodyId: string;
   justification: string;
+  effectiveAt?: string | null;
+  clientUuid: string;
+}
+
+export type CustodyWriteOffClassification = Extract<
+  MaterialOperationalStatus,
+  "extraviado" | "avariado" | "baixado"
+>;
+
+export interface CustodyWriteOffInput {
+  custodyId: string;
+  quantity: number;
+  classification: CustodyWriteOffClassification;
+  justification: string;
+  note?: string;
   effectiveAt?: string | null;
   clientUuid: string;
 }

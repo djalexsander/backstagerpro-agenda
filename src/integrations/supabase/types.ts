@@ -2363,11 +2363,12 @@ export type Database = {
           localizacao_destino_id: string | null
           localizacao_origem_id: string | null
           material_id: string
-          movimento_estoque_id: string
+          movimento_estoque_id: string | null
           observacao: string | null
           ocorrencia: string | null
           payload_hash: string
           quantidade: number
+          status_operacional_resultante: Database["public"]["Enums"]["material_operational_status"] | null
           tipo: Database["public"]["Enums"]["material_custody_event_type"]
         }
         Insert: {
@@ -2385,11 +2386,12 @@ export type Database = {
           localizacao_destino_id?: string | null
           localizacao_origem_id?: string | null
           material_id: string
-          movimento_estoque_id: string
+          movimento_estoque_id?: string | null
           observacao?: string | null
           ocorrencia?: string | null
           payload_hash: string
           quantidade: number
+          status_operacional_resultante?: Database["public"]["Enums"]["material_operational_status"] | null
           tipo: Database["public"]["Enums"]["material_custody_event_type"]
         }
         Update: {
@@ -2407,11 +2409,12 @@ export type Database = {
           localizacao_destino_id?: string | null
           localizacao_origem_id?: string | null
           material_id?: string
-          movimento_estoque_id?: string
+          movimento_estoque_id?: string | null
           observacao?: string | null
           ocorrencia?: string | null
           payload_hash?: string
           quantidade?: number
+          status_operacional_resultante?: Database["public"]["Enums"]["material_operational_status"] | null
           tipo?: Database["public"]["Enums"]["material_custody_event_type"]
         }
         Relationships: [
@@ -2490,6 +2493,7 @@ export type Database = {
           payload_hash: string
           previsao_retorno: string | null
           quantidade_devolvida: number
+          quantidade_baixada: number
           quantidade_retirada: number
           referencia_id: string | null
           referencia_tipo: string | null
@@ -2518,6 +2522,7 @@ export type Database = {
           payload_hash: string
           previsao_retorno?: string | null
           quantidade_devolvida?: number
+          quantidade_baixada?: number
           quantidade_retirada: number
           referencia_id?: string | null
           referencia_tipo?: string | null
@@ -2546,6 +2551,7 @@ export type Database = {
           payload_hash?: string
           previsao_retorno?: string | null
           quantidade_devolvida?: number
+          quantidade_baixada?: number
           quantidade_retirada?: number
           referencia_id?: string | null
           referencia_tipo?: string | null
@@ -4788,6 +4794,25 @@ export type Database = {
         Args: { _empresa_id: string }
         Returns: undefined
       }
+      registrar_baixa_custodia_material: {
+        Args: {
+          _classificacao: string
+          _client_uuid: string
+          _custodia_id: string
+          _data_efetiva?: string
+          _empresa_id?: string
+          _justificativa: string
+          _observacao?: string
+          _quantidade: number
+        }
+        Returns: Database["public"]["Tables"]["material_custodias"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "material_custodias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       master_approve_module_batch_request: {
         Args: { _batch_request_id: string; _observacao_admin?: string | null }
         Returns: Json
@@ -5722,6 +5747,7 @@ export type Database = {
         | "retirada"
         | "devolucao"
         | "cancelamento"
+        | "correcao"
         | "conclusao"
       material_rental_status:
         | "rascunho"
@@ -5966,6 +5992,7 @@ export const Constants = {
         "retirada",
         "devolucao",
         "cancelamento",
+        "correcao",
         "conclusao",
       ],
       material_rental_status: [

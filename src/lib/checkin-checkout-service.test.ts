@@ -10,7 +10,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { registerCheckout } from "./checkin-checkout-service";
+import { registerCheckout, registerCustodyWriteOff } from "./checkin-checkout-service";
 
 describe("check-in/check-out mutation service", () => {
   beforeEach(() => {
@@ -43,5 +43,28 @@ describe("check-in/check-out mutation service", () => {
     expect(mocks.rpc.mock.calls[0][1]._client_uuid).toBe(clientUuid);
     expect(mocks.rpc.mock.calls[1][1]._client_uuid).toBe(clientUuid);
     expect(mocks.rpc.mock.calls[0][1]).toEqual(mocks.rpc.mock.calls[1][1]);
+  });
+
+  it("sends a stock-neutral custody write-off only through the transactional RPC", async () => {
+    await registerCustodyWriteOff("72000000-0000-4000-8000-000000000001", {
+      custodyId: "78100000-0000-4000-8000-000000000001",
+      quantity: 2,
+      classification: "avariado",
+      justification: "Dano irreversível constatado no local",
+      note: "Fotos anexadas ao chamado",
+      clientUuid: "78200000-0000-4000-8000-000000000001",
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "registrar_baixa_custodia_material",
+      expect.objectContaining({
+        _quantidade: 2,
+        _classificacao: "avariado",
+        _justificativa: "Dano irreversível constatado no local",
+      }),
+    );
+    expect(mocks.rpc.mock.calls[0][1]).not.toHaveProperty("_localizacao_destino_id");
+    expect(mocks.rpc.mock.calls[0][1]).not.toHaveProperty("_movimento_estoque_id");
   });
 });
