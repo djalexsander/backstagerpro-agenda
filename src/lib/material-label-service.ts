@@ -2,6 +2,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { labelBatchToRpcItems } from "./material-label-domain";
 import type { LabelBatchSelection, LabelIndicators, LabelMaterial, LabelModel, LabelPrintBatch, LabelPrintRequest, SaveLabelModelInput } from "./material-label-types";
 
+export type LabelMaterialResolution =
+  | { status: "found"; material: LabelMaterial }
+  | { status: "inactive"; id: string; code: string; name: string }
+  | { status: "not_found" };
+
 interface RpcError { message?: string; code?: string }
 type RpcCaller = (name: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: RpcError | null }>;
 const callRpc = supabase.rpc.bind(supabase) as unknown as RpcCaller;
@@ -55,6 +60,38 @@ export async function searchLabelMaterials(companyId: string, search = ""): Prom
   });
   if (error) throwLabelError(error, "search materials");
   return (data ?? []) as LabelMaterial[];
+}
+
+export async function resolveLabelMaterialById(
+  companyId: string,
+  materialId: string,
+): Promise<LabelMaterialResolution> {
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(materialId)) {
+    return { status: "not_found" };
+  }
+  const { data, error } = await supabase
+    .from("materiais")
+    .select("id,nome,codigo_interno,ativo")
+    .eq("empresa_id", companyId)
+    .eq("id", materialId)
+    .maybeSingle();
+  if (error) throwLabelError(error, "resolve material by id");
+  if (!data) return { status: "not_found" };
+  if (!data.ativo) {
+    return {
+      status: "inactive",
+      id: data.id,
+      code: data.codigo_interno,
+      name: data.nome,
+    };
+  }
+
+  // Reuse the canonical label search to build the complete LabelMaterial;
+  // this exact-id lookup only translates the structured route parameter into
+  // the human-readable code consumed by that existing resolver.
+  const candidates = await searchLabelMaterials(companyId, data.codigo_interno);
+  const material = candidates.find((candidate) => candidate.id === data.id);
+  return material ? { status: "found", material } : { status: "not_found" };
 }
 
 export async function registerLabelPrintRequest(companyId: string, input: {

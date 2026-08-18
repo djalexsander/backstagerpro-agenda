@@ -16,7 +16,7 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useToast } from "@/hooks/use-toast";
 import { addLabelBatchMaterial, canPrintMaterialWithModel, labelBatchTotal, labelHistoryPagination, LABEL_IDENTIFICATION_LABELS, labelReadinessMessage, removeLabelBatchMaterial, updateLabelBatchQuantity } from "@/lib/material-label-domain";
 import { getMaterialLabelPermissions } from "@/lib/material-label-permissions";
-import { archiveLabelModel, getLabelIndicators, listLabelModels, listLabelPrintHistory, searchLabelMaterials } from "@/lib/material-label-service";
+import { archiveLabelModel, getLabelIndicators, listLabelModels, listLabelPrintHistory, resolveLabelMaterialById, searchLabelMaterials } from "@/lib/material-label-service";
 import type { LabelBatchSelection, LabelModel, LabelPrintBatch } from "@/lib/material-label-types";
 import { useSearchParams } from "react-router-dom";
 
@@ -25,11 +25,12 @@ const HISTORY_PAGE_SIZE = 10;
 export default function Etiquetas() {
   const { role, empresaId: companyId, empresaNome, empresaReadOnly: readOnly, isMasterAdmin } = useAuth();
   const [searchParams] = useSearchParams(); const { toast } = useToast(); const queryClient = useQueryClient();
+  const requestedMaterialId = searchParams.get("material_id") ?? searchParams.get("material");
   const companyName = empresaNome ?? "Empresa";
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS);
   const permissions = getMaterialLabelPermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
-  const [search, setSearch] = useState(() => searchParams.get("material") ?? "");
+  const [search, setSearch] = useState("");
   const [selectedModelId, setSelectedModelId] = useState(""); const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<LabelModel | null>(null); const [batchItems, setBatchItems] = useState<LabelBatchSelection[]>([]);
   const [printOpen, setPrintOpen] = useState(false); const [historyPage, setHistoryPage] = useState(1);
@@ -37,11 +38,21 @@ export default function Etiquetas() {
   const enabled = Boolean(companyId && permissions.visualizar);
   const models = useQuery({ queryKey: ["label-models", companyId], queryFn: () => listLabelModels(companyId!), enabled });
   const materials = useQuery({ queryKey: ["label-materials", companyId, search], queryFn: () => searchLabelMaterials(companyId!, search), enabled });
+  const requestedMaterial = useQuery({ queryKey: ["label-material-by-id", companyId, requestedMaterialId], queryFn: () => resolveLabelMaterialById(companyId!, requestedMaterialId!), enabled: enabled && Boolean(requestedMaterialId), retry: false });
   const history = useQuery({ queryKey: ["label-history", companyId, historyPage], queryFn: () => listLabelPrintHistory(companyId!, historyPage, HISTORY_PAGE_SIZE), enabled, placeholderData: (previous) => previous });
   const indicators = useQuery({ queryKey: ["label-indicators", companyId], queryFn: () => getLabelIndicators(companyId!), enabled });
   useEffect(() => { const available = models.data ?? []; if (!available.some((model) => model.id === selectedModelId)) setSelectedModelId(available.find((model) => model.padrao)?.id ?? available[0]?.id ?? ""); }, [models.data, selectedModelId]);
   useEffect(() => { setBatchItems([]); setHistoryPage(1); }, [companyId]);
   const selectedModel = (models.data ?? []).find((model) => model.id === selectedModelId) ?? null;
+  const resolvedMaterial = requestedMaterial.data?.status === "found" ? requestedMaterial.data.material : null;
+  useEffect(() => {
+    if (resolvedMaterial) setSearch(resolvedMaterial.codigo_interno);
+  }, [resolvedMaterial]);
+  useEffect(() => {
+    if (!resolvedMaterial || !selectedModel || !permissions.imprimir) return;
+    if (!canPrintMaterialWithModel(resolvedMaterial, selectedModel)) return;
+    setBatchItems((current) => addLabelBatchMaterial(current, resolvedMaterial));
+  }, [permissions.imprimir, resolvedMaterial, selectedModel]);
   const invalidate = async () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["label-models", companyId] }), queryClient.invalidateQueries({ queryKey: ["label-materials", companyId] }),
     queryClient.invalidateQueries({ queryKey: ["label-history", companyId] }), queryClient.invalidateQueries({ queryKey: ["label-indicators", companyId] }),
@@ -51,12 +62,22 @@ export default function Etiquetas() {
   if (!loadingModules && !permissions.visualizar) return <div className="space-y-4"><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><Card className="border-amber-500/50"><CardContent className="p-4">O módulo requer Etiquetas e Gestão de Materiais ativos.</CardContent></Card></div>;
   const stats = indicators.data ?? { modelos_ativos: 0, materiais_identificados: 0, solicitacoes_hoje: 0, etiquetas_hoje: 0 };
   const totalLabels = labelBatchTotal(batchItems); const pagination = labelHistoryPagination(historyPage, HISTORY_PAGE_SIZE, history.data?.total ?? 0);
+  const requestedMaterialMessage = !requestedMaterialId ? null
+    : requestedMaterial.isLoading ? "Carregando o material solicitado..."
+      : requestedMaterial.error ? "Não foi possível carregar o material solicitado. Use a busca manual."
+        : requestedMaterial.data?.status === "not_found" ? "Material solicitado não encontrado nesta empresa. Use a busca manual."
+          : requestedMaterial.data?.status === "inactive" ? `O material ${requestedMaterial.data.code} - ${requestedMaterial.data.name} está inativo e não pode ser adicionado ao lote.`
+            : resolvedMaterial && batchItems.some((item) => item.material.id === resolvedMaterial.id) ? `${resolvedMaterial.codigo_interno} - ${resolvedMaterial.nome} foi adicionado ao lote.`
+              : resolvedMaterial && selectedModel ? `${resolvedMaterial.codigo_interno} - ${resolvedMaterial.nome}: ${labelReadinessMessage(resolvedMaterial, selectedModel) ?? "pronto para adicionar."}`
+                : resolvedMaterial ? `${resolvedMaterial.codigo_interno} - ${resolvedMaterial.nome} carregado. Selecione um modelo para adicioná-lo.`
+                  : null;
   return <div className="space-y-5">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-bold">Etiquetas e Impressão</h1><p className="text-muted-foreground">Modelos dimensionais, lotes multi-material e histórico auditável.</p></div>{permissions.gerenciarModelos && <Button onClick={() => { setEditingModel(null); setModelDialogOpen(true); }}><Plus className="mr-2 h-4 w-4" />Novo modelo</Button>}</div>
     {readOnly && <Card className="border-amber-500/50"><CardContent className="p-3 text-sm">Empresa em modo somente leitura. Consultas permanecem disponíveis.</CardContent></Card>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Modelos ativos", stats.modelos_ativos, LayoutTemplate], ["Materiais identificados", stats.materiais_identificados, PackageCheck], ["Solicitações hoje", stats.solicitacoes_hoje, Printer], ["Etiquetas hoje", stats.etiquetas_hoje, Printer]].map(([label, value, Icon]) => <Card key={String(label)}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs text-muted-foreground">{String(label)}</p><p className="text-2xl font-bold">{String(value)}</p></div><Icon className="h-6 w-6 text-muted-foreground" /></CardContent></Card>)}</div>
     <Card><CardHeader><CardTitle>Modelos de etiqueta</CardTitle></CardHeader><CardContent>{models.isLoading ? <p>Carregando...</p> : !(models.data ?? []).length ? <div className="rounded-md border border-dashed p-8 text-center text-muted-foreground">Crie o primeiro modelo para habilitar a impressão.</div> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{models.data!.map((model) => <div key={model.id} className="rounded-md border p-4"><div className="flex items-start justify-between gap-2"><div><p className="font-medium">{model.nome}</p><p className="text-sm text-muted-foreground">{Number(model.largura_mm)} × {Number(model.altura_mm)} mm · {LABEL_IDENTIFICATION_LABELS[model.tipo_identificacao]}</p></div>{model.padrao && <Badge>Padrão</Badge>}</div><p className="mt-2 text-xs text-muted-foreground">Versão {model.versao} · margem interna {Number(model.margem_interna_mm ?? 1.5)} mm</p>{permissions.gerenciarModelos && <div className="mt-3 flex gap-2"><Button size="sm" variant="outline" onClick={() => { setEditingModel(model); setModelDialogOpen(true); }}><Edit className="mr-1 h-3.5 w-3.5" />Editar</Button><Button size="sm" variant="ghost" onClick={() => archiveMutation.mutate(model)} disabled={archiveMutation.isPending}><Archive className="mr-1 h-3.5 w-3.5" />Inativar</Button></div>}</div>)}</div>}</CardContent></Card>
     <Card><CardHeader><CardTitle>Montar lote de etiquetas</CardTitle></CardHeader><CardContent className="space-y-4">
+      {requestedMaterialMessage && <div role="status" className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">{requestedMaterialMessage}</div>}
       <div className="grid gap-3 md:grid-cols-2"><Select value={selectedModelId} onValueChange={setSelectedModelId}><SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger><SelectContent>{(models.data ?? []).map((model) => <SelectItem key={model.id} value={model.id}>{model.nome} · {Number(model.largura_mm)} × {Number(model.altura_mm)} mm</SelectItem>)}</SelectContent></Select><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar materiais" /></div></div>
       <div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Material</TableHead><TableHead>Categoria</TableHead><TableHead>Identificação</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{(materials.data ?? []).map((material) => { const reason = selectedModel ? labelReadinessMessage(material, selectedModel) : "Selecione um modelo."; const selected = batchItems.some((item) => item.material.id === material.id); return <TableRow key={material.id}><TableCell><strong>{material.nome}</strong><p className="font-mono text-xs text-muted-foreground">{material.codigo_interno}</p></TableCell><TableCell>{material.categoria}</TableCell><TableCell><Badge variant={material.status_identificacao === "ativa" ? "secondary" : "outline"}>{material.status_identificacao === "ativa" ? "Ativa" : "Não gerada"}</Badge>{reason && <p className="mt-1 max-w-xs text-xs text-amber-700">{reason}</p>}</TableCell><TableCell className="text-right"><Button size="sm" variant={selected ? "secondary" : "default"} disabled={selected || !permissions.imprimir || !selectedModel || !canPrintMaterialWithModel(material, selectedModel)} onClick={() => setBatchItems((current) => addLabelBatchMaterial(current, material))}>{selected ? "Selecionado" : "Adicionar"}</Button></TableCell></TableRow>; })}{!materials.isLoading && !(materials.data ?? []).length && <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Nenhum material encontrado.</TableCell></TableRow>}</TableBody></Table></div>
       {batchItems.length > 0 && <div className="space-y-3 rounded-md border p-4"><div className="flex items-center justify-between gap-3"><div><strong>Resumo do lote</strong><p className="text-sm text-muted-foreground">{batchItems.length} material(is) · {totalLabels} etiqueta(s)</p></div><Button disabled={!selectedModel || totalLabels < 1 || totalLabels > 5000 || batchItems.some((item) => item.quantity < 1 || item.quantity > 500)} onClick={() => setPrintOpen(true)}><Printer className="mr-2 h-4 w-4" />Pré-visualizar lote</Button></div>{batchItems.map((item) => <div key={item.material.id} className="flex items-center gap-3 rounded bg-muted/50 p-2"><div className="min-w-0 flex-1"><p className="truncate font-medium">{item.material.nome}</p><p className="font-mono text-xs text-muted-foreground">{item.material.codigo_interno}</p></div><Input aria-label={`Quantidade de ${item.material.nome}`} className="w-24" type="number" min={1} max={500} value={item.quantity} onChange={(event) => setBatchItems((current) => updateLabelBatchQuantity(current, item.material.id, Number(event.target.value)))} /><Button aria-label={`Remover ${item.material.nome}`} variant="ghost" size="icon" onClick={() => setBatchItems((current) => removeLabelBatchMaterial(current, item.material.id))}><X className="h-4 w-4" /></Button></div>)}</div>}
