@@ -3,14 +3,23 @@ import type { Tables } from "@/integrations/supabase/types";
 
 // 1.1 adds clientes/funcionarios/event_funcionarios/event_checklist_items/
 // document_templates/generated_documents (P1-10: the backup used to only
-// cover events/event_days/event_files/financials). The six new collections
-// are optional on BackupData on purpose: a payload produced by an older
-// client, or normalized from a legacy export, simply omits them, and
-// restore_company_backup treats an absent key as "leave this table
-// untouched" rather than "restore to empty". Never default a missing new
-// collection to `[]` anywhere in this file - that would silently turn into
-// a destructive wipe for old backups once sent to the RPC.
-export const BACKUP_VERSION = "1.1";
+// cover events/event_days/event_files/financials). 1.2 adds the operational
+// core - categorias_materiais/materiais/estoque_localizacoes/estoque_saldos/
+// estoque_movimentacoes/material_custodias/material_custodia_eventos/
+// material_locacoes/material_locacao_itens/material_locacao_eventos/
+// manutencao_ordens/manutencao_ordem_insumos/manutencao_ordem_eventos/
+// financeiro_lancamentos/financeiro_parcelas/financeiro_recebimentos
+// (P1-10B). Every one of these collections is optional on BackupData on
+// purpose: a payload produced by an older client, or normalized from a
+// legacy export, simply omits them, and restore_company_backup treats an
+// absent key as "leave this table untouched" rather than "restore to
+// empty". Never default a missing collection to `[]` anywhere in this file
+// - that would silently turn into a destructive wipe for old backups once
+// sent to the RPC. RFID/etiquetas, impressoras/bobinas, binários do
+// Storage, usuários/permissões e módulos/assinaturas/pagamentos continuam
+// fora do escopo do backup (ver Backups.tsx e o comentário no topo da
+// migration 20260818120000_extend_operational_core_backup.sql).
+export const BACKUP_VERSION = "1.2";
 export const BACKUP_SYSTEM = "Backstage Pro";
 export const MAX_AUTO_BACKUPS = 10;
 export const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -37,6 +46,27 @@ export interface BackupData {
   event_checklist_items?: Tables<"event_checklist_items">[];
   document_templates?: Tables<"document_templates">[];
   generated_documents?: Tables<"generated_documents">[];
+  // Present on every backup created from 1.2 onward (P1-10B, operational
+  // core). Optional in the type only to accept payloads restored/imported
+  // from before 1.2. materiais_fotos (Storage metadata) and
+  // material_locacao_numeradores (a pure sequence counter) are
+  // deliberately not part of this scope - see the migration comment.
+  categorias_materiais?: Tables<"categorias_materiais">[];
+  materiais?: Tables<"materiais">[];
+  estoque_localizacoes?: Tables<"estoque_localizacoes">[];
+  estoque_saldos?: Tables<"estoque_saldos">[];
+  estoque_movimentacoes?: Tables<"estoque_movimentacoes">[];
+  material_custodias?: Tables<"material_custodias">[];
+  material_custodia_eventos?: Tables<"material_custodia_eventos">[];
+  material_locacoes?: Tables<"material_locacoes">[];
+  material_locacao_itens?: Tables<"material_locacao_itens">[];
+  material_locacao_eventos?: Tables<"material_locacao_eventos">[];
+  manutencao_ordens?: Tables<"manutencao_ordens">[];
+  manutencao_ordem_insumos?: Tables<"manutencao_ordem_insumos">[];
+  manutencao_ordem_eventos?: Tables<"manutencao_ordem_eventos">[];
+  financeiro_lancamentos?: Tables<"financeiro_lancamentos">[];
+  financeiro_parcelas?: Tables<"financeiro_parcelas">[];
+  financeiro_recebimentos?: Tables<"financeiro_recebimentos">[];
 }
 
 /** Collection keys added in 1.1. Kept in one place so normalize/validate/
@@ -48,6 +78,35 @@ const OPTIONAL_COLLECTION_KEYS = [
   "event_checklist_items",
   "document_templates",
   "generated_documents",
+] as const satisfies readonly (keyof BackupData)[];
+
+/** Collection keys added in 1.2 (P1-10B, operational core). Same
+ * absent-means-untouched rule as OPTIONAL_COLLECTION_KEYS above - kept as a
+ * separate list only so callers that care about the distinction (e.g. a
+ * future UI section grouping "core" vs "operational" data) can, while
+ * validate/summary/restore-prep still treat every key the same way. */
+const OPERATIONAL_CORE_COLLECTION_KEYS = [
+  "categorias_materiais",
+  "materiais",
+  "estoque_localizacoes",
+  "estoque_saldos",
+  "estoque_movimentacoes",
+  "material_custodias",
+  "material_custodia_eventos",
+  "material_locacoes",
+  "material_locacao_itens",
+  "material_locacao_eventos",
+  "manutencao_ordens",
+  "manutencao_ordem_insumos",
+  "manutencao_ordem_eventos",
+  "financeiro_lancamentos",
+  "financeiro_parcelas",
+  "financeiro_recebimentos",
+] as const satisfies readonly (keyof BackupData)[];
+
+const ALL_OPTIONAL_COLLECTION_KEYS = [
+  ...OPTIONAL_COLLECTION_KEYS,
+  ...OPERATIONAL_CORE_COLLECTION_KEYS,
 ] as const satisfies readonly (keyof BackupData)[];
 
 export interface BackupPayload {
@@ -140,7 +199,7 @@ export function validateBackup(payload: unknown): ValidationResult {
     if (!Array.isArray(normalized.data.event_files)) errors.push("'data.event_files' não é um array.");
     if (!Array.isArray(normalized.data.financials)) errors.push("'data.financials' não é um array.");
 
-    for (const key of OPTIONAL_COLLECTION_KEYS) {
+    for (const key of ALL_OPTIONAL_COLLECTION_KEYS) {
       const value = normalized.data[key];
       if (value !== undefined && !Array.isArray(value)) {
         errors.push(`'data.${key}' não é um array.`);
@@ -158,11 +217,11 @@ export function validateBackup(payload: unknown): ValidationResult {
  */
 export function getBackupSummary(payload: BackupPayload) {
   const optional = Object.fromEntries(
-    OPTIONAL_COLLECTION_KEYS.map((key) => [
+    ALL_OPTIONAL_COLLECTION_KEYS.map((key) => [
       key,
       payload.data[key] !== undefined ? (payload.data[key]?.length ?? 0) : null,
     ]),
-  ) as Record<(typeof OPTIONAL_COLLECTION_KEYS)[number], number | null>;
+  ) as Record<(typeof ALL_OPTIONAL_COLLECTION_KEYS)[number], number | null>;
 
   return {
     eventos: payload.data.eventos?.length ?? 0,
@@ -267,6 +326,22 @@ export function prepareBackupForRestore(
       event_checklist_items: withForcedEmpresaId(normalized.data.event_checklist_items, empresaId),
       document_templates: withForcedEmpresaId(normalized.data.document_templates, empresaId),
       generated_documents: withForcedEmpresaId(normalized.data.generated_documents, empresaId),
+      categorias_materiais: withForcedEmpresaId(normalized.data.categorias_materiais, empresaId),
+      materiais: withForcedEmpresaId(normalized.data.materiais, empresaId),
+      estoque_localizacoes: withForcedEmpresaId(normalized.data.estoque_localizacoes, empresaId),
+      estoque_saldos: withForcedEmpresaId(normalized.data.estoque_saldos, empresaId),
+      estoque_movimentacoes: withForcedEmpresaId(normalized.data.estoque_movimentacoes, empresaId),
+      material_custodias: withForcedEmpresaId(normalized.data.material_custodias, empresaId),
+      material_custodia_eventos: withForcedEmpresaId(normalized.data.material_custodia_eventos, empresaId),
+      material_locacoes: withForcedEmpresaId(normalized.data.material_locacoes, empresaId),
+      material_locacao_itens: withForcedEmpresaId(normalized.data.material_locacao_itens, empresaId),
+      material_locacao_eventos: withForcedEmpresaId(normalized.data.material_locacao_eventos, empresaId),
+      manutencao_ordens: withForcedEmpresaId(normalized.data.manutencao_ordens, empresaId),
+      manutencao_ordem_insumos: withForcedEmpresaId(normalized.data.manutencao_ordem_insumos, empresaId),
+      manutencao_ordem_eventos: withForcedEmpresaId(normalized.data.manutencao_ordem_eventos, empresaId),
+      financeiro_lancamentos: withForcedEmpresaId(normalized.data.financeiro_lancamentos, empresaId),
+      financeiro_parcelas: withForcedEmpresaId(normalized.data.financeiro_parcelas, empresaId),
+      financeiro_recebimentos: withForcedEmpresaId(normalized.data.financeiro_recebimentos, empresaId),
     },
   };
 }

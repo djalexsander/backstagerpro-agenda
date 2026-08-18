@@ -187,8 +187,11 @@ export default function Backups() {
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie backups dos dados da sua empresa.</p>
           <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-            Cobre eventos, financeiro de eventos, clientes, funcionários, equipe e checklist de cada evento, e documentos/contratos.
-            Anexos e fotos (riders, logos etc.) são incluídos apenas pela referência salva no banco — o arquivo em si permanece no armazenamento e não é copiado por este backup.
+            Cobre eventos, financeiro de eventos, clientes, funcionários, equipe e checklist de cada evento, documentos/contratos,
+            e o núcleo operacional de materiais: catálogo e categorias, estoque (localizações, saldos e movimentações),
+            custódia/check-in/check-out, locações de materiais e manutenções de equipamento, incluindo o financeiro vinculado a essas duas áreas.
+            Anexos e fotos (riders, logos, fotos de materiais etc.) são incluídos apenas pela referência salva no banco — o arquivo em si permanece no armazenamento e não é copiado por este backup.
+            RFID/etiquetas, configuração de impressoras, usuários/permissões e módulos/assinatura da plataforma não fazem parte deste backup.
           </p>
         </div>
       </div>
@@ -457,6 +460,31 @@ export default function Backups() {
                     {importPreview.summary.clientes === null && (
                       <p className="text-xs text-muted-foreground pt-1">
                         Este backup é de uma versão anterior: clientes, funcionários, equipe/checklist de evento e documentos não estão incluídos e não serão alterados pela restauração.
+                      </p>
+                    )}
+                    {importPreview.summary.materiais !== null && (
+                      <>
+                        <p>• {importPreview.summary.categorias_materiais} categoria(s) de material</p>
+                        <p>• {importPreview.summary.materiais} material(is)</p>
+                        <p>• {importPreview.summary.estoque_localizacoes} localização(ões) de estoque</p>
+                        <p>• {importPreview.summary.estoque_saldos} saldo(s) de estoque</p>
+                        <p>• {importPreview.summary.estoque_movimentacoes} movimentação(ões) de estoque</p>
+                        <p>• {importPreview.summary.material_custodias} custódia(s) (check-in/check-out)</p>
+                        <p>• {importPreview.summary.material_custodia_eventos} evento(s) de custódia</p>
+                        <p>• {importPreview.summary.material_locacoes} locação(ões) de material</p>
+                        <p>• {importPreview.summary.material_locacao_itens} item(ns) de locação</p>
+                        <p>• {importPreview.summary.material_locacao_eventos} evento(s) de locação</p>
+                        <p>• {importPreview.summary.manutencao_ordens} ordem(ns) de manutenção</p>
+                        <p>• {importPreview.summary.manutencao_ordem_insumos} insumo(s) de manutenção</p>
+                        <p>• {importPreview.summary.manutencao_ordem_eventos} evento(s) de manutenção</p>
+                        <p>• {importPreview.summary.financeiro_lancamentos} lançamento(s) financeiro(s) (locação/manutenção)</p>
+                        <p>• {importPreview.summary.financeiro_parcelas} parcela(s) financeira(s)</p>
+                        <p>• {importPreview.summary.financeiro_recebimentos} recebimento(s)/estorno(s)</p>
+                      </>
+                    )}
+                    {importPreview.summary.materiais === null && importPreview.summary.clientes !== null && (
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Este backup é de uma versão anterior: materiais, estoque, custódia, locações, manutenções e o financeiro vinculado a elas não estão incluídos e não serão alterados pela restauração.
                       </p>
                     )}
                   </div>

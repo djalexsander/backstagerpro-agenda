@@ -20,85 +20,43 @@ import type {
 } from "@/integrations/supabase/types";
 
 /**
- * Gathers all backup-worthy data for a given empresa.
+ * Gathers all backup-worthy data for a given empresa through
+ * gather_company_backup_data, a SECURITY DEFINER RPC.
  *
- * clientes/funcionarios/document_templates are standing company data, not
- * date-stamped business events, so they are always fetched in full,
- * independent of dateStart/dateEnd - a backup of "March's events" should
- * still carry the company's complete client/employee/template list, not a
- * partial one. event_funcionarios/event_checklist_items follow the same
- * date-filtered eventIds as event_days/event_files/financials, since they
- * cannot exist without an event. generated_documents is split in two:
- * rows tied to an event follow eventIds (so a date-filtered backup never
- * points a document at an event it does not also contain); rows with no
- * event_id (company-level documents) are always included.
+ * This used to be ~20 direct client-side `.from(table).select()` calls,
+ * each subject to normal RLS. That was a real gap for an authorized
+ * backup: every one of these tables' SELECT policies is gated by
+ * can_read_company_module/company_has_active_module for a specific
+ * subscribed module, so a company whose module lapsed or was deactivated
+ * after the data was created would have that table silently omitted from
+ * its own backup - no error, just fewer rows than actually exist. The RPC
+ * re-checks the same admin_empresa/master_admin bar those client calls
+ * relied on (now enforced server-side too, not only by
+ * assertBackupAdministrator below), resolves the caller's company itself,
+ * and reads every collection directly - unaffected by which modules are
+ * currently active. See the migration's own comment
+ * (20260818120000_extend_operational_core_backup.sql) for the full
+ * rationale and which specific tables were actually affected.
+ *
+ * dateStart/dateEnd only scope events and everything event-owned, exactly
+ * as before; every standing company collection (clientes, funcionarios,
+ * document_templates, and the sixteen P1-10B operational-core tables) is
+ * always returned in full - a backup of "March's events" should still
+ * carry the company's complete client/material/stock/etc. state, not a
+ * partial one.
  */
 async function gatherBackupData(
   empresaId: string,
   dateStart?: string,
   dateEnd?: string
 ): Promise<BackupData> {
-  let eventsQuery = supabase.from("events").select("*").eq("empresa_id", empresaId);
-  if (dateStart) eventsQuery = eventsQuery.gte("date", dateStart);
-  if (dateEnd) eventsQuery = eventsQuery.lte("date", dateEnd);
-  const { data: eventos, error: eventsError } = await eventsQuery;
-  if (eventsError) throw eventsError;
-
-  const eventIds = (eventos || []).map((event) => event.id);
-
-  let eventDays: BackupData["event_days"] = [];
-  let eventFiles: BackupData["event_files"] = [];
-  let financials: BackupData["financials"] = [];
-  let eventFuncionarios: NonNullable<BackupData["event_funcionarios"]> = [];
-  let eventChecklistItems: NonNullable<BackupData["event_checklist_items"]> = [];
-  let generatedDocumentsForEvents: NonNullable<BackupData["generated_documents"]> = [];
-
-  if (eventIds.length > 0) {
-    const [daysRes, filesRes, finRes, teamRes, checklistRes, eventDocsRes] = await Promise.all([
-      supabase.from("event_days").select("*").in("event_id", eventIds),
-      supabase.from("event_files").select("*").in("event_id", eventIds),
-      supabase.from("financials").select("*").in("event_id", eventIds),
-      supabase.from("event_funcionarios").select("*").in("event_id", eventIds),
-      supabase.from("event_checklist_items").select("*").in("event_id", eventIds),
-      supabase.from("generated_documents").select("*").in("event_id", eventIds),
-    ]);
-    if (daysRes.error) throw daysRes.error;
-    if (filesRes.error) throw filesRes.error;
-    if (finRes.error) throw finRes.error;
-    if (teamRes.error) throw teamRes.error;
-    if (checklistRes.error) throw checklistRes.error;
-    if (eventDocsRes.error) throw eventDocsRes.error;
-    eventDays = daysRes.data || [];
-    eventFiles = filesRes.data || [];
-    financials = finRes.data || [];
-    eventFuncionarios = teamRes.data || [];
-    eventChecklistItems = checklistRes.data || [];
-    generatedDocumentsForEvents = eventDocsRes.data || [];
-  }
-
-  const [clientesRes, funcionariosRes, templatesRes, companyDocsRes] = await Promise.all([
-    supabase.from("clientes").select("*").eq("empresa_id", empresaId),
-    supabase.from("funcionarios").select("*").eq("empresa_id", empresaId),
-    supabase.from("document_templates").select("*").eq("empresa_id", empresaId),
-    supabase.from("generated_documents").select("*").eq("empresa_id", empresaId).is("event_id", null),
-  ]);
-  if (clientesRes.error) throw clientesRes.error;
-  if (funcionariosRes.error) throw funcionariosRes.error;
-  if (templatesRes.error) throw templatesRes.error;
-  if (companyDocsRes.error) throw companyDocsRes.error;
-
-  return {
-    eventos: eventos || [],
-    event_days: eventDays,
-    event_files: eventFiles,
-    financials: financials,
-    clientes: clientesRes.data || [],
-    funcionarios: funcionariosRes.data || [],
-    event_funcionarios: eventFuncionarios,
-    event_checklist_items: eventChecklistItems,
-    document_templates: templatesRes.data || [],
-    generated_documents: [...generatedDocumentsForEvents, ...(companyDocsRes.data || [])],
-  };
+  const { data, error } = await supabase.rpc("gather_company_backup_data", {
+    _empresa_id: empresaId,
+    _date_start: dateStart || null,
+    _date_end: dateEnd || null,
+  });
+  if (error) throw error;
+  return data as unknown as BackupData;
 }
 
 /**

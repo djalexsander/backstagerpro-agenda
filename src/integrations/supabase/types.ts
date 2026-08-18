@@ -5357,6 +5357,14 @@ export type Database = {
         Args: { _empresa_id: string; _payload: Json }
         Returns: Json
       }
+      gather_company_backup_data: {
+        Args: {
+          _date_end?: string | null
+          _date_start?: string | null
+          _empresa_id: string
+        }
+        Returns: Json
+      }
       request_company_module_batch: {
         Args: { _module_ids: string[]; _observacao?: string | null }
         Returns: Json
