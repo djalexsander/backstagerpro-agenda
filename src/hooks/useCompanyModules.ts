@@ -34,6 +34,7 @@ interface UseCompanyModulesReturn {
   isLifetime: boolean;
   /** Catálogo completo de módulos disponíveis */
   catalog: ModuleCatalogRow[];
+  moduleDependencies: Array<{ module_id: string; required_module_id: string }>;
   /** Se está carregando */
   isLoading: boolean;
 }
@@ -94,6 +95,17 @@ export function useCompanyModules(
     enabled: !!empresaId,
   });
 
+  const { data: moduleDependencies = [], isLoading: loadingDependencies } = useQuery({
+    queryKey: ["module-dependencies"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("module_dependencies")
+        .select("module_id, required_module_id");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Enriquece módulos da empresa com dados do catálogo
   const allModules: EnrichedEmpresaModule[] = useMemo(() => {
     const catalogMap = new Map(catalog.map((c) => [c.id, c]));
@@ -141,6 +153,8 @@ export function useCompanyModules(
     hasModule,
     isLifetime,
     catalog,
-    isLoading: loadingCatalog || loadingModules || loadingLicense,
+    moduleDependencies,
+    isLoading:
+      loadingCatalog || loadingModules || loadingLicense || loadingDependencies,
   };
 }

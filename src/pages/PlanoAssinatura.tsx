@@ -26,12 +26,13 @@ import type { ModuleCatalogRow } from "@/types/subscription";
 import { generatePixPayload } from "@/lib/pix";
 import { getSelfServiceAvailableModules } from "@/lib/self-service-module-availability";
 import { ensureSingleCommercialBasePlan } from "@/lib/subscription-license";
+import { expandModuleSelectionWithDependencies } from "@/lib/company-module-entitlements";
 
 export default function PlanoAssinatura() {
   const { empresaId } = useAuth();
   const queryClient = useQueryClient();
   const sub = useSubscriptionSummary();
-  const { catalog, activeModules, allModules } = useCompanyModules();
+  const { catalog, activeModules, allModules, moduleDependencies } = useCompanyModules();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showPix, setShowPix] = useState(false);
@@ -267,7 +268,11 @@ export default function PlanoAssinatura() {
     setSelectedModuleIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+      return expandModuleSelectionWithDependencies({
+        selectedModuleIds: next,
+        moduleDependencies,
+        activeModuleIds: activeModules.map((module) => module.module_id),
+      });
     });
   };
 
@@ -842,6 +847,7 @@ export default function PlanoAssinatura() {
             </div>
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
               <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• Dependências obrigatórias ausentes são incluídas automaticamente</p>
               <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
               <p>• Pagamento via PIX com envio de comprovante</p>
             </div>
@@ -858,16 +864,15 @@ export default function PlanoAssinatura() {
                 const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
                 const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
 
-                const { data: batch, error: batchError } = await supabase
-                  .from("module_batch_requests")
-                  .insert({ empresa_id: empresaId!, valor_total: total, observacao: batchObservacao || null })
-                  .select("id")
-                  .single();
-                if (batchError) throw batchError;
-
-                const items = selectedMods.map(m => ({ batch_request_id: batch.id, module_id: m.id, valor: Number(m.valor) }));
-                const { error: itemsError } = await supabase.from("module_batch_request_items").insert(items);
-                if (itemsError) throw itemsError;
+                const { data, error } = await supabase.rpc(
+                  "request_company_module_batch",
+                  {
+                    _module_ids: selectedMods.map((module) => module.id),
+                    _observacao: batchObservacao || null,
+                  },
+                );
+                if (error) throw error;
+                const batch = data as { id: string };
 
                 const moduleNames = selectedMods.map(m => m.nome).join(", ");
                 await supabase.from("notificacoes_master").insert({

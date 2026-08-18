@@ -41,43 +41,16 @@ export default function SolicitacoesLoteModulos() {
       const now = new Date().toISOString();
 
       if (actionType === "approve") {
-        // Update batch status
-        const { error } = await supabase.from("module_batch_requests")
-          .update({ status: "approved", approved_at: now, observacao_admin: adminObs || null } as any)
-          .eq("id", actionItem.id);
+        const { error } = await supabase.rpc(
+          "master_approve_module_batch_request",
+          {
+            _batch_request_id: actionItem.id,
+            _observacao_admin: adminObs || null,
+          },
+        );
         if (error) throw error;
 
-        // Activate ALL modules in this batch
-        const empresaVencimento = actionItem.empresas?.vencimento || null;
         const items = actionItem.module_batch_request_items || [];
-
-        for (const item of items) {
-          // Check if module already exists
-          const { data: existing } = await supabase.from("empresa_modules")
-            .select("id, status")
-            .eq("empresa_id", actionItem.empresa_id)
-            .eq("module_id", item.module_id)
-            .maybeSingle();
-
-          if (existing) {
-            if (existing.status !== "active") {
-              await supabase.from("empresa_modules")
-                .update({ status: "active", activated_at: now, expires_at: empresaVencimento } as any)
-                .eq("id", existing.id);
-            }
-          } else {
-            await supabase.from("empresa_modules").insert({
-              empresa_id: actionItem.empresa_id,
-              module_id: item.module_id,
-              status: "active",
-              activated_at: now,
-              expires_at: empresaVencimento,
-              origem: "solicitacao_lote_aprovada",
-              granted_by_admin: true,
-              valor_cobrado: item.valor || 0,
-            });
-          }
-        }
 
         // Log
         const moduleNames = items.map((i: any) => i.module_catalog?.nome || "?").join(", ");

@@ -24,6 +24,7 @@ import type { ModuleCatalogRow } from "@/types/subscription";
 import { MODULE_CATEGORIES, getCategoryLabel, getBadgeInfo } from "@/constants/module-categories";
 import { toast as sonnerToast } from "sonner";
 import { generatePixPayload } from "@/lib/pix";
+import { expandModuleSelectionWithDependencies } from "@/lib/company-module-entitlements";
 
 export default function ModulosDisponiveis() {
   const { empresaId } = useAuth();
@@ -33,6 +34,7 @@ export default function ModulosDisponiveis() {
     catalog,
     activeModules,
     allModules,
+    moduleDependencies,
     isLifetime,
     isLoading,
   } = useCompanyModules();
@@ -184,7 +186,11 @@ export default function ModulosDisponiveis() {
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+      return expandModuleSelectionWithDependencies({
+        selectedModuleIds: next,
+        moduleDependencies,
+        activeModuleIds: activeModules.map((module) => module.module_id),
+      });
     });
   };
 
@@ -193,28 +199,15 @@ export default function ModulosDisponiveis() {
     mutationFn: async () => {
       if (!empresaId || selectedModules.length === 0) throw new Error("Selecione ao menos um módulo");
 
-      // Create batch request
-      const { data: batch, error: batchError } = await supabase
-        .from("module_batch_requests")
-        .insert({
-          empresa_id: empresaId,
-          valor_total: totalSelected,
-          observacao: observacao || null,
-        })
-        .select("id")
-        .single();
-      if (batchError) throw batchError;
-
-      // Create batch items
-      const items = selectedModules.map(m => ({
-        batch_request_id: batch.id,
-        module_id: m.id,
-        valor: Number(m.valor),
-      }));
-      const { error: itemsError } = await supabase
-        .from("module_batch_request_items")
-        .insert(items);
-      if (itemsError) throw itemsError;
+      const { data, error } = await supabase.rpc(
+        "request_company_module_batch",
+        {
+          _module_ids: selectedModules.map((module) => module.id),
+          _observacao: observacao || null,
+        },
+      );
+      if (error) throw error;
+      const batch = data as { id: string; valor_total: number };
 
       // Notify master
       const moduleNames = selectedModules.map(m => m.nome).join(", ");
@@ -225,13 +218,13 @@ export default function ModulosDisponiveis() {
         dados: { batch_request_id: batch.id, module_count: selectedModules.length, valor_total: totalSelected },
       });
 
-      return batch.id;
+      return batch;
     },
-    onSuccess: async (id) => {
+    onSuccess: async (batch) => {
       queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
-      setBatchId(id);
+      setBatchId(batch.id);
       setShowSummary(false);
-      setBatchTotalForPix(totalSelected);
+      setBatchTotalForPix(Number(batch.valor_total));
       setSelectedIds(new Set());
       setObservacao("");
       setShowPix(true);
@@ -565,6 +558,7 @@ export default function ModulosDisponiveis() {
 
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
               <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• Dependências obrigatórias ausentes são incluídas automaticamente</p>
               <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
               <p>• Pagamento único consolidado via PIX</p>
             </div>

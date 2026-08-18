@@ -39,25 +39,16 @@ export default function SolicitacoesModulos() {
       const now = new Date().toISOString();
 
       if (actionType === "approve") {
-        // Update request status
-        const { error } = await supabase.from("module_requests")
-          .update({ status: "approved", approved_at: now, observacao: adminObs || actionItem.observacao } as any)
-          .eq("id", actionItem.id);
+        const { error } = await supabase.rpc(
+          "master_approve_module_request",
+          {
+            _request_id: actionItem.id,
+            _observacao: adminObs || actionItem.observacao || null,
+          },
+        );
         if (error) throw error;
 
-        // Create empresa_module entry as active
         const catalog = actionItem.module_catalog;
-        const { error: emError } = await supabase.from("empresa_modules").insert({
-          empresa_id: actionItem.empresa_id,
-          module_id: actionItem.module_id,
-          status: "active",
-          activated_at: now,
-          origem: "solicitacao_aprovada",
-          granted_by_admin: true,
-          valor_cobrado: catalog?.valor || 0,
-        });
-        if (emError) throw emError;
-
         // Log
         await supabase.from("system_logs").insert({
           tipo: "modulo",

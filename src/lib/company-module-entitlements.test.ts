@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildCompanyModuleEntitlementPayload, validateModuleDependenciesForActivation } from "./company-module-entitlements";
+import {
+  buildCompanyModuleEntitlementPayload,
+  expandModuleSelectionWithDependencies,
+  validateModuleDependenciesForActivation,
+} from "./company-module-entitlements";
 
 describe("buildCompanyModuleEntitlementPayload", () => {
   it("marks an inactive row as active and stamps activation time", () => {
@@ -52,5 +56,52 @@ describe("buildCompanyModuleEntitlementPayload", () => {
 
     expect(result.isAllowed).toBe(true);
     expect(result.missingDependencies).toEqual([]);
+  });
+});
+
+describe("expandModuleSelectionWithDependencies", () => {
+  const dependencies = [
+    { module_id: "stock", required_module_id: "materials" },
+    { module_id: "checkout", required_module_id: "stock" },
+  ];
+
+  it("keeps a module without dependencies unchanged", () => {
+    expect([
+      ...expandModuleSelectionWithDependencies({
+        selectedModuleIds: ["reports"],
+        moduleDependencies: dependencies,
+        activeModuleIds: [],
+      }),
+    ]).toEqual(["reports"]);
+  });
+
+  it("does not add a dependency that is already active", () => {
+    expect([
+      ...expandModuleSelectionWithDependencies({
+        selectedModuleIds: ["stock"],
+        moduleDependencies: dependencies,
+        activeModuleIds: ["materials"],
+      }),
+    ]).toEqual(["stock"]);
+  });
+
+  it("includes every missing transitive dependency exactly once", () => {
+    const selected = expandModuleSelectionWithDependencies({
+      selectedModuleIds: ["checkout", "stock"],
+      moduleDependencies: dependencies,
+      activeModuleIds: [],
+    });
+
+    expect(selected).toEqual(new Set(["checkout", "stock", "materials"]));
+  });
+
+  it("uses only the active-module set supplied for the current company", () => {
+    const selected = expandModuleSelectionWithDependencies({
+      selectedModuleIds: ["stock"],
+      moduleDependencies: dependencies,
+      activeModuleIds: [],
+    });
+
+    expect(selected).toContain("materials");
   });
 });

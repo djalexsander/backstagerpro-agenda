@@ -40,36 +40,14 @@ export default function PagamentosModulos() {
       const now = new Date().toISOString();
 
       if (actionType === "approve") {
-        // Mark payment as approved
-        const { error } = await supabase.from("module_payments")
-          .update({ status: "approved", approved_at: now, observacao_admin: adminObs || null } as any)
-          .eq("id", actionItem.id);
+        const { error } = await supabase.rpc(
+          "master_approve_module_payment",
+          {
+            _payment_id: actionItem.id,
+            _observacao_admin: adminObs || null,
+          },
+        );
         if (error) throw error;
-
-        // Activate module if not already active
-        const { data: existing } = await supabase.from("empresa_modules")
-          .select("id, status")
-          .eq("empresa_id", actionItem.empresa_id)
-          .eq("module_id", actionItem.module_id)
-          .maybeSingle();
-
-        if (existing) {
-          if (existing.status !== "active") {
-            await supabase.from("empresa_modules")
-              .update({ status: "active", activated_at: now } as any)
-              .eq("id", existing.id);
-          }
-        } else {
-          await supabase.from("empresa_modules").insert({
-            empresa_id: actionItem.empresa_id,
-            module_id: actionItem.module_id,
-            status: "active",
-            activated_at: now,
-            origem: "pagamento_aprovado",
-            granted_by_admin: true,
-            valor_cobrado: actionItem.amount || 0,
-          });
-        }
 
         await supabase.from("system_logs").insert({
           tipo: "modulo",

@@ -19,6 +19,43 @@ export interface ModuleDependencyValidationResult {
   missingDependencies: string[];
 }
 
+export interface ModuleDependencyEdge {
+  module_id: string;
+  required_module_id: string;
+}
+
+export function expandModuleSelectionWithDependencies({
+  selectedModuleIds,
+  moduleDependencies,
+  activeModuleIds,
+}: {
+  selectedModuleIds: Iterable<string>;
+  moduleDependencies: readonly ModuleDependencyEdge[];
+  activeModuleIds: Iterable<string>;
+}): Set<string> {
+  const expanded = new Set(selectedModuleIds);
+  const active = new Set(activeModuleIds);
+  const dependenciesByModule = new Map<string, string[]>();
+
+  for (const dependency of moduleDependencies) {
+    const existing = dependenciesByModule.get(dependency.module_id) ?? [];
+    existing.push(dependency.required_module_id);
+    dependenciesByModule.set(dependency.module_id, existing);
+  }
+
+  const pending = [...expanded];
+  while (pending.length > 0) {
+    const moduleId = pending.pop()!;
+    for (const requiredId of dependenciesByModule.get(moduleId) ?? []) {
+      if (active.has(requiredId) || expanded.has(requiredId)) continue;
+      expanded.add(requiredId);
+      pending.push(requiredId);
+    }
+  }
+
+  return expanded;
+}
+
 /** Same entitlement-state rule used by the Master catalog. */
 export function doesCompanyModuleBlockPurchase(
   status: CompanyModuleEntitlementStatus | string,

@@ -4788,6 +4788,18 @@ export type Database = {
         Args: { _empresa_id: string }
         Returns: undefined
       }
+      master_approve_module_batch_request: {
+        Args: { _batch_request_id: string; _observacao_admin?: string | null }
+        Returns: Json
+      }
+      master_approve_module_payment: {
+        Args: { _observacao_admin?: string | null; _payment_id: string }
+        Returns: Json
+      }
+      master_approve_module_request: {
+        Args: { _observacao?: string | null; _request_id: string }
+        Returns: Json
+      }
       master_set_company_plan: {
         Args: {
           _empresa_id: string
@@ -5318,6 +5330,10 @@ export type Database = {
       }
       restore_company_backup: {
         Args: { _empresa_id: string; _payload: Json }
+        Returns: Json
+      }
+      request_company_module_batch: {
+        Args: { _module_ids: string[]; _observacao?: string | null }
         Returns: Json
       }
       salvar_cliente: {
