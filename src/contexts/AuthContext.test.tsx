@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     full_name: "Ana",
     avatar_url: null as string | null,
     empresa_id: "123e4567-e89b-42d3-a456-426614174000" as string | null,
+    ativado: true,
   },
   roles: [{ role: "admin_empresa" }],
   company: {
@@ -47,7 +48,10 @@ function createQuery(table: string) {
         return { data: { ativado: mocks.activated }, error: null };
       }
       if (table === "profiles") {
-        return { data: mocks.profile, error: null };
+        return {
+          data: { ...mocks.profile, ativado: mocks.activated },
+          error: null,
+        };
       }
       if (table === "empresas") {
         return { data: mocks.company, error: null };
@@ -126,6 +130,7 @@ function Probe() {
       <span data-testid="tenant">{auth.empresaId ?? "none"}</span>
       <span data-testid="readonly">{String(auth.empresaReadOnly)}</span>
       <span data-testid="payment">{auth.statusPagamento ?? "none"}</span>
+      <span data-testid="activated">{String(auth.isAccountActivated)}</span>
     </>
   );
 }
@@ -148,6 +153,7 @@ describe("AuthProvider", () => {
       full_name: "Ana",
       avatar_url: null,
       empresa_id: "123e4567-e89b-42d3-a456-426614174000",
+      ativado: true,
     };
     mocks.roles = [{ role: "admin_empresa" }];
     mocks.company = {
@@ -209,6 +215,26 @@ describe("AuthProvider", () => {
     );
     expect(screen.getByTestId("role")).toHaveTextContent("admin_empresa");
     expect(screen.getByTestId("payment")).toHaveTextContent("pago");
+  });
+
+  it("fails closed for an existing session whose account is not activated", async () => {
+    mocks.initialSession = {
+      user: {
+        id: "user-pending-session",
+        email: "pending-session@example.com",
+        user_metadata: {},
+      },
+    };
+    mocks.activated = false;
+
+    renderProvider();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("loading")).toHaveTextContent("false"),
+    );
+    expect(screen.getByTestId("activated")).toHaveTextContent("false");
+    expect(screen.getByTestId("role")).toHaveTextContent("none");
+    expect(screen.getByTestId("tenant")).toHaveTextContent("none");
   });
 
   it("signs an unactivated account back out", async () => {

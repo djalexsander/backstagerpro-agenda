@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function ProtectedRoute({ children, adminOnly = false, masterOnly = false, skipPlanCheck = false }: Props) {
-  const { user, loading, isAdmin, isMasterAdmin, empresaBloqueada, precisaEscolherPlano, statusPagamento } = useAuth();
+  const { user, loading, isAccountActivated, isAdmin, isMasterAdmin, empresaBloqueada, precisaEscolherPlano, statusPagamento } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -22,6 +22,7 @@ export function ProtectedRoute({ children, adminOnly = false, masterOnly = false
   }
 
   if (!user) return <Navigate to="/login" replace />;
+  if (!isAccountActivated) return <Navigate to="/primeiro-acesso" replace />;
 
   const subscriptionRedirect = getSubscriptionRedirect({
     pathname: location.pathname,

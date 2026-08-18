@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Music, Eye, EyeOff, CheckCircle, ArrowLeft, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
@@ -19,6 +20,7 @@ export default function ResetPassword() {
   const [isRecovery, setIsRecovery] = useState(false);
   const [checking, setChecking] = useState(true);
   const navigate = useNavigate();
+  const { user, loading: authLoading, isAccountActivated } = useAuth();
   const { toast } = useToast();
   const { platformLogoUrl, platformName } = usePlatformBranding();
 
@@ -48,6 +50,12 @@ export default function ResetPassword() {
       clearTimeout(timeout);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authLoading && user && !isAccountActivated) {
+      navigate("/primeiro-acesso", { replace: true });
+    }
+  }, [authLoading, isAccountActivated, navigate, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

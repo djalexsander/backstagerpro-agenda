@@ -20,6 +20,7 @@ interface AuthContextType {
   isAdminEmpresa: boolean;
   isUsuario: boolean;
   isAdmin: boolean;
+  isAccountActivated: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -38,14 +39,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [empresaLogoUrl, setEmpresaLogoUrl] = useState<string | null>(null);
   const [empresaNome, setEmpresaNome] = useState<string | null>(null);
   const [statusPagamento, setStatusPagamento] = useState<string | null>(null);
+  const [isAccountActivated, setIsAccountActivated] = useState(false);
   const [loading, setLoading] = useState(true);
   const authLoadIdRef = useRef(0);
 
+  const clearOperationalState = () => {
+    setProfile(null);
+    setRole(null);
+    setEmpresaBloqueada(false);
+    setPrecisaEscolherPlano(false);
+    setEmpresaLogoUrl(null);
+    setEmpresaNome(null);
+    setStatusPagamento(null);
+  };
+
   const fetchUserData = async (userId: string) => {
-    const [profileRes, roleRes] = await Promise.all([
-      supabase.from("profiles").select("full_name, avatar_url, empresa_id").eq("user_id", userId).single(),
-      supabase.from("user_roles").select("role").eq("user_id", userId),
-    ]);
+    const profileRes = await supabase
+      .from("profiles")
+      .select("full_name, avatar_url, empresa_id, ativado")
+      .eq("user_id", userId)
+      .single();
+
+    const activated = profileRes.data?.ativado === true;
+    setIsAccountActivated(activated);
+
+    // Fail closed before loading any tenant, company or role state. Recovery
+    // sessions remain alive so Primeiro Acesso can consume their OTP.
+    if (!activated) {
+      clearOperationalState();
+      return;
+    }
+
+    const roleRes = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
     if (profileRes.data) {
       setProfile(profileRes.data as any);
       // Check if empresa is blocked (trial expired) and get logo
@@ -104,18 +133,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
+          // Close the previous session's authorization window immediately;
+          // no route may reuse stale activation, tenant or role state while
+          // the new/refreshed session is being classified.
+          setLoading(true);
+          setIsAccountActivated(false);
+          clearOperationalState();
           setTimeout(() => {
             if (active) void loadUserData(session.user.id);
           }, 0);
         } else {
           authLoadIdRef.current += 1;
-          setProfile(null);
-          setRole(null);
-          setEmpresaBloqueada(false);
-          setPrecisaEscolherPlano(false);
-          setEmpresaLogoUrl(null);
-          setEmpresaNome(null);
-          setStatusPagamento(null);
+          setIsAccountActivated(false);
+          clearOperationalState();
           setLoading(false);
         }
       }
@@ -191,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       statusPagamento: isMasterAdmin ? null : statusPagamento,
       isMasterAdmin, isAdminEmpresa, isUsuario,
       isAdmin: isMasterAdmin || isAdminEmpresa,
+      isAccountActivated,
       loading, signIn, signOut, refreshProfile,
     }}>
       {children}
