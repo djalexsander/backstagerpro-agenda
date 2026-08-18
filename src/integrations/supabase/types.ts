@@ -507,6 +507,7 @@ export type Database = {
       }
       empresas: {
         Row: {
+          cpf_cnpj: string | null
           created_at: string
           data_contrato: string | null
           email: string | null
@@ -526,6 +527,7 @@ export type Database = {
           vencimento: string | null
         }
         Insert: {
+          cpf_cnpj?: string | null
           created_at?: string
           data_contrato?: string | null
           email?: string | null
@@ -545,6 +547,7 @@ export type Database = {
           vencimento?: string | null
         }
         Update: {
+          cpf_cnpj?: string | null
           created_at?: string
           data_contrato?: string | null
           email?: string | null

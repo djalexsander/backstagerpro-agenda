@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertBillingAdmin,
+  assertValidBillingDocument,
   toTrustedCurrencyAmount,
   validateBillingChargeRequest,
 } from "../../supabase/functions/_shared/billing-charge";
@@ -67,5 +68,66 @@ describe("Asaas billing security", () => {
     expect(() => toTrustedCurrencyAmount("not-a-price")).toThrow(
       /preço inválido/i,
     );
+  });
+
+  it("accepts an 11-digit CPF and sends it through unchanged", () => {
+    expect(assertValidBillingDocument("12345678909")).toBe("12345678909");
+  });
+
+  it("accepts a 14-digit CNPJ and sends it through unchanged", () => {
+    expect(assertValidBillingDocument("12345678000195")).toBe(
+      "12345678000195",
+    );
+  });
+
+  it("strips punctuation before validating - a formatted CPF or CNPJ is normalized to digits only", () => {
+    expect(assertValidBillingDocument("123.456.789-09")).toBe("12345678909");
+    expect(assertValidBillingDocument("12.345.678/0001-95")).toBe(
+      "12345678000195",
+    );
+    // Any non-digit noise (spaces, letters) is stripped the same way, not
+    // just the conventional CPF/CNPJ punctuation.
+    expect(assertValidBillingDocument(" 123 456 789-09 ")).toBe(
+      "12345678909",
+    );
+  });
+
+  it("blocks a missing document instead of inventing one", () => {
+    expect(() => assertValidBillingDocument(null)).toThrow(
+      /não possui cpf\/cnpj válido/i,
+    );
+    expect(() => assertValidBillingDocument(undefined)).toThrow(
+      /não possui cpf\/cnpj válido/i,
+    );
+    expect(() => assertValidBillingDocument("")).toThrow(
+      /não possui cpf\/cnpj válido/i,
+    );
+    expect(() => assertValidBillingDocument("   ")).toThrow(
+      /não possui cpf\/cnpj válido/i,
+    );
+  });
+
+  it("blocks a document with the wrong digit count instead of forwarding it as-is", () => {
+    expect(() => assertValidBillingDocument("123")).toThrow(
+      /não possui cpf\/cnpj válido/i,
+    );
+    expect(() => assertValidBillingDocument("123456789012")).toThrow( // 12 digits: neither CPF nor CNPJ
+      /não possui cpf\/cnpj válido/i,
+    );
+    expect(() => assertValidBillingDocument(123456789)).toThrow( // not even a string
+      /não possui cpf\/cnpj válido/i,
+    );
+  });
+
+  it("never lets one company's document leak into another's validation result", () => {
+    const companyACnpj = "11222333000181";
+    const companyBCpf = "98765432100";
+    // A pure function: interleaved, independent calls never share state -
+    // company A's result is unaffected by validating company B's document
+    // (or a bad one) in between.
+    expect(assertValidBillingDocument(companyACnpj)).toBe(companyACnpj);
+    expect(() => assertValidBillingDocument(null)).toThrow();
+    expect(assertValidBillingDocument(companyBCpf)).toBe(companyBCpf);
+    expect(assertValidBillingDocument(companyACnpj)).toBe(companyACnpj);
   });
 });

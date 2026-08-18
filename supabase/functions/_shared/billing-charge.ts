@@ -55,3 +55,36 @@ export function toTrustedCurrencyAmount(value: unknown): number {
 
   return cents / 100;
 }
+
+// The Asaas customer/charge is billed to the subscribing company itself
+// (prepare_asaas_charge resolves it from the caller's own profile - see
+// 20260818160000_empresa_billing_document.sql), never to a `clientes` row.
+// A CHECK constraint on empresas.cpf_cnpj already guarantees a stored value
+// is digits-only and exactly 11 or 14 characters, but this function treats
+// whatever `prepare_asaas_charge` returned as untrusted input anyway rather
+// than assuming that invariant holds forever - same defense-in-depth
+// posture as toTrustedCurrencyAmount above for price. Only shape (length) is
+// validated, matching the DB constraint and clientes.cpf_cnpj's own
+// precedent (20260802200000_material_rentals_stage_four.sql) - neither
+// checks a CPF/CNPJ verification digit.
+const CPF_DIGIT_COUNT = 11;
+const CNPJ_DIGIT_COUNT = 14;
+// Defensive cap before the regex strip - a legitimate document string is a
+// handful of characters (formatted or not); anything wildly longer is
+// already not a document and doesn't need to be scanned digit by digit.
+const MAX_DOCUMENT_INPUT_LENGTH = 32;
+
+export function assertValidBillingDocument(rawDocument: unknown): string {
+  const digits =
+    typeof rawDocument === "string"
+      ? rawDocument.slice(0, MAX_DOCUMENT_INPUT_LENGTH).replace(/[^0-9]/g, "")
+      : "";
+
+  if (digits.length !== CPF_DIGIT_COUNT && digits.length !== CNPJ_DIGIT_COUNT) {
+    throw new Error(
+      "A empresa não possui CPF/CNPJ válido cadastrado para cobrança. Cadastre o documento antes de gerar uma cobrança no Asaas.",
+    );
+  }
+
+  return digits;
+}

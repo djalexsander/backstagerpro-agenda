@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   assertBillingAdmin,
+  assertValidBillingDocument,
   toTrustedCurrencyAmount,
   validateBillingChargeRequest,
 } from "../_shared/billing-charge.ts";
@@ -22,6 +23,7 @@ type PreparedCharge = {
   empresa_id: string;
   empresa_nome: string;
   empresa_email: string | null;
+  empresa_documento: string | null;
   resource_id: string;
   resource_name: string;
   related_batch_request_id: string | null;
@@ -219,6 +221,22 @@ Deno.serve(async (req) => {
       throw new RequestError("A empresa não possui e-mail para cobrança", 422);
     }
 
+    // Blocks here, before any Asaas API call, whenever the paying company
+    // has no valid CPF/CNPJ on file - never falls back to a fabricated
+    // document. `prepared` is already set, so throwing from here still goes
+    // through the catch block below and releases the reservation made by
+    // prepare_asaas_charge (cancelPreparedCharge), same as every other
+    // failure path in this function.
+    let customerDocument: string;
+    try {
+      customerDocument = assertValidBillingDocument(prepared.empresa_documento);
+    } catch (error) {
+      throw new RequestError(
+        error instanceof Error ? error.message : "Documento inválido",
+        422,
+      );
+    }
+
     const customerExternalReference = `backstage_pro:${prepared.empresa_id}`;
     const searchResponse = await fetch(
       `${ASAAS_API_URL}/customers?externalReference=${
@@ -250,6 +268,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           name: `[Backstage Pro] ${prepared.empresa_nome}`,
           email: customerEmail,
+          cpfCnpj: customerDocument,
           externalReference: customerExternalReference,
         }),
       });
