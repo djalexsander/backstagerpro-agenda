@@ -68,10 +68,9 @@ export const RFID_READ_SESSION_TYPE_LABELS: Record<RfidReadSessionType, string> 
 export type RfidReadSessionStatus = "em_andamento" | "concluida" | "cancelada";
 
 /**
- * Snapshot limitado (não é log de leituras brutas) gravado ao finalizar uma
- * sessão - ver rfid-domain.ts `buildSessionResultSnapshot`. Tamanho é
- * limitado pela quantidade de materiais/EPCs envolvidos na conferência, não
- * pelo volume de leituras de rádio.
+ * Snapshot limitado (não é log de leituras brutas) calculado pelo backend ao
+ * finalizar uma sessão. Tamanho é limitado pela quantidade de materiais/EPCs
+ * envolvidos na conferência, não pelo volume de leituras de rádio.
  */
 export interface RfidSessionResultSnapshot {
   found: string[]; // material_id[]
@@ -100,6 +99,10 @@ export interface RfidReadSession {
   unexpected_count: number | null;
   unknown_count: number | null;
   resultado: RfidSessionResultSnapshot | null;
+  /** Baseline persisted at session start; immutable until completion. */
+  expected_material_ids: string[];
+  /** Normalized, deduplicated observations; raw radio events remain transient. */
+  read_epcs: string[];
   created_at: string;
   updated_at: string;
 }

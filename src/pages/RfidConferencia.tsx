@@ -28,9 +28,8 @@ import { getRfidPermissions } from "@/lib/rfid-permissions";
 import { useModulePermission } from "@/hooks/useModulePermission";
 import { listMaterials } from "@/lib/material-service";
 import { getMaterialRental, listMaterialRentals } from "@/lib/material-rental-service";
-import { finishReadSession, resolveEpcs, startReadSession } from "@/lib/rfid-service";
+import { finishReadSession, recordReadSessionEpcs, resolveEpcs, startReadSession } from "@/lib/rfid-service";
 import {
-  buildSessionResultSnapshot,
   normalizeEpc,
   parseEpcList,
   reconcileRfidRead,
@@ -191,16 +190,12 @@ export default function RfidConferencia() {
         referenciaTipo: isRentalMode ? "locacao" : null,
         referenciaId: isRentalMode ? rentalId || null : null,
         dispositivoLabel: companyId ? getTerminalRfidReaderConfig(companyId)?.readerLabel ?? null : null,
+        expectedMaterialIds: effectiveExpected.map((material) => material.id),
       });
+      await recordReadSessionEpcs(session.id, readEpcs);
       return finishReadSession({
         sessionId: session.id,
         status: "concluida",
-        expectedCount: reconciliation.counts.expected,
-        foundCount: reconciliation.counts.found,
-        missingCount: reconciliation.counts.missing,
-        unexpectedCount: reconciliation.counts.unexpected,
-        unknownCount: reconciliation.counts.unknown,
-        resultado: buildSessionResultSnapshot(reconciliation),
       });
     },
     onSuccess: () => {

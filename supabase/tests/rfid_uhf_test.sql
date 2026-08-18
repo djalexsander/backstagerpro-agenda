@@ -3,9 +3,9 @@
 -- ============================================================================
 --
 -- Cobre 20260814090000_rfid_uhf_foundation.sql: schema, constraints,
--- triggers e as 6 RPCs (rfid_link_or_replace_tag, rfid_deactivate_tag,
+-- triggers e as RPCs RFID (rfid_link_or_replace_tag, rfid_deactivate_tag,
 -- rfid_resolve_epcs, rfid_list_material_tags, rfid_start_read_session,
--- rfid_finish_read_session).
+-- rfid_record_read_session_epcs, rfid_finish_read_session).
 --
 -- gestao_materiais/rfid_materiais são módulos REAIS (inseridos pelas
 -- próprias migrations, não fixtures isoladas como em
@@ -139,6 +139,34 @@ INSERT INTO public.materiais (
   ('e6000000-0000-4000-8000-000000000005', 'e2000000-0000-4000-8000-000000000001',
    'e5000000-0000-4000-8000-000000000001', '__RFID-A4__', 'Material individual A4', 'individual', 1);
 
+-- Real rental reference used to prove that conferencia_locacao derives its
+-- expected materials on the server instead of trusting the client array.
+INSERT INTO public.clientes (
+  id, empresa_id, tipo_pessoa, nome, ativo, created_by, updated_by
+) VALUES (
+  'e7000000-0000-4000-8000-000000000001', 'e2000000-0000-4000-8000-000000000001',
+  'pessoa_fisica', '__rfid_cliente_a__', true,
+  'e3000000-0000-4000-8000-000000000001', 'e3000000-0000-4000-8000-000000000001'
+);
+INSERT INTO public.material_locacoes (
+  id, empresa_id, cliente_id, numero, retirada_prevista_em, devolucao_prevista_em,
+  responsavel_tipo, responsavel_usuario_id, responsavel_nome,
+  client_uuid, payload_hash, created_by, updated_by
+) VALUES (
+  'f0000000-0000-4000-8000-000000000001', 'e2000000-0000-4000-8000-000000000001',
+  'e7000000-0000-4000-8000-000000000001', '__RFID-LOC-A__', now() + interval '1 day', now() + interval '2 days',
+  'usuario', 'e3000000-0000-4000-8000-000000000001', 'RFID Admin A',
+  'f0000000-0000-4000-8000-000000000011', 'rfid-test',
+  'e3000000-0000-4000-8000-000000000001', 'e3000000-0000-4000-8000-000000000001'
+);
+INSERT INTO public.material_locacao_itens (
+  id, empresa_id, locacao_id, material_id, quantidade_contratada
+) VALUES
+  ('f1000000-0000-4000-8000-000000000001', 'e2000000-0000-4000-8000-000000000001',
+   'f0000000-0000-4000-8000-000000000001', 'e6000000-0000-4000-8000-000000000001', 1),
+  ('f1000000-0000-4000-8000-000000000002', 'e2000000-0000-4000-8000-000000000001',
+   'f0000000-0000-4000-8000-000000000001', 'e6000000-0000-4000-8000-000000000002', 1);
+
 -- ----------------------------------------------------------------------------
 -- 1. ESTRUTURAL: RLS, policies, grants
 -- ----------------------------------------------------------------------------
@@ -185,8 +213,11 @@ SELECT ok(
   AND has_function_privilege('authenticated', 'public.rfid_resolve_epcs(text[])', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.rfid_list_material_tags(uuid)', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.rfid_start_read_session(public.rfid_read_session_type,text,uuid,text)', 'EXECUTE')
+  AND has_function_privilege('authenticated', 'public.rfid_start_read_session(public.rfid_read_session_type,text,uuid,text,uuid[])', 'EXECUTE')
+  AND has_function_privilege('authenticated', 'public.rfid_record_read_session_epcs(uuid,text[])', 'EXECUTE')
+  AND has_function_privilege('authenticated', 'public.rfid_finish_read_session(uuid,public.rfid_read_session_status)', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.rfid_finish_read_session(uuid,public.rfid_read_session_status,integer,integer,integer,integer,integer,jsonb)', 'EXECUTE'),
-  'authenticated pode executar as 6 RPCs públicas'
+  'authenticated pode executar as RPCs RFID públicas'
 );
 SELECT ok(
   NOT has_function_privilege('anon', 'public.rfid_link_or_replace_tag(uuid,text)', 'EXECUTE')
@@ -194,8 +225,11 @@ SELECT ok(
   AND NOT has_function_privilege('anon', 'public.rfid_resolve_epcs(text[])', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.rfid_list_material_tags(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.rfid_start_read_session(public.rfid_read_session_type,text,uuid,text)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rfid_start_read_session(public.rfid_read_session_type,text,uuid,text,uuid[])', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rfid_record_read_session_epcs(uuid,text[])', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rfid_finish_read_session(uuid,public.rfid_read_session_status)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.rfid_finish_read_session(uuid,public.rfid_read_session_status,integer,integer,integer,integer,integer,jsonb)', 'EXECUTE'),
-  'anon não pode executar nenhuma das 6 RPCs'
+  'anon não pode executar nenhuma RPC RFID'
 );
 
 SELECT throws_ok(
@@ -649,78 +683,166 @@ SELECT throws_ok(
   'referencia_tipo sem referencia_id é rejeitado'
 );
 
+SELECT lives_ok(
+  format(
+    $fmt$SELECT public.rfid_finish_read_session(%L, 'cancelada')$fmt$,
+    (SELECT id FROM public.rfid_read_sessions
+     WHERE responsavel_user_id = 'e3000000-0000-4000-8000-000000000002'
+       AND status = 'em_andamento' LIMIT 1)
+  ),
+  'same-company admin with create permission may finish a session started by another authorized user'
+);
+
+-- The caller deliberately supplies A4 as a false expectation. Because this
+-- is a rental conference, the backend derives A1+A2 from rental items.
 SELECT ok(
   (SELECT status FROM public.rfid_start_read_session(
-    'conferencia_locacao', 'locacao', 'f0000000-0000-4000-8000-000000000001', 'Bancada RFID'
+    'conferencia_locacao', 'locacao', 'f0000000-0000-4000-8000-000000000001', 'P1-6 truth',
+    ARRAY['e6000000-0000-4000-8000-000000000005'::uuid]
   )) = 'em_andamento',
-  'sessão de conferência de locação inicia em_andamento'
+  'rental conference starts with a server-derived baseline'
 );
--- tipo é filtro suficiente para identificar a linha sem ambiguidade (é a
--- única sessão desse tipo no teste inteiro) - evitar depender de created_at
--- para desempate, já que now() fica congelado no início da transação e
--- todas as linhas deste arquivo compartilham o mesmo valor.
 SELECT is(
-  (SELECT responsavel_user_id FROM public.rfid_read_sessions WHERE tipo = 'conferencia_locacao'),
+  (SELECT expected_material_ids FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth'),
+  ARRAY[
+    'e6000000-0000-4000-8000-000000000001'::uuid,
+    'e6000000-0000-4000-8000-000000000002'::uuid
+  ],
+  'rental expected ids come from persisted rental items, not the client payload'
+);
+SELECT is(
+  (SELECT responsavel_user_id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth'),
   'e3000000-0000-4000-8000-000000000001'::uuid,
-  'responsavel_user_id é sempre o autor autenticado, nunca informado pelo chamador'
+  'responsavel_user_id remains the authenticated author'
 );
 
 SELECT lives_ok(
-  $test$
-    SELECT public.rfid_finish_read_session(
-      (SELECT id FROM public.rfid_read_sessions WHERE tipo = 'conferencia_locacao'),
-      'concluida', 30, 28, 2, 1, 1,
-      '{"found":["e6000000-0000-4000-8000-000000000001"]}'::jsonb
-    )
-  $test$,
-  'finaliza a sessão como concluída com o resumo já calculado pelo motor do frontend'
+  format(
+    $fmt$SELECT public.rfid_record_read_session_epcs(%L, ARRAY['1111222233334444','2222333344445555','0000000000000000','CCDDEEFF11223344','1111222233334444'])$fmt$,
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth')
+  ),
+  'EPC observations are persisted before finishing'
 );
 SELECT is(
-  (SELECT found_count FROM public.rfid_read_sessions WHERE tipo = 'conferencia_locacao'),
-  28,
-  'contagens ficam gravadas quando a sessão é concluída'
+  (SELECT cardinality(read_epcs) FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth'),
+  4,
+  'persisted EPC observations are normalized and deduplicated'
+);
+
+-- Exercise the legacy signature with a forged all-999 summary. The wrapper
+-- must ignore every client-calculated field and delegate to server truth.
+SELECT lives_ok(
+  format(
+    $fmt$SELECT public.rfid_finish_read_session(%L, 'concluida', 999, 999, 999, 999, 999, '{"found":["forged"]}'::jsonb)$fmt$,
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth')
+  ),
+  'legacy finish payload is accepted only for compatibility and ignored'
+);
+SELECT results_eq(
+  $$
+    SELECT expected_count, found_count, missing_count, unexpected_count, unknown_count
+    FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth'
+  $$,
+  $$VALUES (2, 1, 1, 1, 1)$$,
+  'found, missing, unexpected and unknown counts are recalculated from persisted data'
+);
+SELECT is(
+  (SELECT resultado FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth'),
+  jsonb_build_object(
+    'found', jsonb_build_array('e6000000-0000-4000-8000-000000000001'),
+    'missing', jsonb_build_array('e6000000-0000-4000-8000-000000000002'),
+    'unexpected', jsonb_build_array(jsonb_build_object(
+      'materialId', 'e6000000-0000-4000-8000-000000000005', 'epc', '2222333344445555'
+    )),
+    'unknown', jsonb_build_array('0000000000000000'),
+    'inactiveTag', jsonb_build_array(jsonb_build_object(
+      'materialId', 'e6000000-0000-4000-8000-000000000001', 'epc', 'CCDDEEFF11223344'
+    ))
+  ),
+  'persisted result snapshot exactly matches actual reads and tag registry state'
+);
+SELECT throws_ok(
+  format(
+    $fmt$SELECT public.rfid_finish_read_session(%L, 'concluida')$fmt$,
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth')
+  ),
+  'RF008', NULL,
+  'an already-finished session cannot be finalized again'
+);
+SELECT throws_ok(
+  format(
+    $fmt$SELECT public.rfid_record_read_session_epcs(%L, ARRAY['AAAAAAAAAAAAAAAA'])$fmt$,
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth')
+  ),
+  'RF008', NULL,
+  'reads cannot be appended after finalization'
 );
 
 SELECT throws_ok(
-  $test$
-    SELECT public.rfid_finish_read_session(
-      (SELECT id FROM public.rfid_read_sessions WHERE tipo = 'conferencia_locacao'),
-      'concluida', 1, 1, 0, 0, 0, NULL
-    )
-  $test$,
-  'RF008',
-  NULL,
-  'uma sessão já encerrada não pode ser finalizada de novo'
+  $test$SELECT public.rfid_start_read_session(
+    'conferencia_livre', NULL, NULL, 'cross-expected',
+    ARRAY['e6000000-0000-4000-8000-000000000004'::uuid]
+  )$test$,
+  '42501', NULL,
+  'company A cannot persist a company B material as expected'
 );
 
--- Sessão cancelada: contagens não são gravadas mesmo se informadas.
-SELECT public.rfid_start_read_session('conferencia_livre', NULL, NULL, NULL);
+-- Cancelled sessions keep no calculated summary, including through legacy calls.
+SELECT public.rfid_start_read_session('conferencia_livre', NULL, NULL, 'cancel-test');
 SELECT lives_ok(
   format(
     $fmt$SELECT public.rfid_finish_read_session(%L, 'cancelada', 10, 5, 5, 0, 0, '{"x":1}'::jsonb)$fmt$,
-    (SELECT id FROM public.rfid_read_sessions WHERE tipo = 'conferencia_livre' ORDER BY created_at DESC LIMIT 1)
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'cancel-test')
   ),
-  'sessão livre pode ser cancelada'
+  'free conference can be cancelled'
 );
 SELECT ok(
   (SELECT found_count IS NULL AND resultado IS NULL FROM public.rfid_read_sessions
-   WHERE tipo = 'conferencia_livre' ORDER BY created_at DESC LIMIT 1),
-  'contagens/resultado NÃO são gravados para uma sessão cancelada, mesmo enviados pelo chamador'
+   WHERE dispositivo_label = 'cancel-test'),
+  'cancelled session ignores client counts and stores no result'
 );
 
 RESET ROLE;
 
--- Isolamento entre empresas nas sessões.
+-- Company B cannot mutate/finalize A's session, and resolving the same EPC
+-- inside its own session never imports company A's tag association.
 SELECT set_config('request.jwt.claim.sub', 'e3000000-0000-4000-8000-000000000003', true);
 SET LOCAL ROLE authenticated;
 SELECT throws_ok(
   format(
-    $fmt$SELECT public.rfid_finish_read_session(%L, 'concluida', 1, 1, 0, 0, 0, NULL)$fmt$,
-    (SELECT id FROM public.rfid_read_sessions WHERE tipo = 'conferencia_livre' ORDER BY created_at DESC LIMIT 1)
+    $fmt$SELECT public.rfid_finish_read_session(%L, 'concluida')$fmt$,
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth')
   ),
-  '42501',
-  NULL,
-  'admin B não consegue finalizar uma sessão iniciada pela empresa A'
+  '42501', NULL,
+  'admin B cannot finalize company A session'
+);
+SELECT throws_ok(
+  format(
+    $fmt$SELECT public.rfid_record_read_session_epcs(%L, ARRAY['AAAAAAAAAAAAAAAA'])$fmt$,
+    (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'P1-6 truth')
+  ),
+  '42501', NULL,
+  'admin B cannot append reads to company A session'
+);
+SELECT public.rfid_start_read_session(
+  'conferencia_livre', NULL, NULL, 'company-b-isolation',
+  ARRAY['e6000000-0000-4000-8000-000000000004'::uuid]
+);
+SELECT public.rfid_record_read_session_epcs(
+  (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'company-b-isolation'),
+  ARRAY['1111222233334444']
+);
+SELECT public.rfid_finish_read_session(
+  (SELECT id FROM public.rfid_read_sessions WHERE dispositivo_label = 'company-b-isolation'),
+  'concluida'
+);
+SELECT results_eq(
+  $$
+    SELECT found_count, missing_count, unexpected_count, unknown_count
+    FROM public.rfid_read_sessions WHERE dispositivo_label = 'company-b-isolation'
+  $$,
+  $$VALUES (0, 1, 0, 1)$$,
+  'company A tag data is unknown inside company B session'
 );
 RESET ROLE;
 

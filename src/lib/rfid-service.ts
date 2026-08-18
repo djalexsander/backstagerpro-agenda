@@ -4,7 +4,6 @@ import type {
   RfidReadSession,
   RfidReadSessionStatus,
   RfidReadSessionType,
-  RfidSessionResultSnapshot,
   RfidTag,
   RfidTagStatus,
 } from "./rfid-types";
@@ -112,6 +111,7 @@ export interface StartReadSessionInput {
   referenciaTipo?: string | null;
   referenciaId?: string | null;
   dispositivoLabel?: string | null;
+  expectedMaterialIds?: string[];
 }
 
 export async function startReadSession(input: StartReadSessionInput): Promise<RfidReadSession> {
@@ -120,6 +120,7 @@ export async function startReadSession(input: StartReadSessionInput): Promise<Rf
     _referencia_tipo: input.referenciaTipo ?? null,
     _referencia_id: input.referenciaId ?? null,
     _dispositivo_label: input.dispositivoLabel ?? null,
+    _expected_material_ids: input.expectedMaterialIds ?? [],
   });
   if (error) throwRfidError(error, "start read session");
   return data as RfidReadSession;
@@ -128,24 +129,24 @@ export async function startReadSession(input: StartReadSessionInput): Promise<Rf
 export interface FinishReadSessionInput {
   sessionId: string;
   status: Exclude<RfidReadSessionStatus, "em_andamento">;
-  expectedCount?: number;
-  foundCount?: number;
-  missingCount?: number;
-  unexpectedCount?: number;
-  unknownCount?: number;
-  resultado?: RfidSessionResultSnapshot;
+}
+
+/** Persists normalized EPC observations before finalization. The backend
+ * deduplicates and tenant-validates them; future physical readers use this
+ * same batch boundary instead of sending a trusted result summary. */
+export async function recordReadSessionEpcs(sessionId: string, epcs: string[]): Promise<RfidReadSession> {
+  const { data, error } = await callRpc("rfid_record_read_session_epcs", {
+    _session_id: sessionId,
+    _epcs: epcs,
+  });
+  if (error) throwRfidError(error, "record read session epcs");
+  return data as RfidReadSession;
 }
 
 export async function finishReadSession(input: FinishReadSessionInput): Promise<RfidReadSession> {
   const { data, error } = await callRpc("rfid_finish_read_session", {
     _session_id: input.sessionId,
     _status: input.status,
-    _expected_count: input.expectedCount ?? null,
-    _found_count: input.foundCount ?? null,
-    _missing_count: input.missingCount ?? null,
-    _unexpected_count: input.unexpectedCount ?? null,
-    _unknown_count: input.unknownCount ?? null,
-    _resultado: input.resultado ?? null,
   });
   if (error) throwRfidError(error, "finish read session");
   return data as RfidReadSession;
