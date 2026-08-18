@@ -33,6 +33,8 @@ import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
 import { CancelCheckoutDialog } from "@/components/checkin-checkout/CancelCheckoutDialog";
 import { CustodyHistoryDialog } from "@/components/checkin-checkout/CustodyHistoryDialog";
 import { CustodyWriteOffDialog } from "@/components/checkin-checkout/CustodyWriteOffDialog";
+import { RentalOperationsQueue } from "@/components/checkin-checkout/RentalOperationsQueue";
+import { RentalDetailDialog } from "@/components/material-rentals/RentalDetailDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useCheckinCheckout } from "@/hooks/useCheckinCheckout";
@@ -55,6 +57,7 @@ import type {
   CustodyPurpose,
   CustodyStatus,
 } from "@/lib/checkin-checkout-types";
+import { getRentalPermissions } from "@/lib/material-rental-permissions";
 
 const PAGE_SIZE = 10;
 const INITIAL_FILTERS: CustodyFilters = {
@@ -105,6 +108,19 @@ export default function CheckinCheckout() {
     companyReadOnly: empresaReadOnly,
     companySelected: Boolean(companyId),
   });
+  // Locações é um módulo adicional (não exigido pelas outras abas desta
+  // página) - quando não contratado, a aba "Locações" simplesmente não é
+  // renderizada e o restante do Check-in/Check-out continua funcionando
+  // normalmente via QR/código de barras/busca manual, igual ao RFID.
+  const rentalModuleEnabled =
+    moduleEnabled &&
+    hasModule(MODULE_KEYS.LOCACAO_MATERIAIS);
+  const rentalPermissions = getRentalPermissions({
+    role,
+    moduleEnabled: rentalModuleEnabled,
+    companyReadOnly: empresaReadOnly,
+    companySelected: Boolean(companyId),
+  });
 
   const [openPage, setOpenPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
@@ -119,6 +135,7 @@ export default function CheckinCheckout() {
   const [cancelOperation, setCancelOperation] = useState<CustodyOperationView | null>(null);
   const [writeOffOperation, setWriteOffOperation] = useState<CustodyOperationView | null>(null);
   const [historyOperation, setHistoryOperation] = useState<CustodyOperationView | null>(null);
+  const [detailRentalId, setDetailRentalId] = useState<string | null>(null);
   const scannerRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -321,7 +338,16 @@ export default function CheckinCheckout() {
       {error && <Card className="border-destructive/50"><CardContent className="p-4 text-sm text-destructive">{error instanceof Error ? error.message : "Não foi possível carregar as operações."}</CardContent></Card>}
 
       <Tabs defaultValue="abertas">
-        <TabsList><TabsTrigger value="abertas">Operações em aberto</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger></TabsList>
+        <TabsList>
+          <TabsTrigger value="abertas">Operações em aberto</TabsTrigger>
+          {rentalPermissions.visualizar && <TabsTrigger value="locacoes">Locações</TabsTrigger>}
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+        </TabsList>
+        {rentalPermissions.visualizar && companyId && (
+          <TabsContent value="locacoes">
+            <RentalOperationsQueue companyId={companyId} permissions={rentalPermissions} onSelect={setDetailRentalId} />
+          </TabsContent>
+        )}
         <TabsContent value="abertas">
           <Card>
             <CardContent className="p-4">
@@ -361,6 +387,18 @@ export default function CheckinCheckout() {
       {companyId && <CancelCheckoutDialog open={!!cancelOperation} onOpenChange={(open) => !open && setCancelOperation(null)} companyId={companyId} operation={cancelOperation} onSaved={refreshAfterOperation} />}
       {companyId && <CustodyWriteOffDialog open={!!writeOffOperation} onOpenChange={(open) => !open && setWriteOffOperation(null)} companyId={companyId} operation={writeOffOperation} onSaved={refreshAfterOperation} />}
       {companyId && <CustodyHistoryDialog open={!!historyOperation} onOpenChange={(open) => !open && setHistoryOperation(null)} companyId={companyId} operation={historyOperation} />}
+      {companyId && (
+        <RentalDetailDialog
+          open={Boolean(detailRentalId)}
+          onOpenChange={(next) => { if (!next) setDetailRentalId(null); }}
+          companyId={companyId}
+          rentalId={detailRentalId}
+          permissions={rentalPermissions}
+          locations={locations}
+          responsibles={responsibles}
+          onChanged={invalidateCustody}
+        />
+      )}
     </div>
   );
 }
