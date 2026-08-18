@@ -35,7 +35,7 @@ export const MODULE_KEYS = {
   EXTRA_USUARIOS: "extra_usuarios",
   /** Pacote extra de eventos */
   EXTRA_EVENTOS: "extra_eventos",
-  /** Pacote extra de armazenamento */
+  /** @deprecated Não comercial enquanto não houver medição/enforcement de bytes. */
   EXTRA_STORAGE: "extra_storage",
   /** Cadastro patrimonial de materiais e equipamentos */
   GESTAO_MATERIAIS: "gestao_materiais",
