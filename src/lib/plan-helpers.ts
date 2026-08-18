@@ -49,7 +49,7 @@ export interface ModuloAdicional {
   nome: string;
   descricao: string | null;
   valor: number;
-  /** Tipo de recurso que este módulo expande (ex: "eventos", "usuarios", "storage") */
+  /** Tipo legado; storage não tem enforcement e não é comercializável. */
   tipo_limite: "eventos" | "usuarios" | "storage" | "funcionalidade";
   /** Quanto este módulo adiciona ao limite base (null = funcionalidade on/off) */
   limite_valor: number | null;
@@ -91,10 +91,11 @@ export function computeCapabilities(
     return { maxUsuarios: null, maxEventos: null, storageLimit: null, features: [] };
   }
 
-  // Modelo atual: retorna limites do plano sem modificação
+  // Usuários/eventos preservam o modelo atual. Storage não é retornado como
+  // capacidade porque o campo de plano não possui medição ou enforcement.
   let maxUsuarios = planoBase.max_usuarios;
   let maxEventos = planoBase.max_eventos;
-  let storageLimit = planoBase.storage_limit;
+  const storageLimit = null;
   const features: string[] = [];
 
   // FUTURO: iterar _empresaModulos ativos e somar limites dos _modulos correspondentes
@@ -105,8 +106,6 @@ export function computeCapabilities(
   //     maxEventos = (maxEventos ?? 0) + mod.limite_valor;
   //   } else if (mod.tipo_limite === "usuarios" && mod.limite_valor != null) {
   //     maxUsuarios = (maxUsuarios ?? 0) + mod.limite_valor;
-  //   } else if (mod.tipo_limite === "storage" && mod.limite_valor != null) {
-  //     storageLimit = (storageLimit ?? 0) + mod.limite_valor;
   //   } else if (mod.tipo_limite === "funcionalidade") {
   //     features.push(mod.nome);
   //   }
@@ -192,7 +191,8 @@ export function computeConsolidatedCapabilities(
 
   let maxUsuarios: number | null = planoBase?.max_usuarios ?? null;
   let maxEventos: number | null = planoBase?.max_eventos ?? null;
-  let storageLimitGb: number | null = planoBase?.storage_limit ?? null;
+  // Schema-only legacy value: no byte measurement or upload enforcement exists.
+  const storageLimitGb: number | null = null;
   const activeFeatures: string[] = [];
 
   for (const em of activeModules) {
@@ -205,9 +205,6 @@ export function computeConsolidatedCapabilities(
       }
       if (cat.capacidade_extra_eventos > 0) {
         maxEventos = (maxEventos ?? 0) + cat.capacidade_extra_eventos;
-      }
-      if (cat.capacidade_extra_storage > 0) {
-        storageLimitGb = (storageLimitGb ?? 0) + Number(cat.capacidade_extra_storage);
       }
     }
 

@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package,
-  Users, Calendar, HardDrive, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
+  Users, Calendar, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
   ShoppingCart, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,8 +24,15 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
 import { generatePixPayload } from "@/lib/pix";
-import { getSelfServiceAvailableModules } from "@/lib/self-service-module-availability";
-import { ensureSingleCommercialBasePlan } from "@/lib/subscription-license";
+import {
+  getSelfServiceAvailableModules,
+  getLifetimeLicensedCatalogModules,
+  getSelfServiceModulesInProgress,
+} from "@/lib/self-service-module-availability";
+import {
+  ensureSingleCommercialBasePlan,
+  getCustomerPlanPresentation,
+} from "@/lib/subscription-license";
 import { expandModuleSelectionWithDependencies } from "@/lib/company-module-entitlements";
 
 export default function PlanoAssinatura() {
@@ -262,6 +269,29 @@ export default function PlanoAssinatura() {
     modulePayments,
   }), [empresaId, catalog, allModules, moduleRequests, batchRequests, modulePayments]);
 
+  const modulesInProgress = useMemo(() => getSelfServiceModulesInProgress({
+    companyId: empresaId,
+    catalog,
+    companyModules: allModules,
+    moduleRequests,
+    batchRequests,
+    modulePayments,
+  }), [empresaId, catalog, allModules, moduleRequests, batchRequests, modulePayments]);
+
+  const lifetimeLicensedModules = useMemo(
+    () => getLifetimeLicensedCatalogModules(catalog),
+    [catalog],
+  );
+
+  const planPresentation = useMemo(() => getCustomerPlanPresentation({
+    plan: sub.planoBase,
+    isOnTrial: sub.isOnTrial,
+    isLifetime: sub.isLifetime,
+    isExpired: sub.isExpired,
+    isReadOnly: sub.isReadOnly,
+    trialExpiresAt: sub.trialExpiresAt,
+  }), [sub.planoBase, sub.isOnTrial, sub.isLifetime, sub.isExpired, sub.isReadOnly, sub.trialExpiresAt]);
+
   const selectedModules = catalog.filter(c => selectedModuleIds.has(c.id));
 
   const toggleModuleSelect = (id: string) => {
@@ -287,7 +317,7 @@ export default function PlanoAssinatura() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Shield className="h-5 w-5 text-primary" />
-            Plano Base
+            Plano Atual
           </CardTitle>
           {sub.isOnTrial && (
             <Badge variant="secondary" className="w-fit">
@@ -299,56 +329,57 @@ export default function PlanoAssinatura() {
               <Sparkles className="h-3 w-3 mr-1" /> Licença Vitalícia
             </Badge>
           )}
-          {sub.isExpired && <Badge variant="destructive" className="w-fit">Expirado</Badge>}
+          <Badge
+            variant={planPresentation.status === "Ativo" ? "default" : planPresentation.status === "Expirado" || planPresentation.status === "Bloqueado" ? "destructive" : "secondary"}
+            className="w-fit"
+          >
+            Status: {planPresentation.status}
+          </Badge>
         </CardHeader>
         <CardContent>
-          {sub.planoBase ? (
+          {sub.planoBase || sub.isOnTrial ? (
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="flex items-center gap-3">
                   <CreditCard className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="text-xs text-muted-foreground">Plano</p>
-                    <p className="font-semibold text-lg">{sub.planoBase.nome}</p>
+                    <p className="text-xs text-muted-foreground">Plano atual</p>
+                    <p className="font-semibold text-lg">{planPresentation.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Shield className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tipo</p>
+                    <p className="font-semibold text-lg">{planPresentation.type}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <CreditCard className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Cobrança do plano</p>
+                    <p className="font-semibold text-lg">{planPresentation.chargeLabel}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">
-                      {sub.planoBase.periodicidade === "vitalicio" ? "Valor Único" : sub.planoBase.periodicidade === "anual" ? "Valor Anual" : "Valor Mensal"}
+                      {sub.isOnTrial ? "Fim do Trial" : "Vencimento"}
                     </p>
-                    <p className="font-semibold text-lg">
-                      {sub.isLifetime ? (
-                        "Sem cobrança"
-                      ) : (
-                        <>
-                          R$ {Number(sub.planoBase.valor).toFixed(2)}
-                          {sub.planoBase.periodicidade !== "vitalicio" && <span className="text-sm font-normal text-muted-foreground">/{sub.planoBase.periodicidade === "anual" ? "ano" : "mês"}</span>}
-                        </>
-                      )}
+                    <p className="font-semibold">
+                      {sub.isLifetime
+                        ? "Sem vencimento"
+                        : sub.isOnTrial && sub.trialExpiresAt
+                          ? format(new Date(sub.trialExpiresAt), "dd/MM/yyyy")
+                          : sub.vencimento
+                            ? format(new Date(sub.vencimento), "dd/MM/yyyy")
+                            : "Não informado"}
                     </p>
                   </div>
                 </div>
-                {sub.isLifetime ? (
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Vencimento</p>
-                      <p className="font-semibold text-primary">Sem vencimento</p>
-                    </div>
-                  </div>
-                ) : sub.vencimento && (
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Vencimento</p>
-                      <p className="font-semibold">{format(new Date(sub.vencimento), "dd/MM/yyyy")}</p>
-                    </div>
-                  </div>
-                )}
               </div>
-              {sub.planoBase.descricao && <p className="text-sm text-muted-foreground">{sub.planoBase.descricao}</p>}
+              {sub.planoBase?.descricao && <p className="text-sm text-muted-foreground">{sub.planoBase.descricao}</p>}
               <div className="flex flex-wrap gap-4 pt-2">
                 <div className="flex items-center gap-1.5 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -359,11 +390,6 @@ export default function PlanoAssinatura() {
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Usuários:</span>
                   <span className="font-medium">{sub.capabilities.maxUsuarios ?? "∞"}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-sm">
-                  <HardDrive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Storage:</span>
-                  <span className="font-medium">{sub.capabilities.storageLimitGb ?? "∞"} GB</span>
                 </div>
               </div>
             </div>
@@ -378,8 +404,10 @@ export default function PlanoAssinatura() {
         <CardContent className="pt-5 pb-5 space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Plano Base ({sub.planoBase?.nome || "—"})</span>
-              <span className="font-medium">R$ {sub.valorBase.toFixed(2)}</span>
+              <span className="text-muted-foreground">Plano ({planPresentation.name})</span>
+              <span className="font-medium">
+                {sub.isLifetime ? "Sem cobrança mensal" : sub.isOnTrial ? "Sem cobrança" : `R$ ${sub.valorBase.toFixed(2)}`}
+              </span>
             </div>
             {sub.valorModulos > 0 && (
               <div className="flex justify-between text-sm">
@@ -392,10 +420,10 @@ export default function PlanoAssinatura() {
             <Separator />
             <div className="flex justify-between items-baseline">
               <span className="font-semibold text-base">
-                {sub.isLifetime ? "Licença permanente" : "Total Mensal"}
+                {sub.isLifetime ? "Licença permanente" : sub.isOnTrial ? "Período de teste" : "Total Mensal"}
               </span>
               <span className="font-bold text-xl text-primary">
-                {sub.isLifetime ? "Sem cobrança" : `R$ ${sub.valorTotal.toFixed(2)}`}
+                {sub.isLifetime ? "Sem cobrança mensal" : sub.isOnTrial ? "Sem cobrança" : `R$ ${sub.valorTotal.toFixed(2)}`}
               </span>
             </div>
           </div>
@@ -404,13 +432,15 @@ export default function PlanoAssinatura() {
             {sub.isLifetime ? (
               <Badge className="bg-primary/15 text-primary border border-primary/30 px-3 py-2">
                 <Shield className="h-4 w-4 mr-2" />
-                Todos os módulos e capacidades estão incluídos
+                Licença permanente, sem mensalidade do plano
               </Badge>
             ) : (
               <>
-                <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
-                  <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
-                </Button>
+                {!sub.isOnTrial && (
+                  <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
+                    <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => setShowUpgrade(true)}>
                   <ArrowUpCircle className="h-4 w-4 mr-2" /> Upgrade de Plano
                 </Button>
@@ -426,14 +456,31 @@ export default function PlanoAssinatura() {
           <Sparkles className="h-5 w-5 text-primary" /> Módulos Ativos
         </h2>
         {sub.isLifetime ? (
-          <Card className="border-primary/30 bg-primary/[0.03]">
-            <CardContent className="py-6 text-center">
-              <p className="font-medium text-primary">Todos os módulos liberados</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                A licença Vitalícia inclui automaticamente módulos atuais e futuros.
-              </p>
-            </CardContent>
-          </Card>
+          lifetimeLicensedModules.length === 0 ? (
+            <Card>
+              <CardContent className="py-6 text-center text-muted-foreground">
+                Nenhum módulo funcional ativo no catálogo.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {lifetimeLicensedModules.map((mod) => (
+                <Card key={mod.id} className="border-accent/30">
+                  <CardContent className="pt-4 pb-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium flex items-center gap-1.5">
+                        <CheckCircle className="h-4 w-4 text-accent" />
+                        {mod.nome}
+                      </p>
+                      <Badge variant="outline" className="text-xs">Incluído</Badge>
+                    </div>
+                    {mod.descricao && <p className="text-sm text-muted-foreground">{mod.descricao}</p>}
+                    <p className="text-sm font-medium text-primary">Sem cobrança mensal</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )
         ) : activeModules.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center text-muted-foreground">
@@ -469,7 +516,6 @@ export default function PlanoAssinatura() {
                     <div className="text-xs text-muted-foreground space-y-0.5">
                       {(mod.catalog.capacidade_extra_usuarios ?? 0) > 0 && <p>+{mod.catalog.capacidade_extra_usuarios} usuários</p>}
                       {(mod.catalog.capacidade_extra_eventos ?? 0) > 0 && <p>+{mod.catalog.capacidade_extra_eventos} eventos</p>}
-                      {Number(mod.catalog.capacidade_extra_storage ?? 0) > 0 && <p>+{Number(mod.catalog.capacidade_extra_storage)} GB</p>}
                     </div>
                   )}
                   {mod.activated_at && (
@@ -481,6 +527,45 @@ export default function PlanoAssinatura() {
           </div>
         )}
       </div>
+
+      {/* ─── SOLICITAÇÕES EM ANDAMENTO ─── */}
+      {modulesInProgress.length > 0 && !sub.isLifetime && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" /> Solicitações em andamento
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {modulesInProgress.map(({ module, status }) => {
+              const statusLabel = status === "activation_pending"
+                ? "Aguardando ativação"
+                : status === "payment_confirmed"
+                  ? "Pagamento confirmado"
+                  : status === "payment_pending"
+                    ? "Pagamento pendente"
+                    : "Solicitação pendente";
+              return (
+                <Card key={module.id} className="border-primary/20">
+                  <CardContent className="pt-4 pb-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{module.nome}</p>
+                      <Badge variant="secondary">{statusLabel}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      R$ {Number(module.valor).toFixed(2)}/{module.periodicidade}
+                    </p>
+                    {module.is_capacity_module && (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {module.capacidade_extra_usuarios > 0 && <p>+{module.capacidade_extra_usuarios} usuários</p>}
+                        {module.capacidade_extra_eventos > 0 && <p>+{module.capacidade_extra_eventos} eventos</p>}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ─── MÓDULOS DISPONÍVEIS ─── */}
       {!sub.isLifetime && availableModules.length > 0 && (
@@ -519,7 +604,6 @@ export default function PlanoAssinatura() {
                       <div className="text-xs text-muted-foreground space-y-0.5">
                         {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
                         {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
-                        {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB</p>}
                       </div>
                     )}
                   </CardContent>
@@ -562,19 +646,21 @@ export default function PlanoAssinatura() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-primary" /> Detalhamento da Cobrança
+              <CreditCard className="h-5 w-5 text-primary" /> {sub.isLifetime ? "Detalhamento da Licença" : "Detalhamento da Cobrança"}
             </CardTitle>
-            <CardDescription>Veja quais itens compõem sua mensalidade</CardDescription>
+            <CardDescription>
+              {sub.isLifetime ? "Módulos registrados sem cobrança recorrente" : "Veja quais itens compõem sua mensalidade"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-medium">
                 <span>Plano Base — {sub.planoBase?.nome || "—"}</span>
-                <span>R$ {sub.valorBase.toFixed(2)}</span>
+                <span>{sub.isLifetime ? "Sem cobrança mensal" : `R$ ${sub.valorBase.toFixed(2)}`}</span>
               </div>
               <Separator className="my-1" />
               {activeModules.map((mod) => {
-                const isBillable = !mod.trial_granted && Number(mod.valor_cobrado) > 0;
+                const isBillable = !sub.isLifetime && !mod.trial_granted && Number(mod.valor_cobrado) > 0;
                 return (
                   <div key={mod.id} className="flex justify-between text-sm">
                     <span className="text-muted-foreground flex items-center gap-1.5">
@@ -589,20 +675,22 @@ export default function PlanoAssinatura() {
                         <Badge variant="outline" className="text-[10px] px-1 py-0">Cortesia</Badge>
                       )}
                     </span>
-                    <span className={!isBillable ? "text-muted-foreground line-through" : ""}>
-                      R$ {Number(mod.valor_cobrado).toFixed(2)}
+                    <span className={!isBillable ? "text-muted-foreground" : ""}>
+                      {sub.isLifetime ? "Incluído" : `R$ ${Number(mod.valor_cobrado).toFixed(2)}`}
                     </span>
                   </div>
                 );
               })}
               <Separator className="my-1" />
               <div className="flex justify-between font-semibold text-base pt-1">
-                <span>Total Mensal</span>
-                <span className="text-primary">R$ {sub.valorTotal.toFixed(2)}</span>
+                <span>{sub.isLifetime ? "Licença Vitalícia" : "Total Mensal"}</span>
+                <span className="text-primary">{sub.isLifetime ? "Sem cobrança mensal" : `R$ ${sub.valorTotal.toFixed(2)}`}</span>
               </div>
-              <p className="text-xs text-muted-foreground pt-1">
-                Apenas módulos com <CheckCircle className="h-3 w-3 inline text-green-500" /> entram na cobrança mensal.
-              </p>
+              {!sub.isLifetime && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Apenas módulos com <CheckCircle className="h-3 w-3 inline text-green-500" /> entram na cobrança mensal.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -788,7 +876,6 @@ export default function PlanoAssinatura() {
                     <CardContent className="space-y-1 text-sm">
                       <p className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {plano.max_eventos ?? "∞"} eventos</p>
                       <p className="flex items-center gap-1"><Users className="h-3 w-3" /> {plano.max_usuarios ?? "∞"} usuários</p>
-                      <p className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {(plano as any).storage_limit ?? 5}GB</p>
                       {empresa?.plano_id === plano.id && <Badge variant="secondary" className="mt-2">Plano Atual</Badge>}
                     </CardContent>
                   </Card>

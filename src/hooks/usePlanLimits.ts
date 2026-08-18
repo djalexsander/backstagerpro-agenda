@@ -8,7 +8,7 @@ import type { Tables } from "@/integrations/supabase/types";
 interface PlanLimits {
   maxUsuarios: number | null;
   maxEventos: number | null;
-  /** Storage em GB */
+  /** Compatibilidade de schema; sem cota enquanto não houver medição. */
   storageLimitGb: number | null;
   currentUsuarios: number;
   currentEventos: number;

@@ -372,7 +372,14 @@ export default function Modulos() {
                       </Button>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleAtivo.mutate({ id: m.id, ativo: !m.ativo })}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={m.feature_key === "extra_storage"}
+                        title={m.feature_key === "extra_storage" ? "Sem medição real de armazenamento" : undefined}
+                        onClick={() => toggleAtivo.mutate({ id: m.id, ativo: !m.ativo })}
+                      >
                         {m.ativo ? <Eye className="h-4 w-4 text-green-600" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
                       </Button>
                     </TableCell>
@@ -529,7 +536,7 @@ export default function Modulos() {
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
                 <p className="text-sm font-medium">Módulo de capacidade</p>
-                <p className="text-xs text-muted-foreground">Aumenta limites de usuários, eventos ou storage</p>
+                <p className="text-xs text-muted-foreground">Aumenta limites reais de usuários ou eventos</p>
               </div>
               <Switch checked={form.is_capacity_module} onCheckedChange={(v) => setForm((p) => ({ ...p, is_capacity_module: v }))} />
             </div>
@@ -545,8 +552,9 @@ export default function Modulos() {
                   <Input type="number" min="0" value={form.capacidade_extra_eventos} onChange={(e) => setForm((p) => ({ ...p, capacidade_extra_eventos: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">+ Storage (GB)</Label>
-                  <Input type="number" min="0" value={form.capacidade_extra_storage} onChange={(e) => setForm((p) => ({ ...p, capacidade_extra_storage: e.target.value }))} />
+                  <Label className="text-xs">Storage histórico</Label>
+                  <Input type="number" min="0" value={form.capacidade_extra_storage} disabled />
+                  <p className="text-[10px] text-muted-foreground">Sem efeito enquanto não houver medição.</p>
                 </div>
               </div>
             )}
@@ -557,7 +565,11 @@ export default function Modulos() {
                 <p className="text-sm font-medium">Módulo ativo</p>
                 <p className="text-xs text-muted-foreground">Disponível para contratação pelas empresas</p>
               </div>
-              <Switch checked={form.ativo} onCheckedChange={(v) => setForm((p) => ({ ...p, ativo: v }))} />
+              <Switch
+                checked={form.ativo}
+                disabled={form.feature_key === "extra_storage"}
+                onCheckedChange={(v) => setForm((p) => ({ ...p, ativo: v }))}
+              />
             </div>
           </div>
 

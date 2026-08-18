@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isCompanyModuleAccessible } from "@/lib/company-module-access";
+import {
+  isCompanyModuleAccessible,
+  isCustomerVisibleActiveEntitlement,
+} from "@/lib/company-module-access";
 
 const activeCatalogFeatureKeys = new Set([
   "gestao_materiais",
@@ -54,5 +57,38 @@ describe("company module access", () => {
         isLifetime: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("customer-visible active entitlements", () => {
+  it("never presents extra_storage as an active benefit, even with stale catalog data", () => {
+    expect(isCustomerVisibleActiveEntitlement({
+      status: "active",
+      catalog: { ativo: true, feature_key: "extra_storage" },
+    })).toBe(false);
+  });
+
+  it("keeps historical inactive entitlements intact but outside active benefits", () => {
+    const historical = {
+      status: "active",
+      catalog: { ativo: false, feature_key: "extra_storage" },
+    };
+
+    expect(isCustomerVisibleActiveEntitlement(historical)).toBe(false);
+    expect(historical).toEqual({
+      status: "active",
+      catalog: { ativo: false, feature_key: "extra_storage" },
+    });
+  });
+
+  it("continues presenting real active capacity extras", () => {
+    expect(isCustomerVisibleActiveEntitlement({
+      status: "active",
+      catalog: { ativo: true, feature_key: "extra_eventos" },
+    })).toBe(true);
+    expect(isCustomerVisibleActiveEntitlement({
+      status: "active",
+      catalog: { ativo: true, feature_key: "extra_usuarios" },
+    })).toBe(true);
   });
 });

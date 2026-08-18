@@ -18,7 +18,10 @@ import type {
 } from "@/types/subscription";
 import { useCallback, useMemo } from "react";
 import { isLifetimePlan } from "@/lib/subscription-license";
-import { isCompanyModuleAccessible } from "@/lib/company-module-access";
+import {
+  isCompanyModuleAccessible,
+  isCustomerVisibleActiveEntitlement,
+} from "@/lib/company-module-access";
 
 interface UseCompanyModulesReturn {
   /** Todos os módulos da empresa (qualquer status) */
@@ -120,7 +123,12 @@ export function useCompanyModules(
     [allModules],
   );
 
-  const activeModules = useMemo(() => filterByStatus("active"), [filterByStatus]);
+  // Historical entitlements stay in allModules, but an inactive catalog row
+  // must never be presented as a current customer benefit.
+  const activeModules = useMemo(
+    () => allModules.filter(isCustomerVisibleActiveEntitlement),
+    [allModules],
+  );
   const pendingModules = useMemo(() => filterByStatus("pending"), [filterByStatus]);
   const inactiveModules = useMemo(() => filterByStatus("inactive"), [filterByStatus]);
 

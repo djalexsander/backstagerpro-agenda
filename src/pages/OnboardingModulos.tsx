@@ -281,7 +281,6 @@ export default function OnboardingModulos() {
                                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                                   {mod.capacidade_extra_usuarios > 0 && <span>+{mod.capacidade_extra_usuarios} usuários</span>}
                                   {mod.capacidade_extra_eventos > 0 && <span>+{mod.capacidade_extra_eventos} eventos</span>}
-                                  {Number(mod.capacidade_extra_storage) > 0 && <span>+{Number(mod.capacidade_extra_storage)} GB</span>}
                                 </div>
                               )}
                             </div>

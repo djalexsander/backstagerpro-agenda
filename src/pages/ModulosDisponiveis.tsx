@@ -389,7 +389,6 @@ export default function ModulosDisponiveis() {
                               <div className="text-xs text-muted-foreground space-y-0.5">
                                 {mod.capacidade_extra_usuarios > 0 && <p>+{mod.capacidade_extra_usuarios} usuários</p>}
                                 {mod.capacidade_extra_eventos > 0 && <p>+{mod.capacidade_extra_eventos} eventos</p>}
-                                {Number(mod.capacidade_extra_storage) > 0 && <p>+{Number(mod.capacidade_extra_storage)} GB storage</p>}
                               </div>
                             )}
                           </CardContent>

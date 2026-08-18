@@ -60,7 +60,7 @@ describe("commercial capacity extras", () => {
     expect(result).toMatchObject({
       maxEventos: 70,
       maxUsuarios: 25,
-      storageLimitGb: 5,
+      storageLimitGb: null,
     });
     expect(eventCatalog.valor).toBe(49.9);
     expect(userCatalog.valor).toBe(39.9);
@@ -77,7 +77,8 @@ describe("commercial capacity extras", () => {
       id: "storage",
       featureKey: "extra_storage",
       storage: 100,
-      active: false,
+      // Defense in depth: even stale data claiming it is active is hidden.
+      active: true,
     });
 
     const available = getSelfServiceAvailableModules({

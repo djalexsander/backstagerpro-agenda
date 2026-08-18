@@ -14,3 +14,17 @@ export function isCompanyModuleAccessible({
     && (isLifetime || activeEntitlementFeatureKeys.has(featureKey))
   );
 }
+
+export function isCustomerVisibleActiveEntitlement({
+  status,
+  catalog,
+}: {
+  status: string;
+  catalog: { ativo: boolean; feature_key: string } | null;
+}): boolean {
+  return (
+    status === "active"
+    && catalog?.ativo === true
+    && catalog.feature_key !== "extra_storage"
+  );
+}

@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { computeConsolidatedCapabilities } from "@/lib/plan-helpers";
-import type { SubscriptionSummary, PlanCapabilities } from "@/types/subscription";
+import type { SubscriptionSummary } from "@/types/subscription";
 import { useMemo } from "react";
 import type { Tables } from "@/integrations/supabase/types";
 import { isLifetimePlan } from "@/lib/subscription-license";
@@ -90,6 +90,7 @@ export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boo
       valorTotal: valorBase + valorModulos,
       capabilities,
       vencimento: isLifetime ? null : empresa?.vencimento ?? null,
+      trialExpiresAt: empresa?.trial_expires_at ?? null,
       isOnTrial,
       isLifetime,
       isExpired,

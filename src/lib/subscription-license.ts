@@ -89,3 +89,80 @@ export function getSubscriptionLimitLabel(
   if (lifetime || value == null) return "Ilimitado";
   return String(value);
 }
+
+export interface CustomerPlanPresentationInput {
+  plan: (SubscriptionPlanLike & { nome?: string | null; valor?: number | null }) | null;
+  isOnTrial: boolean;
+  isLifetime: boolean;
+  isExpired: boolean;
+  isReadOnly: boolean;
+  trialExpiresAt?: string | null;
+}
+
+export interface CustomerPlanPresentation {
+  name: string;
+  type: "Mensal" | "Anual" | "Vitalício" | "Trial" | "Sem plano";
+  status: "Ativo" | "Expirado" | "Bloqueado" | "Sem plano";
+  chargeLabel: string;
+  trialExpiresAt: string | null;
+}
+
+/**
+ * Keeps plan identity, access status and billing semantics separate in the
+ * customer-facing subscription area.
+ */
+export function getCustomerPlanPresentation({
+  plan,
+  isOnTrial,
+  isLifetime,
+  isExpired,
+  isReadOnly,
+  trialExpiresAt = null,
+}: CustomerPlanPresentationInput): CustomerPlanPresentation {
+  const status = isExpired
+    ? "Expirado"
+    : isReadOnly
+      ? "Bloqueado"
+      : plan || isOnTrial
+        ? "Ativo"
+        : "Sem plano";
+
+  if (isOnTrial) {
+    return {
+      name: "Trial",
+      type: "Trial",
+      status,
+      chargeLabel: "Sem cobrança durante o teste",
+      trialExpiresAt,
+    };
+  }
+
+  if (isLifetime) {
+    return {
+      name: plan?.nome || "Vitalícia",
+      type: "Vitalício",
+      status,
+      chargeLabel: "Sem cobrança mensal",
+      trialExpiresAt: null,
+    };
+  }
+
+  if (!plan) {
+    return {
+      name: "Nenhum plano associado",
+      type: "Sem plano",
+      status,
+      chargeLabel: "Sem cobrança",
+      trialExpiresAt: null,
+    };
+  }
+
+  const isAnnual = plan.periodicidade === "anual";
+  return {
+    name: plan.nome || "Plano",
+    type: isAnnual ? "Anual" : "Mensal",
+    status,
+    chargeLabel: `R$ ${Number(plan.valor || 0).toFixed(2)}/${isAnnual ? "ano" : "mês"}`,
+    trialExpiresAt: null,
+  };
+}

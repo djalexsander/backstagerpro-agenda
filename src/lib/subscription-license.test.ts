@@ -4,6 +4,7 @@ import {
   ensureSingleCommercialBasePlan,
   getSubscriptionLimitLabel,
   getSubscriptionValueLabel,
+  getCustomerPlanPresentation,
   isCommercialBasePlan,
   isLifetimePlan,
 } from "@/lib/subscription-license";
@@ -23,6 +24,54 @@ describe("lifetime subscription helpers", () => {
     expect(
       getSubscriptionValueLabel({ periodicidade: "mensal" }, 99.9),
     ).toBe("R$ 99.90");
+  });
+
+  it("presents a monthly customer plan with its recurring value", () => {
+    expect(getCustomerPlanPresentation({
+      plan: { nome: "Plano Base", periodicidade: "mensal", valor: 99.9 },
+      isOnTrial: false,
+      isLifetime: false,
+      isExpired: false,
+      isReadOnly: false,
+    })).toMatchObject({
+      name: "Plano Base",
+      type: "Mensal",
+      status: "Ativo",
+      chargeLabel: "R$ 99.90/mês",
+    });
+  });
+
+  it("keeps the lifetime area active without a fictitious monthly charge", () => {
+    expect(getCustomerPlanPresentation({
+      plan: { nome: "Vitalícia", periodicidade: "vitalicio", valor: 499.9 },
+      isOnTrial: false,
+      isLifetime: true,
+      isExpired: false,
+      isReadOnly: false,
+    })).toEqual({
+      name: "Vitalícia",
+      type: "Vitalício",
+      status: "Ativo",
+      chargeLabel: "Sem cobrança mensal",
+      trialExpiresAt: null,
+    });
+  });
+
+  it("shows trial status and deadline independently from a paid plan", () => {
+    expect(getCustomerPlanPresentation({
+      plan: null,
+      isOnTrial: true,
+      isLifetime: false,
+      isExpired: false,
+      isReadOnly: false,
+      trialExpiresAt: "2026-08-24T00:00:00Z",
+    })).toEqual({
+      name: "Trial",
+      type: "Trial",
+      status: "Ativo",
+      chargeLabel: "Sem cobrança durante o teste",
+      trialExpiresAt: "2026-08-24T00:00:00Z",
+    });
   });
 
   it("presents lifetime capacities as unlimited", () => {

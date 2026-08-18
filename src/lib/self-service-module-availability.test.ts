@@ -4,7 +4,11 @@ import {
   doesCompanyModuleBlockPurchase,
   validateModuleDependenciesForActivation,
 } from "./company-module-entitlements";
-import { getSelfServiceAvailableModules } from "./self-service-module-availability";
+import {
+  getSelfServiceAvailableModules,
+  getLifetimeLicensedCatalogModules,
+  getSelfServiceModulesInProgress,
+} from "./self-service-module-availability";
 
 const companyA = "company-a";
 const companyB = "company-b";
@@ -109,6 +113,31 @@ describe("self-service module availability", () => {
     })).not.toContain("gestao_materiais");
   });
 
+  it("exposes a pending module once with the most advanced customer status", () => {
+    expect(getSelfServiceModulesInProgress({
+      companyId: companyA,
+      catalog,
+      companyModules: [],
+      moduleRequests: [{ empresa_id: companyA, module_id: "addon", status: "pending" }],
+      batchRequests: [],
+      modulePayments: [{ empresa_id: companyA, module_id: "addon", status: "paid" }],
+    })).toEqual([{
+      module: catalog[1],
+      status: "payment_confirmed",
+    }]);
+  });
+
+  it("does not leak another company's pending module into the customer view", () => {
+    expect(getSelfServiceModulesInProgress({
+      companyId: companyA,
+      catalog,
+      companyModules: [{ empresa_id: companyB, module_id: "materials", status: "pending" }],
+      moduleRequests: [],
+      batchRequests: [],
+      modulePayments: [],
+    })).toEqual([]);
+  });
+
   it("allows a new purchase after rejected or cancelled commercial states", () => {
     expect(available({
       moduleRequests: [{ empresa_id: companyA, module_id: "addon", status: "rejected" }],
@@ -177,6 +206,24 @@ describe("self-service module availability", () => {
       "gestao_materiais",
       "documentos_avancados",
       "rfid_materiais",
+    ]);
+  });
+
+  it("never offers extra_storage even if stale catalog data marks it active", () => {
+    expect(available({
+      catalog: [catalogModule("storage", "extra_storage")],
+    })).toEqual([]);
+  });
+
+  it("lists concrete lifetime modules without exposing inactive or storage products", () => {
+    expect(getLifetimeLicensedCatalogModules([
+      catalogModule("events", "extra_eventos"),
+      catalogModule("users", "extra_usuarios"),
+      catalogModule("storage", "extra_storage"),
+      { ...catalogModule("disabled", "disabled_feature"), ativo: false },
+    ]).map((module) => module.feature_key)).toEqual([
+      "extra_eventos",
+      "extra_usuarios",
     ]);
   });
 });

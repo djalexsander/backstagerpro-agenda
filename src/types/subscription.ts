@@ -49,7 +49,7 @@ export interface PlanCapabilities {
   /** null = ilimitado */
   maxUsuarios: number | null;
   maxEventos: number | null;
-  /** Em GB */
+  /** Compatibilidade de schema; null enquanto não houver medição real. */
   storageLimitGb: number | null;
   /** feature_keys de módulos de funcionalidade ativos */
   activeFeatures: string[];
@@ -76,6 +76,8 @@ export interface SubscriptionSummary {
   capabilities: PlanCapabilities;
   /** Vencimento do plano */
   vencimento: string | null;
+  /** Fim do período de teste, quando a empresa ainda não possui plano */
+  trialExpiresAt: string | null;
   /** Se a empresa está em trial */
   isOnTrial: boolean;
   isLifetime: boolean;

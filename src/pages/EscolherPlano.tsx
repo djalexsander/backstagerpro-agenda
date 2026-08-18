@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Music, Calendar, Users, HardDrive, Gift, CreditCard, CheckCircle, Sparkles, Shield, Zap } from "lucide-react";
+import { Music, Calendar, Users, Gift, CreditCard, CheckCircle, Sparkles, Shield, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 import { ensureSingleCommercialBasePlan } from "@/lib/subscription-license";
@@ -204,10 +204,6 @@ export default function EscolherPlano() {
                     <div className="flex items-center gap-2.5 text-sm">
                       <Users className="h-4 w-4 text-primary shrink-0" />
                       <span><strong>{plano.max_usuarios ?? "∞"}</strong> usuários</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 text-sm">
-                      <HardDrive className="h-4 w-4 text-primary shrink-0" />
-                      <span><strong>{(plano as any).storage_limit ?? 5}GB</strong> armazenamento</span>
                     </div>
                     <div className="flex items-center gap-2.5 text-sm">
                       <Shield className="h-4 w-4 text-primary shrink-0" />

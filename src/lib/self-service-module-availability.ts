@@ -25,7 +25,7 @@ interface ModuleBatchState {
   module_batch_request_items?: Array<{ module_id: string }> | null;
 }
 
-interface SelfServiceModuleAvailabilityInput {
+export interface SelfServiceModuleAvailabilityInput {
   companyId: string | null | undefined;
   catalog: ModuleCatalogRow[];
   companyModules: CompanyModuleState[];
@@ -37,6 +37,80 @@ interface SelfServiceModuleAvailabilityInput {
 const BLOCKING_REQUEST_STATUSES = new Set(["pending"]);
 const BLOCKING_BATCH_STATUSES = new Set(["pending", "paid"]);
 const BLOCKING_PAYMENT_STATUSES = new Set(["pending", "paid"]);
+
+export function getLifetimeLicensedCatalogModules(
+  catalog: ModuleCatalogRow[],
+): ModuleCatalogRow[] {
+  return catalog.filter(
+    (module) => module.ativo && module.feature_key !== "extra_storage",
+  );
+}
+
+export type SelfServiceModuleProgressStatus =
+  | "activation_pending"
+  | "payment_confirmed"
+  | "payment_pending"
+  | "request_pending";
+
+export interface SelfServiceModuleProgress {
+  module: ModuleCatalogRow;
+  status: SelfServiceModuleProgressStatus;
+}
+
+const PROGRESS_PRIORITY: Record<SelfServiceModuleProgressStatus, number> = {
+  request_pending: 1,
+  payment_pending: 2,
+  payment_confirmed: 3,
+  activation_pending: 4,
+};
+
+/** Returns each in-flight module once, scoped to the current company. */
+export function getSelfServiceModulesInProgress({
+  companyId,
+  catalog,
+  companyModules,
+  moduleRequests,
+  batchRequests,
+  modulePayments,
+}: SelfServiceModuleAvailabilityInput): SelfServiceModuleProgress[] {
+  if (!companyId) return [];
+
+  const states = new Map<string, SelfServiceModuleProgressStatus>();
+  const setState = (moduleId: string, status: SelfServiceModuleProgressStatus) => {
+    const current = states.get(moduleId);
+    if (!current || PROGRESS_PRIORITY[status] > PROGRESS_PRIORITY[current]) {
+      states.set(moduleId, status);
+    }
+  };
+
+  companyModules
+    .filter((row) => row.empresa_id === companyId && row.status === "pending")
+    .forEach((row) => setState(row.module_id, "activation_pending"));
+
+  moduleRequests
+    .filter((row) => row.empresa_id === companyId && row.status === "pending")
+    .forEach((row) => setState(row.module_id, "request_pending"));
+
+  modulePayments
+    .filter((row) => row.empresa_id === companyId && BLOCKING_PAYMENT_STATUSES.has(row.status))
+    .forEach((row) => setState(
+      row.module_id,
+      row.status === "paid" ? "payment_confirmed" : "payment_pending",
+    ));
+
+  batchRequests
+    .filter((row) => row.empresa_id === companyId && BLOCKING_BATCH_STATUSES.has(row.status))
+    .forEach((row) => {
+      (row.module_batch_request_items || []).forEach((item) => setState(
+        item.module_id,
+        row.status === "paid" ? "payment_confirmed" : "request_pending",
+      ));
+    });
+
+  return catalog
+    .filter((module) => module.feature_key !== "extra_storage" && states.has(module.id))
+    .map((module) => ({ module, status: states.get(module.id)! }));
+}
 
 /**
  * Applies the existing entitlement state machine to the self-service catalog.
@@ -76,5 +150,10 @@ export function getSelfServiceAvailableModules({
       });
     });
 
-  return catalog.filter((module) => module.ativo && !unavailableModuleIds.has(module.id));
+  return catalog.filter(
+    (module) =>
+      module.ativo
+      && module.feature_key !== "extra_storage"
+      && !unavailableModuleIds.has(module.id),
+  );
 }

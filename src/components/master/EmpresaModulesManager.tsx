@@ -790,7 +790,6 @@ export function EmpresaModulesManager({
                       <div className="flex gap-3 pt-1">
                         {mod.capacidade_extra_usuarios > 0 && <span>+{mod.capacidade_extra_usuarios} usuários</span>}
                         {mod.capacidade_extra_eventos > 0 && <span>+{mod.capacidade_extra_eventos} eventos</span>}
-                        {mod.capacidade_extra_storage > 0 && <span>+{mod.capacidade_extra_storage}GB</span>}
                       </div>
                     )}
                   </CardContent>
