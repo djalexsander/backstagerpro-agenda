@@ -1,7 +1,16 @@
 // Backup utility functions: validation, normalization, types
 import type { Tables } from "@/integrations/supabase/types";
 
-export const BACKUP_VERSION = "1.0";
+// 1.1 adds clientes/funcionarios/event_funcionarios/event_checklist_items/
+// document_templates/generated_documents (P1-10: the backup used to only
+// cover events/event_days/event_files/financials). The six new collections
+// are optional on BackupData on purpose: a payload produced by an older
+// client, or normalized from a legacy export, simply omits them, and
+// restore_company_backup treats an absent key as "leave this table
+// untouched" rather than "restore to empty". Never default a missing new
+// collection to `[]` anywhere in this file - that would silently turn into
+// a destructive wipe for old backups once sent to the RPC.
+export const BACKUP_VERSION = "1.1";
 export const BACKUP_SYSTEM = "Backstage Pro";
 export const MAX_AUTO_BACKUPS = 10;
 export const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -20,7 +29,26 @@ export interface BackupData {
   event_days: Tables<"event_days">[];
   event_files: Tables<"event_files">[];
   financials: Tables<"financials">[];
+  // Present on every backup created from this version onward. Optional in
+  // the type only to accept payloads restored/imported from before 1.1.
+  clientes?: Tables<"clientes">[];
+  funcionarios?: Tables<"funcionarios">[];
+  event_funcionarios?: Tables<"event_funcionarios">[];
+  event_checklist_items?: Tables<"event_checklist_items">[];
+  document_templates?: Tables<"document_templates">[];
+  generated_documents?: Tables<"generated_documents">[];
 }
+
+/** Collection keys added in 1.1. Kept in one place so normalize/validate/
+ * restore-payload-building stay in sync when a future version adds more. */
+const OPTIONAL_COLLECTION_KEYS = [
+  "clientes",
+  "funcionarios",
+  "event_funcionarios",
+  "event_checklist_items",
+  "document_templates",
+  "generated_documents",
+] as const satisfies readonly (keyof BackupData)[];
 
 export interface BackupPayload {
   versao: string;
@@ -29,7 +57,8 @@ export interface BackupPayload {
   data: BackupData;
 }
 
-// Legacy format (pre-refactor)
+// Legacy format (pre-refactor). Never had any of the 1.1 collections, so
+// there is nothing to add for them here - they simply stay absent.
 interface LegacyPayload {
   empresa_id?: string;
   data_backup?: string;
@@ -45,17 +74,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Normalizes any backup payload (legacy or new) into the current format.
+ * A 1.0 payload (legacy, or already-versioned but predating 1.1) simply has
+ * no 'clientes'/'funcionarios'/etc. keys under data - that absence is left
+ * as-is here (never backfilled to `[]`) so restore_company_backup can tell
+ * "nothing to restore" apart from "this table isn't in this backup".
  */
 export function normalizeBackup(
   raw: unknown,
   fallbackEmpresaId?: string,
 ): BackupPayload {
-  // Already in new format
+  // Already in new format (1.0 or 1.1 - both have versao/meta/data)
   if (isRecord(raw) && raw.versao && raw.meta && raw.data) {
     return raw as unknown as BackupPayload;
   }
 
-  // Legacy format conversion
+  // Legacy (pre-versioning) format conversion
   const legacy = (isRecord(raw) ? raw : {}) as LegacyPayload;
   return {
     versao: BACKUP_VERSION,
@@ -80,7 +113,8 @@ export interface ValidationResult {
 }
 
 /**
- * Validates a backup payload structure.
+ * Validates a backup payload structure. The 1.1 collections are optional:
+ * a backup predating this version is still valid without them.
  */
 export function validateBackup(payload: unknown): ValidationResult {
   const errors: string[] = [];
@@ -105,20 +139,37 @@ export function validateBackup(payload: unknown): ValidationResult {
     if (!Array.isArray(normalized.data.event_days)) errors.push("'data.event_days' não é um array.");
     if (!Array.isArray(normalized.data.event_files)) errors.push("'data.event_files' não é um array.");
     if (!Array.isArray(normalized.data.financials)) errors.push("'data.financials' não é um array.");
+
+    for (const key of OPTIONAL_COLLECTION_KEYS) {
+      const value = normalized.data[key];
+      if (value !== undefined && !Array.isArray(value)) {
+        errors.push(`'data.${key}' não é um array.`);
+      }
+    }
   }
 
   return { valid: errors.length === 0, errors };
 }
 
 /**
- * Returns a summary of the backup contents for preview.
+ * Returns a summary of the backup contents for preview. A 1.1 collection
+ * absent from an older backup shows as `null`, not `0`, so the preview UI
+ * can say "not included in this backup" instead of implying it was empty.
  */
 export function getBackupSummary(payload: BackupPayload) {
+  const optional = Object.fromEntries(
+    OPTIONAL_COLLECTION_KEYS.map((key) => [
+      key,
+      payload.data[key] !== undefined ? (payload.data[key]?.length ?? 0) : null,
+    ]),
+  ) as Record<(typeof OPTIONAL_COLLECTION_KEYS)[number], number | null>;
+
   return {
     eventos: payload.data.eventos?.length ?? 0,
     eventDays: payload.data.event_days?.length ?? 0,
     eventFiles: payload.data.event_files?.length ?? 0,
     financials: payload.data.financials?.length ?? 0,
+    ...optional,
   };
 }
 
@@ -144,6 +195,21 @@ export function buildBackupPayload(
     },
     data,
   };
+}
+
+/**
+ * Forces empresa_id onto every item of an optional collection, preserving
+ * `undefined` when the collection itself is absent from the payload - an
+ * absent collection must stay absent all the way to the RPC call, never
+ * become `[]`, or restore_company_backup would treat it as "restore this
+ * table to empty" instead of "this backup doesn't cover this table".
+ */
+function withForcedEmpresaId<T extends { empresa_id?: string | null }>(
+  items: T[] | undefined,
+  empresaId: string,
+): T[] | undefined {
+  if (items === undefined) return undefined;
+  return items.map((item) => ({ ...item, empresa_id: empresaId }));
 }
 
 /**
@@ -195,6 +261,12 @@ export function prepareBackupForRestore(
         ...financial,
         empresa_id: empresaId,
       })),
+      clientes: withForcedEmpresaId(normalized.data.clientes, empresaId),
+      funcionarios: withForcedEmpresaId(normalized.data.funcionarios, empresaId),
+      event_funcionarios: withForcedEmpresaId(normalized.data.event_funcionarios, empresaId),
+      event_checklist_items: withForcedEmpresaId(normalized.data.event_checklist_items, empresaId),
+      document_templates: withForcedEmpresaId(normalized.data.document_templates, empresaId),
+      generated_documents: withForcedEmpresaId(normalized.data.generated_documents, empresaId),
     },
   };
 }

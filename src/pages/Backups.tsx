@@ -186,6 +186,10 @@ export default function Backups() {
             Backups
           </h1>
           <p className="text-muted-foreground mt-1">Gerencie backups dos dados da sua empresa.</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+            Cobre eventos, financeiro de eventos, clientes, funcionários, equipe e checklist de cada evento, e documentos/contratos.
+            Anexos e fotos (riders, logos etc.) são incluídos apenas pela referência salva no banco — o arquivo em si permanece no armazenamento e não é copiado por este backup.
+          </p>
         </div>
       </div>
 
@@ -245,7 +249,7 @@ export default function Backups() {
               <Plus className="h-5 w-5 text-primary" />
               Backup Manual
             </CardTitle>
-            <CardDescription>Gere um backup completo agora.</CardDescription>
+            <CardDescription>Gere um backup agora.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button
@@ -432,6 +436,29 @@ export default function Backups() {
                     <p>• {importPreview.summary.eventDays} dia(s) de evento</p>
                     <p>• {importPreview.summary.eventFiles} arquivo(s)</p>
                     <p>• {importPreview.summary.financials} registro(s) financeiro(s)</p>
+                    {importPreview.summary.clientes !== null && (
+                      <p>• {importPreview.summary.clientes} cliente(s)</p>
+                    )}
+                    {importPreview.summary.funcionarios !== null && (
+                      <p>• {importPreview.summary.funcionarios} funcionário(s)</p>
+                    )}
+                    {importPreview.summary.event_funcionarios !== null && (
+                      <p>• {importPreview.summary.event_funcionarios} vínculo(s) de equipe em eventos</p>
+                    )}
+                    {importPreview.summary.event_checklist_items !== null && (
+                      <p>• {importPreview.summary.event_checklist_items} item(ns) de checklist</p>
+                    )}
+                    {importPreview.summary.document_templates !== null && (
+                      <p>• {importPreview.summary.document_templates} modelo(s) de documento</p>
+                    )}
+                    {importPreview.summary.generated_documents !== null && (
+                      <p>• {importPreview.summary.generated_documents} documento(s) gerado(s)</p>
+                    )}
+                    {importPreview.summary.clientes === null && (
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Este backup é de uma versão anterior: clientes, funcionários, equipe/checklist de evento e documentos não estão incluídos e não serão alterados pela restauração.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
