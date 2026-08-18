@@ -8,8 +8,11 @@ vi.mock("./printer-service", () => ({
 // human-readable value under the bars - jsdom has none (same gap as
 // html2canvas). Mocked minimally so barcode-inclusion logic stays
 // testable without needing the `canvas` native package as a test dep.
+// Respects `displayValue` (unlike a fixed always-add-text stub) since
+// renderLabelMarkup's own displayValue-by-height decision is under test.
 vi.mock("jsbarcode", () => ({
-  default: (svg: SVGElement, value: string) => {
+  default: (svg: SVGElement, value: string, options?: { displayValue?: boolean }) => {
+    if (options?.displayValue === false) return;
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.textContent = value;
     svg.appendChild(text);
@@ -17,7 +20,7 @@ vi.mock("jsbarcode", () => ({
 }));
 
 import type { BobinaPrintProfile } from "./label-layout-engine";
-import { buildBobinaPrintHtml, buildLabelPrintHtml, printBobinaTestPage, printLabelBatch, renderLabelMarkup } from "./material-label-print";
+import { buildBobinaPrintHtml, buildLabelContentCss, buildLabelPrintHtml, printBobinaTestPage, printLabelBatch, renderLabelMarkup } from "./material-label-print";
 import type { LabelMaterialSnapshot, LabelModelSnapshot, LabelPrintBatch } from "./material-label-types";
 
 const model: LabelModelSnapshot = {
@@ -60,6 +63,73 @@ describe("renderLabelMarkup", () => {
     const html = renderLabelMarkup(modelWithLocation, material); // localizacao is null
     expect(html).toContain("Furadeira");
     expect(html).not.toContain("Localiza"); // label for the skipped empty field never appears
+  });
+
+  it("shows a clear, safe marker instead of a barcode when the material has no codigo_barras - never invents one", () => {
+    const barcodeOnlyModel: LabelModelSnapshot = { ...model, tipo_identificacao: "codigo_barras" };
+    const materialWithoutBarcode: LabelMaterialSnapshot = { ...material, codigo_barras: null };
+    const html = renderLabelMarkup(barcodeOnlyModel, materialWithoutBarcode);
+    expect(html).not.toContain("<svg");
+    expect(html).toContain("Sem identificação");
+    expect(html).not.toContain(material.identificador_unico); // no UUID fallback either
+  });
+
+  it("shows the same safe marker instead of a QR when the material has no conteudo_qr_code", () => {
+    const qrOnlyModel: LabelModelSnapshot = { ...model, tipo_identificacao: "qr_code" };
+    const materialWithoutQr: LabelMaterialSnapshot = { ...material, conteudo_qr_code: null };
+    const html = renderLabelMarkup(qrOnlyModel, materialWithoutQr);
+    expect(html).not.toContain("<svg");
+    expect(html).toContain("Sem identificação");
+  });
+
+  it("marks only the missing side of a combined model, still rendering the code that IS available", () => {
+    const combinedModel: LabelModelSnapshot = { ...model, tipo_identificacao: "ambos" };
+    const materialWithOnlyQr: LabelMaterialSnapshot = { ...material, codigo_barras: null };
+    const html = renderLabelMarkup(combinedModel, materialWithOnlyQr);
+    expect(html).toContain("<svg"); // the QR still renders
+    expect(html).toContain("Sem identificação"); // the missing barcode is flagged, not silently dropped
+  });
+
+  it("shows the barcode's human-readable text on a label tall enough to fit it", () => {
+    const tallModel: LabelModelSnapshot = { ...model, tipo_identificacao: "codigo_barras", altura_mm: 40 };
+    expect(renderLabelMarkup(tallModel, material)).toContain("<text");
+  });
+
+  it("omits the barcode's human-readable text on a label too short to fit it legibly, keeping a scannable barcode", () => {
+    const shortModel: LabelModelSnapshot = { ...model, tipo_identificacao: "codigo_barras", altura_mm: 10 };
+    const html = renderLabelMarkup(shortModel, material);
+    expect(html).toContain("<svg");
+    expect(html).not.toContain("<text");
+  });
+});
+
+describe("buildLabelContentCss", () => {
+  it("stacks QR above Code 128 (column) when the codes column is taller than it is wide", () => {
+    const tallModel: LabelModelSnapshot = { ...model, largura_mm: 40, altura_mm: 60 };
+    const css = buildLabelContentCss(tallModel);
+    expect(css).toContain("flex-direction: column");
+    expect(css).toContain("max-width: 100%; max-height: 48%;");
+  });
+
+  it("places QR and Code 128 side by side (row) when the codes column is wider than it is tall", () => {
+    const wideModel: LabelModelSnapshot = { ...model, largura_mm: 100, altura_mm: 30 };
+    const css = buildLabelContentCss(wideModel);
+    expect(css).toContain("flex-direction: row");
+    expect(css).toContain("max-width: 48%; max-height: 100%;");
+  });
+
+  it("emits bare selectors by default (the print path's isolated documents never need scoping)", () => {
+    const css = buildLabelContentCss(model);
+    expect(css).toContain(".label {");
+    expect(css).not.toContain("undefined .label");
+  });
+
+  it("namespaces every selector under the given scope, for safe injection into a shared DOM", () => {
+    const css = buildLabelContentCss(model, "#label-preview-abc");
+    expect(css).toContain("#label-preview-abc .label {");
+    expect(css).toContain("#label-preview-abc .codes {");
+    expect(css).toContain("#label-preview-abc .fields {");
+    expect(css).not.toMatch(/(?<!#label-preview-abc )\.label \{/);
   });
 });
 
@@ -230,6 +300,71 @@ describe("printLabelBatch with a multi-column bobina profile", () => {
       expect(jobs[0].rasterScale).toBeCloseTo(expectedScale, 5);
     },
   );
+
+  const threeColumnProfile: BobinaPrintProfile = { ...twoColumnProfile, colunas: 3 };
+
+  it("composes 3 distinct items into a single row on a 3-column bobina without breaking", async () => {
+    const batch = batchFromItems([
+      { material: productA, quantity: 1 }, { material: productB, quantity: 1 }, { material: productC, quantity: 1 },
+    ]);
+    await printLabelBatch("company-1", batch, undefined, threeColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].html.match(/class="label"/g)).toHaveLength(3);
+    expect(jobs[0].html.indexOf("Produto A")).toBeLessThan(jobs[0].html.indexOf("Produto B"));
+    expect(jobs[0].html.indexOf("Produto B")).toBeLessThan(jobs[0].html.indexOf("Produto C"));
+  });
+
+  it("pads the last row with empty cells for an odd quantity across multiple 3-column rows", async () => {
+    const batch = batchFromItems([
+      { material: productA, quantity: 1 }, { material: productB, quantity: 1 },
+      { material: productC, quantity: 1 }, { material: productD, quantity: 1 },
+    ]);
+    await printLabelBatch("company-1", batch, undefined, threeColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
+    expect(jobs).toHaveLength(2); // [A,B,C] then [D, empty, empty]
+    expect(jobs[0].html.match(/class="label"/g)).toHaveLength(3);
+    expect(jobs[1].html).toContain("Produto D");
+    expect(jobs[1].html.match(/class="label"/g)).toHaveLength(1);
+  });
+
+  it("never swaps a material's own identifier with a neighbor's when rasterizing a multi-column batch", async () => {
+    const withCode = (id: string, name: string, barcode: string, qr: string): LabelMaterialSnapshot => ({
+      ...material, id, nome: name, codigo_barras: barcode, conteudo_qr_code: qr,
+    });
+    const alpha = withCode("alpha", "Alpha", "1111111111", "QR-ALPHA");
+    const beta = withCode("beta", "Beta", "2222222222", "QR-BETA");
+    const gamma = withCode("gamma", "Gamma", "3333333333", "QR-GAMMA");
+    const combinedModel: LabelModelSnapshot = { ...model, tipo_identificacao: "codigo_barras" };
+    const batch: LabelPrintBatch = {
+      id: "batch-ids", modelo_id: combinedModel.id, modelo_snapshot: combinedModel,
+      quantidade_materiais: 3, quantidade_etiquetas: 3, solicitada_em: "2026-01-01T00:00:00Z",
+      solicitante_nome: "Tester", reimpressao_de_id: null,
+      itens: [
+        { id: "item-gamma", solicitacao_id: "batch-ids", material_id: gamma.id, ordem: 2, quantidade: 1, material_snapshot: gamma },
+        { id: "item-alpha", solicitacao_id: "batch-ids", material_id: alpha.id, ordem: 0, quantidade: 1, material_snapshot: alpha },
+        { id: "item-beta", solicitacao_id: "batch-ids", material_id: beta.id, ordem: 1, quantidade: 1, material_snapshot: beta },
+      ],
+    };
+    await printLabelBatch("company-1", batch, undefined, threeColumnProfile);
+    const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
+    expect(jobs).toHaveLength(1);
+    const html = jobs[0].html;
+    // Each material's own name must appear closer to its own barcode value
+    // than to either sibling's - proves the row was built by zipping
+    // name+code from the SAME item, not two independently-ordered lists.
+    for (const [name, code] of [["Alpha", "1111111111"], ["Beta", "2222222222"], ["Gamma", "3333333333"]] as const) {
+      const nameIndex = html.indexOf(name);
+      const codeIndex = html.indexOf(code);
+      expect(nameIndex).toBeGreaterThanOrEqual(0);
+      expect(codeIndex).toBeGreaterThanOrEqual(0);
+      const distanceToOwnCode = Math.abs(nameIndex - codeIndex);
+      for (const [otherName, otherCode] of [["Alpha", "1111111111"], ["Beta", "2222222222"], ["Gamma", "3333333333"]] as const) {
+        if (otherName === name) continue;
+        expect(distanceToOwnCode).toBeLessThan(Math.abs(nameIndex - html.indexOf(otherCode)));
+      }
+    }
+  });
 });
 
 describe("buildBobinaPrintHtml (web/browser multi-row document)", () => {

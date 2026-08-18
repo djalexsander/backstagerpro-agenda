@@ -34,7 +34,14 @@ vi.mock("@/lib/bobina-profile-service", async (importOriginal) => ({
   listBobinaProfiles: listBobinaProfilesMock,
 }));
 vi.mock("@/lib/material-label-service", () => ({ registerLabelPrintBatch: registerLabelPrintBatchMock }));
-vi.mock("@/lib/material-label-print", () => ({
+// renderLabelMarkup/buildLabelContentCss are left real (pure, no side
+// effects) - LabelCanvas's on-screen preview now calls them directly (same
+// function as the real print path, see material-label-print.tsx), so a full
+// module mock would break the preview. Only printLabelBatch, the actual
+// GDI/iframe dispatch, is mocked - same "mock the lowest boundary" approach
+// as bobina-profile-service below.
+vi.mock("@/lib/material-label-print", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/material-label-print")>()),
   printLabelBatch: printLabelBatchMock,
 }));
 
@@ -83,7 +90,10 @@ const fakeRecord: LabelPrintBatch = {
   }],
 };
 
-function renderDialog(overrides?: Partial<{ onPrinted: () => Promise<void>; onOpenChange: (open: boolean) => void }>) {
+function renderDialog(overrides?: Partial<{
+  onPrinted: () => Promise<void>; onOpenChange: (open: boolean) => void;
+  model: LabelModel; items: LabelBatchSelection[];
+}>) {
   const onPrinted = overrides?.onPrinted ?? vi.fn().mockResolvedValue(undefined);
   const onOpenChange = overrides?.onOpenChange ?? vi.fn();
   const rendered = render(
@@ -93,8 +103,8 @@ function renderDialog(overrides?: Partial<{ onPrinted: () => Promise<void>; onOp
         onOpenChange={onOpenChange}
         companyId="company-1"
         companyName="Empresa X"
-        model={model}
-        items={items}
+        model={overrides?.model ?? model}
+        items={overrides?.items ?? items}
         onPrinted={onPrinted}
       />
     </QueryClientProvider>,
@@ -193,6 +203,25 @@ describe("LabelPrintDialog", () => {
     const secondUuid = registerLabelPrintBatchMock.mock.calls[1][1].clientUuid;
 
     expect(secondUuid).toBe(firstUuid);
+  });
+
+  it("blocks printing and shows a clear warning when a batch item lacks the identifier the model needs", async () => {
+    isDesktopRuntimeMock.mockReturnValue(false);
+    // Etiquetas.tsx normally can't produce this combination (it blocks
+    // adding a material the *currently selected* model can't identify), but
+    // switching models after items were already added isn't retroactive -
+    // this is exactly that gap, exercised directly against the dialog.
+    const barcodeOnlyModel: LabelModel = { ...model, tipo_identificacao: "codigo_barras" };
+    const materialWithoutBarcode: LabelMaterial = { ...material, codigo_barras: null };
+    renderDialog({ model: barcodeOnlyModel, items: [{ material: materialWithoutBarcode, quantity: 1 }] });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/código de barras/i);
+    expect(screen.getByRole("button", { name: /registrar lote e imprimir/i })).toBeDisabled();
+
+    clickPrint();
+
+    expect(registerLabelPrintBatchMock).not.toHaveBeenCalled();
+    expect(printLabelBatchMock).not.toHaveBeenCalled();
   });
 });
 

@@ -21,18 +21,60 @@ function escapeHtml(value: unknown) {
   })[character]!);
 }
 
-function barcodeMarkup(value: string) {
+// Single canonical intrinsic-size formula for the code SVGs, used by every
+// rendering path (preview and real print alike - section 11 of the request
+// that produced this: "preview e impressão real devem usar a MESMA função de
+// renderização"). Before this, LabelCanvas.tsx (preview) and this module
+// (real print) each hardcoded their own slightly different multipliers
+// (2.5/1.5 vs 3/1.8, barcode height 34/10 vs 42/11), so what an operator
+// previewed didn't quite match what got rasterized. The exact multiplier
+// barely matters for final on-screen/print size - buildLabelContentCss's
+// `.codes svg { max-width/max-height }` is what actually clamps the visible
+// result - but it does need to be big enough that CODE128's bars and the QR
+// modules aren't generated at a source resolution too small to stay crisp
+// once html2canvas rasterizes at the bobina's DPI-derived scale.
+function qrIntrinsicSizePx(model: Pick<LabelModelSnapshot, "altura_mm" | "largura_mm">) {
+  return Math.min(model.altura_mm * 3, model.largura_mm * 1.8);
+}
+
+// A barcode's human-readable value is only worth rendering when the label is
+// tall enough that it won't be squeezed into illegibility by the `.codes svg
+// { max-height: 48% }` clamp below - shorter labels still get a correct,
+// scannable CODE128, just without the sub-millimeter text under it.
+const MIN_HEIGHT_MM_FOR_BARCODE_TEXT = 15;
+
+function barcodeMarkup(value: string, model: Pick<LabelModelSnapshot, "altura_mm">) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  JsBarcode(svg, value, { format: "CODE128", displayValue: true, margin: 0, height: 42, fontSize: 11 });
+  JsBarcode(svg, value, {
+    format: "CODE128", margin: 0, height: 42, fontSize: 11,
+    displayValue: model.altura_mm >= MIN_HEIGHT_MM_FOR_BARCODE_TEXT,
+  });
   return svg.outerHTML;
 }
 
 // One physical label's markup (QR/barcode + fields), shared by the web
-// iframe and offscreen desktop rasterization paths.
+// iframe and offscreen desktop rasterization paths, AND by LabelCanvas.tsx's
+// on-screen preview (via dangerouslySetInnerHTML) - there is exactly one
+// function that turns a model+material into label content markup, never a
+// second parallel implementation.
 export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMaterialSnapshot) {
-  const qr = model.tipo_identificacao !== "codigo_barras" && material.conteudo_qr_code
-    ? renderToStaticMarkup(<QRCodeSVG value={material.conteudo_qr_code} level="M" size={Math.min(model.altura_mm * 3, model.largura_mm * 1.8)} />) : "";
-  const barcode = model.tipo_identificacao !== "qr_code" && material.codigo_barras ? barcodeMarkup(material.codigo_barras) : "";
+  const wantsQr = model.tipo_identificacao !== "codigo_barras";
+  const wantsBarcode = model.tipo_identificacao !== "qr_code";
+  const qr = wantsQr && material.conteudo_qr_code
+    ? renderToStaticMarkup(<QRCodeSVG value={material.conteudo_qr_code} level="M" size={qrIntrinsicSizePx(model)} />) : "";
+  const barcode = wantsBarcode && material.codigo_barras ? barcodeMarkup(material.codigo_barras, model) : "";
+  // In normal operation this never happens - Etiquetas.tsx blocks adding a
+  // material the selected model can't identify, and LabelPrintDialog blocks
+  // the print button the same way - but neither of those is retroactive to
+  // a model swapped after the fact, and this function must never invent a
+  // fake QR/barcode value to paper over it (section 7/8: "não inventar um
+  // valor"). Rather than silently leaving `.codes` empty - indistinguishable
+  // from "this model doesn't use codes", which never actually happens, since
+  // every tipo_identificacao wants at least one - render an explicit marker
+  // so a missing identifier is visible directly on the label content itself,
+  // in both the preview and (were it ever reached) a real print.
+  const missing = (wantsQr && !qr) || (wantsBarcode && !barcode)
+    ? `<div class="codes-missing">Sem identificação</div>` : "";
   const fieldValues = { nome: material.nome, codigo_interno: material.codigo_interno, categoria: material.categoria,
     marca_modelo: [material.marca, material.modelo].filter(Boolean).join(" "), numero_serie: material.numero_serie,
     numero_patrimonio: material.numero_patrimonio, localizacao: material.localizacao, empresa: material.empresa };
@@ -40,7 +82,45 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
     const value = fieldValues[field];
     return value ? `<div class="field ${index === 0 ? "primary" : ""}"><small>${escapeHtml(LABEL_FIELD_LABELS[field])}:</small> ${escapeHtml(value)}</div>` : "";
   }).join("");
-  return `<article class="label"><div class="codes">${qr}${barcode}</div><div class="fields">${fields}</div></article>`;
+  return `<article class="label"><div class="codes">${qr}${barcode}${missing}</div><div class="fields">${fields}</div></article>`;
+}
+
+// Shared `.label`/`.codes`/`.fields` rules - the visual contract for one
+// label's content, independent of whatever positions the label on the page
+// (@page for a single label, absolute cell positioning for a bobina row, or
+// a scale() transform for the on-screen preview). Kept as its own function
+// (rather than inlined twice) so buildLabelSheetCss, buildBobinaCss and
+// LabelCanvas.tsx's preview can never drift from each other again.
+//
+// .codes direction adapts to the codes column's own available shape (not
+// the whole label's) - section 6: "organizar automaticamente de acordo com
+// largura/altura disponíveis; não permitir sobreposição". Stacking QR above
+// barcode (column) suits a portrait/near-square codes column; placing them
+// side by side (row) suits a wide, short one. Either way each code is capped
+// at <=48% of the relevant axis with a 1mm gap between, so two codes can
+// never together exceed the column's box - structurally impossible to
+// overlap regardless of the intrinsic SVG size chosen above.
+// `scope` namespaces every selector (e.g. "#label-preview-xyz") so this can
+// be safely injected as a plain <style> tag into the live React app's shared
+// DOM (LabelCanvas.tsx) without its bare `.label`/`.codes`/`.fields` classes
+// leaking into or colliding with another LabelCanvas instance rendered
+// elsewhere on the same page - the print callers below render into an
+// isolated document per job and never pass a scope, so their output is
+// unchanged (bare classes, exactly as before).
+export function buildLabelContentCss(model: LabelModelSnapshot, scope = "") {
+  const prefix = scope ? `${scope} ` : "";
+  const codesColumnWidthMm = model.largura_mm * 0.42;
+  const wideCodesColumn = codesColumnWidthMm > model.altura_mm;
+  const codesDirection = wideCodesColumn ? "row" : "column";
+  const codesSvgLimit = wideCodesColumn ? "max-width: 48%; max-height: 100%;" : "max-width: 100%; max-height: 48%;";
+  return `
+    ${prefix}.label { padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; display: flex; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
+    ${prefix}.codes { width: 42%; display: flex; flex-direction: ${codesDirection}; justify-content: center; align-items: center; gap: 1mm; overflow: hidden; }
+    ${prefix}.codes svg { ${codesSvgLimit} }
+    ${prefix}.codes-missing { font-size: .6em; font-weight: 700; text-align: center; border: .25mm dashed #666; padding: 1mm; }
+    ${prefix}.fields { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
+    ${prefix}.field { overflow-wrap: anywhere; } ${prefix}.field.primary { font-weight: 700; } ${prefix}small { color: #555; font-size: .72em; }
+  `;
 }
 
 // Shared between the popup document (web) and the offscreen rasterization
@@ -50,11 +130,8 @@ export function buildLabelSheetCss(model: LabelModelSnapshot) {
   return `<style>
     @page { size: ${model.largura_mm}mm ${model.altura_mm}mm; margin: 0; }
     * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: white; }
-    .label { width: ${model.largura_mm}mm; height: ${model.altura_mm}mm; padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; page-break-after: always; display: flex; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
-    .codes { width: 42%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1mm; overflow: hidden; }
-    .codes:empty { display: none; } .codes svg { max-width: 100%; max-height: 48%; }
-    .fields { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
-    .field { overflow-wrap: anywhere; } .field.primary { font-weight: 700; } small { color: #555; font-size: .72em; }
+    .label { width: ${model.largura_mm}mm; height: ${model.altura_mm}mm; page-break-after: always; }
+    ${buildLabelContentCss(model)}
     @media screen { body { background: #ddd; } .label { margin: 8px auto; background: white; box-shadow: 0 1px 6px #777; } }
   </style>`;
 }
@@ -92,11 +169,8 @@ function buildBobinaCss(profile: Pick<BobinaPrintProfile, "orientacao">, model: 
     * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: white; }
     .row { position: relative; width: ${geometry.rowWidthMm}mm; height: ${geometry.rowHeightMm}mm; background: white; page-break-after: always; }
     .cell { position: absolute; width: ${geometry.cellWidthMm}mm; height: ${geometry.cellHeightMm}mm; overflow: hidden; }
-    .cell .label { ${labelBox} padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; display: flex; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
-    .codes { width: 42%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1mm; overflow: hidden; }
-    .codes:empty { display: none; } .codes svg { max-width: 100%; max-height: 48%; }
-    .fields { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
-    .field { overflow-wrap: anywhere; } .field.primary { font-weight: 700; } small { color: #555; font-size: .72em; }
+    .cell .label { ${labelBox} }
+    ${buildLabelContentCss(model)}
     @media screen { body { background: #ddd; } .row { margin: 8px auto; box-shadow: 0 1px 6px #777; } }
   </style>`;
 }

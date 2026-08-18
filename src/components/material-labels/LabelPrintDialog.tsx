@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { listBobinaProfiles, resolveBobinaProfile } from "@/lib/bobina-profile-service";
 import { computeSheetGeometry, legacyProfileFromModel } from "@/lib/label-layout-engine";
-import { labelBatchTotal, labelModelToSnapshot, materialToLabelSnapshot } from "@/lib/material-label-domain";
+import { canPrintMaterialWithModel, labelBatchTotal, labelModelToSnapshot, labelReadinessMessage, materialToLabelSnapshot } from "@/lib/material-label-domain";
 import { printLabelBatch } from "@/lib/material-label-print";
 import { registerLabelPrintBatch } from "@/lib/material-label-service";
 import type { LabelBatchSelection, LabelModel } from "@/lib/material-label-types";
@@ -25,6 +25,18 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
   const preview = useMemo(() => items.map((item) => ({
     key: item.material.id, quantity: item.quantity, material: materialToLabelSnapshot(item.material, companyName),
   })), [items, companyName]);
+  // Etiquetas.tsx already blocks adding a material that lacks the identifier
+  // its currently-selected model needs, but that check isn't retroactive: a
+  // material added while model A (say QR-only) was selected stays in the
+  // batch if the operator then switches to model B (barcode-only) before
+  // opening this dialog. The RPC itself still refuses to print it (LB012/
+  // LB013), so nothing unsafe reaches the printer either way - this is a
+  // second, earlier checkpoint reusing the exact same domain rule, so the
+  // gap surfaces as a clear message here instead of a toast after the fact.
+  const unprintableItems = useMemo(
+    () => (model ? items.filter((item) => !canPrintMaterialWithModel(item.material, model)) : []),
+    [model, items],
+  );
 
   // Resolved on both desktop and web (unlike getConfiguredPrinter below,
   // these two reads never throw when nothing is configured yet), so the
@@ -66,6 +78,7 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
   const mutation = useMutation({
     mutationFn: async () => {
       if (!model || !items.length || total < 1 || items.some((item) => item.quantity < 1 || item.quantity > 500)) throw new Error("Revise o modelo, os materiais e as quantidades.");
+      if (unprintableItems.length) throw new Error("Remova ou ajuste os materiais sem a identificação exigida pelo modelo antes de imprimir.");
       const clientUuid = clientUuidRef.current ?? crypto.randomUUID();
 
       const configuredPrinter = isDesktopRuntime()
@@ -85,6 +98,10 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
   });
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>Pré-visualizar lote e imprimir</DialogTitle></DialogHeader>
     {model && effectiveProfile && <div className="space-y-4"><div className="rounded-md border p-3 text-sm"><strong>{items.length} material(is) · {total} etiqueta(s)</strong>{items.map((item) => <p key={item.material.id}>{item.material.nome} × {item.quantity}</p>)}</div>
+      {!!unprintableItems.length && <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <strong>Ajuste o lote antes de imprimir:</strong>
+        {unprintableItems.map((item) => <p key={item.material.id}>{item.material.nome}: {labelReadinessMessage(item.material, model) ?? "identificação exigida pelo modelo ausente."}</p>)}
+      </div>}
       <div className="grid gap-4 rounded-md bg-muted p-4 md:grid-cols-[1fr_auto]">
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">
@@ -102,6 +119,6 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
         {preview[0] && <div className="space-y-1"><p className="text-xs font-medium text-muted-foreground">Conteúdo da etiqueta</p><div className="w-fit bg-white shadow"><LabelCanvas model={labelModelToSnapshot(model)} material={preview[0].material} scale={0.72} /></div></div>}
       </div>
       <p className="text-center text-xs text-muted-foreground">A prévia usa o mesmo cálculo de layout da impressão real. A escala e margens físicas finais dependem do navegador, driver e impressora.</p></div>}
-    <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button disabled={!model || !items.length || total < 1 || total > 5000 || mutation.isPending} onClick={() => mutation.mutate()}><Printer className="mr-2 h-4 w-4" />{mutation.isPending ? "Preparando..." : "Registrar lote e imprimir"}</Button></DialogFooter>
+    <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button disabled={!model || !items.length || total < 1 || total > 5000 || !!unprintableItems.length || mutation.isPending} onClick={() => mutation.mutate()}><Printer className="mr-2 h-4 w-4" />{mutation.isPending ? "Preparando..." : "Registrar lote e imprimir"}</Button></DialogFooter>
   </DialogContent></Dialog>;
 }
