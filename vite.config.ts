@@ -56,6 +56,12 @@ export default defineConfig(() => ({
         navigateFallbackDenylist: [/^\/~oauth/],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Adds push/notificationclick listeners to the generated sw.js via
+        // importScripts() without switching off the default generateSW
+        // strategy (keeps the existing precache/update-prompt flow in
+        // src/features/update/UpdateService.ts untouched). push-sw.js lives
+        // in public/ so it is copied to the same output root as sw.js.
+        importScripts: ["push-sw.js"],
       },
 
       manifest: {
