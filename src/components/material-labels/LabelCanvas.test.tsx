@@ -110,24 +110,28 @@ describe("LabelCanvas", () => {
   });
 
   it("scopes its injected <style> per instance so two previews on the same page never leak .codes rules into each other", () => {
-    const wideModel: LabelModelSnapshot = { ...baseModel, tipo_identificacao: "ambos", largura_mm: 100, altura_mm: 30 };
-    const tallModel: LabelModelSnapshot = { ...baseModel, tipo_identificacao: "ambos", largura_mm: 40, altura_mm: 60 };
+    const combinedModel: LabelModelSnapshot = { ...baseModel, tipo_identificacao: "ambos", largura_mm: 100, altura_mm: 30 };
+    const qrOnlyModel: LabelModelSnapshot = { ...baseModel, tipo_identificacao: "qr_code", largura_mm: 40, altura_mm: 60 };
     // Both instances mounted in the *same* tree/root, like they would be if
     // this component were ever reused in a list - two separate render()
     // calls (two separate roots) each start their own useId() counter and
     // would misleadingly collide, which isn't the scenario being guarded.
     const { container } = render(
       <>
-        <LabelCanvas model={wideModel} material={material} />
-        <LabelCanvas model={tallModel} material={material} />
+        <LabelCanvas model={combinedModel} material={material} />
+        <LabelCanvas model={qrOnlyModel} material={material} />
       </>,
     );
     const [firstRoot, secondRoot] = Array.from(container.children) as HTMLElement[];
     const firstStyle = firstRoot.querySelector("style")!.textContent!;
     const secondStyle = secondRoot.querySelector("style")!.textContent!;
     expect(firstRoot.id).not.toBe(secondRoot.id);
-    expect(firstStyle).toContain("flex-direction: row");
-    expect(secondStyle).toContain("flex-direction: column");
+    // Combined mode caps the QR (max-height: 34%); QR-only gives the QR the
+    // full codes area instead - genuinely different generated CSS, not just
+    // a different scope id, so this still proves each instance's <style>
+    // reflects its own model.
+    expect(firstStyle).toContain("max-height: 34%");
+    expect(secondStyle).not.toContain("max-height: 34%");
     expect(secondStyle).not.toContain(firstRoot.id);
     expect(firstStyle).not.toContain(secondRoot.id);
   });

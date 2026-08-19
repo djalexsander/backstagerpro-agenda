@@ -1,23 +1,26 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { printHtmlBatchMock } = vi.hoisted(() => ({ printHtmlBatchMock: vi.fn() }));
-vi.mock("./printer-service", () => ({
-  printHtmlBatch: printHtmlBatchMock,
-}));
-// JsBarcode measures text via a real canvas 2D context to lay out the
-// human-readable value under the bars - jsdom has none (same gap as
-// html2canvas). Mocked minimally so barcode-inclusion logic stays
-// testable without needing the `canvas` native package as a test dep.
-// Respects `displayValue` (unlike a fixed always-add-text stub) since
-// renderLabelMarkup's own displayValue-by-height decision is under test.
-vi.mock("jsbarcode", () => ({
-  default: (svg: SVGElement, value: string, options?: { displayValue?: boolean }) => {
+const { printHtmlBatchMock, jsBarcodeMock } = vi.hoisted(() => ({
+  printHtmlBatchMock: vi.fn(),
+  // JsBarcode measures text via a real canvas 2D context to lay out the
+  // human-readable value under the bars - jsdom has none (same gap as
+  // html2canvas). Mocked minimally so barcode-inclusion logic stays
+  // testable without needing the `canvas` native package as a test dep.
+  // Respects `displayValue` (unlike a fixed always-add-text stub) since
+  // renderLabelMarkup's own displayValue-by-height decision is under test.
+  // A real vi.fn() (not a plain arrow function) so tests can also assert on
+  // the *other* options renderLabelMarkup passes through (height/margins).
+  jsBarcodeMock: vi.fn((svg: SVGElement, value: string, options?: { displayValue?: boolean }) => {
     if (options?.displayValue === false) return;
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.textContent = value;
     svg.appendChild(text);
-  },
+  }),
 }));
+vi.mock("./printer-service", () => ({
+  printHtmlBatch: printHtmlBatchMock,
+}));
+vi.mock("jsbarcode", () => ({ default: jsBarcodeMock }));
 
 import type { BobinaPrintProfile } from "./label-layout-engine";
 import { buildBobinaPrintHtml, buildLabelContentCss, buildLabelPrintHtml, printBobinaTestPage, printLabelBatch, renderLabelMarkup } from "./material-label-print";
@@ -104,18 +107,50 @@ describe("renderLabelMarkup", () => {
 });
 
 describe("buildLabelContentCss", () => {
-  it("stacks QR above Code 128 (column) when the codes column is taller than it is wide", () => {
+  it("stacks .label as a column (fields on top, codes below) regardless of label dimensions", () => {
     const tallModel: LabelModelSnapshot = { ...model, largura_mm: 40, altura_mm: 60 };
-    const css = buildLabelContentCss(tallModel);
-    expect(css).toContain("flex-direction: column");
-    expect(css).toContain("max-width: 100%; max-height: 48%;");
+    const wideModel: LabelModelSnapshot = { ...model, largura_mm: 100, altura_mm: 30 };
+    for (const m of [tallModel, wideModel]) {
+      const css = buildLabelContentCss(m);
+      expect(css).toMatch(/\.label \{[^}]*flex-direction: column/);
+    }
   });
 
-  it("places QR and Code 128 side by side (row) when the codes column is wider than it is tall", () => {
-    const wideModel: LabelModelSnapshot = { ...model, largura_mm: 100, altura_mm: 30 };
-    const css = buildLabelContentCss(wideModel);
-    expect(css).toContain("flex-direction: row");
-    expect(css).toContain("max-width: 48%; max-height: 100%;");
+  it("in combined mode, caps the QR to a modest share and lets Code128 take the remaining (priority) space", () => {
+    const css = buildLabelContentCss({ ...model, tipo_identificacao: "ambos" });
+    expect(css).toMatch(/\.qr-code \{ flex: 0 0 auto; max-width: 60%; max-height: 34%;/);
+    expect(css).toMatch(/\.barcode \{ flex: 1 1 auto;/);
+  });
+
+  it("in QR-only mode, the QR itself gets the full codes area instead of the combined-mode cap", () => {
+    const css = buildLabelContentCss({ ...model, tipo_identificacao: "qr_code" });
+    expect(css).toMatch(/\.qr-code \{ flex: 1 1 auto;[^}]*max-width: 100%; max-height: 100%;/);
+    expect(css).not.toContain("max-height: 34%");
+  });
+
+  it("in Code128-only mode, the barcode gets the full codes area (flex:1, same as combined mode)", () => {
+    const css = buildLabelContentCss({ ...model, tipo_identificacao: "codigo_barras" });
+    expect(css).toMatch(/\.barcode \{ flex: 1 1 auto;/);
+  });
+
+  it("every code's svg is capped with aspect-ratio-preserving max-width/max-height, never a distorting width/height:100%", () => {
+    const css = buildLabelContentCss({ ...model, tipo_identificacao: "ambos" });
+    expect(css).toMatch(/\.qr-code svg \{ max-width: 100%; max-height: 100%; \}/);
+    expect(css).toMatch(/\.barcode svg \{ max-width: 100%; max-height: 100%; \}/);
+    expect(css).not.toContain("width: 100%; height: 100%");
+  });
+
+  it("keeps overflow:hidden on every container so content can never visually escape its box on a small label", () => {
+    const css = buildLabelContentCss({ ...model, largura_mm: 40, altura_mm: 27 });
+    expect(css).toMatch(/\.label \{[^}]*overflow: hidden/);
+    expect(css).toMatch(/\.fields \{[^}]*overflow: hidden/);
+    expect(css).toMatch(/\.codes \{[^}]*overflow: hidden/);
+  });
+
+  it("gives the fields block flex: 0 1 auto (content-sized, never grows to steal space Code128 needs)", () => {
+    const css = buildLabelContentCss(model);
+    expect(css).toMatch(/\.fields \{ flex: 0 1 auto;/);
+    expect(css).toMatch(/\.codes \{ flex: 1 1 auto;/);
   });
 
   it("emits bare selectors by default (the print path's isolated documents never need scoping)", () => {
@@ -130,6 +165,49 @@ describe("buildLabelContentCss", () => {
     expect(css).toContain("#label-preview-abc .codes {");
     expect(css).toContain("#label-preview-abc .fields {");
     expect(css).not.toMatch(/(?<!#label-preview-abc )\.label \{/);
+  });
+});
+
+describe("renderLabelMarkup layout order (combined model)", () => {
+  it("places the fields block (name/código) before the codes block in DOM order, never lateral to the QR", () => {
+    const html = renderLabelMarkup(model, material);
+    const fieldsIndex = html.indexOf('class="fields"');
+    const codesIndex = html.indexOf('class="codes"');
+    expect(fieldsIndex).toBeGreaterThanOrEqual(0);
+    expect(codesIndex).toBeGreaterThan(fieldsIndex);
+  });
+
+  it("wraps QR and Code128 in distinct classed containers, QR before Code128", () => {
+    const html = renderLabelMarkup(model, material);
+    const qrIndex = html.indexOf('class="qr-code"');
+    const barcodeIndex = html.indexOf('class="barcode"');
+    expect(qrIndex).toBeGreaterThanOrEqual(0);
+    expect(barcodeIndex).toBeGreaterThan(qrIndex);
+  });
+
+  it("scales the barcode's intrinsic height with the label's altura_mm instead of a fixed size", () => {
+    jsBarcodeMock.mockClear();
+
+    renderLabelMarkup({ ...model, altura_mm: 30 }, material);
+    const shortHeight = (jsBarcodeMock.mock.calls.at(-1)?.[2] as { height: number }).height;
+
+    renderLabelMarkup({ ...model, altura_mm: 90 }, material);
+    const tallHeight = (jsBarcodeMock.mock.calls.at(-1)?.[2] as { height: number }).height;
+
+    expect(tallHeight).toBeGreaterThan(shortHeight);
+  });
+
+  it("gives the barcode a lateral quiet zone without eating into top/bottom (bar height stays maximized)", () => {
+    jsBarcodeMock.mockClear();
+
+    renderLabelMarkup(model, material);
+    const options = jsBarcodeMock.mock.calls.at(-1)?.[2] as {
+      marginLeft: number; marginRight: number; marginTop: number; marginBottom: number;
+    };
+    expect(options.marginLeft).toBeGreaterThan(0);
+    expect(options.marginRight).toBeGreaterThan(0);
+    expect(options.marginTop).toBe(0);
+    expect(options.marginBottom).toBe(0);
   });
 });
 

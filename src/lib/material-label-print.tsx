@@ -29,24 +29,51 @@ function escapeHtml(value: unknown) {
 // (2.5/1.5 vs 3/1.8, barcode height 34/10 vs 42/11), so what an operator
 // previewed didn't quite match what got rasterized. The exact multiplier
 // barely matters for final on-screen/print size - buildLabelContentCss's
-// `.codes svg { max-width/max-height }` is what actually clamps the visible
-// result - but it does need to be big enough that CODE128's bars and the QR
-// modules aren't generated at a source resolution too small to stay crisp
-// once html2canvas rasterizes at the bobina's DPI-derived scale.
+// `svg { max-width/max-height }` is what actually clamps the visible result
+// - but it does need to be big enough that CODE128's bars and the QR modules
+// aren't generated at a source resolution too small to stay crisp once
+// html2canvas rasterizes at the bobina's DPI-derived scale. QR is
+// deliberately the smaller of the two budgets (Code128 is the read-priority
+// code - see buildLabelContentCss below): this only sets how crisp its
+// *source* is, the actual on-label size is capped separately by CSS.
 function qrIntrinsicSizePx(model: Pick<LabelModelSnapshot, "altura_mm" | "largura_mm">) {
-  return Math.min(model.altura_mm * 3, model.largura_mm * 1.8);
+  return Math.min(model.altura_mm * 2.2, model.largura_mm * 1.3);
+}
+
+// Code128 gets a generously scaled intrinsic height so its bars are rendered
+// at a source resolution proportional to the label itself, not a fixed 42px
+// regardless of a 30mm vs 100mm label (section "CODE 128... aumentar
+// significativamente largura e altura" / "não esticar bitmap artificialmente;
+// gerar o SVG/Code128 nas dimensões corretas"). The bar *module* width is
+// intentionally left at JsBarcode's default rather than also scaled by
+// largura_mm: CODE128's overall width is value-length-driven, and inflating
+// module width on top of that would fight the aspect-preserving CSS clamp
+// below (a wider intrinsic SVG can end up *height*-constrained instead of
+// width-constrained, working against "aumentar altura"). Width is instead
+// grown by giving the barcode's own flex box the label's full width (no
+// longer sharing it with a side-by-side fields column) - see
+// buildLabelContentCss.
+function barcodeIntrinsicHeightPx(model: Pick<LabelModelSnapshot, "altura_mm">) {
+  return Math.max(42, Math.round(model.altura_mm * 3));
 }
 
 // A barcode's human-readable value is only worth rendering when the label is
-// tall enough that it won't be squeezed into illegibility by the `.codes svg
-// { max-height: 48% }` clamp below - shorter labels still get a correct,
-// scannable CODE128, just without the sub-millimeter text under it.
+// tall enough that it won't be squeezed into illegibility by the barcode's
+// own max-height clamp below - shorter labels still get a correct, scannable
+// CODE128, just without the sub-millimeter text under it.
 const MIN_HEIGHT_MM_FOR_BARCODE_TEXT = 15;
 
 function barcodeMarkup(value: string, model: Pick<LabelModelSnapshot, "altura_mm">) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   JsBarcode(svg, value, {
-    format: "CODE128", margin: 0, height: 42, fontSize: 11,
+    format: "CODE128",
+    height: barcodeIntrinsicHeightPx(model),
+    // Lateral quiet zone only (top/bottom stay at 0) - a real quiet zone
+    // baked into the generated SVG itself, not left to whatever margin the
+    // surrounding layout happens to leave, and never at the cost of bar
+    // height, which is the one dimension this code type is prioritized for.
+    marginTop: 0, marginBottom: 0, marginLeft: 8, marginRight: 8,
+    fontSize: 11,
     displayValue: model.altura_mm >= MIN_HEIGHT_MM_FOR_BARCODE_TEXT,
   });
   return svg.outerHTML;
@@ -57,12 +84,23 @@ function barcodeMarkup(value: string, model: Pick<LabelModelSnapshot, "altura_mm
 // on-screen preview (via dangerouslySetInnerHTML) - there is exactly one
 // function that turns a model+material into label content markup, never a
 // second parallel implementation.
+//
+// Visual order is fields-then-codes (name/código on top, codes below) so the
+// column flex layout in buildLabelContentCss stacks them in that order
+// without needing any explicit `order:` CSS. QR and barcode are each wrapped
+// in their own classed container (.qr-code / .barcode) so CSS can size them
+// independently (QR capped small, Code128 given the remaining/priority
+// space) - two bare sibling <svg>s couldn't be told apart by a selector.
 export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMaterialSnapshot) {
   const wantsQr = model.tipo_identificacao !== "codigo_barras";
   const wantsBarcode = model.tipo_identificacao !== "qr_code";
   const qr = wantsQr && material.conteudo_qr_code
-    ? renderToStaticMarkup(<QRCodeSVG value={material.conteudo_qr_code} level="M" size={qrIntrinsicSizePx(model)} />) : "";
-  const barcode = wantsBarcode && material.codigo_barras ? barcodeMarkup(material.codigo_barras, model) : "";
+    ? `<div class="qr-code">${renderToStaticMarkup(
+        <QRCodeSVG value={material.conteudo_qr_code} level="M" size={qrIntrinsicSizePx(model)} marginSize={2} />,
+      )}</div>`
+    : "";
+  const barcode = wantsBarcode && material.codigo_barras
+    ? `<div class="barcode">${barcodeMarkup(material.codigo_barras, model)}</div>` : "";
   // In normal operation this never happens - Etiquetas.tsx blocks adding a
   // material the selected model can't identify, and LabelPrintDialog blocks
   // the print button the same way - but neither of those is retroactive to
@@ -82,24 +120,33 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
     const value = fieldValues[field];
     return value ? `<div class="field ${index === 0 ? "primary" : ""}"><small>${escapeHtml(LABEL_FIELD_LABELS[field])}:</small> ${escapeHtml(value)}</div>` : "";
   }).join("");
-  return `<article class="label"><div class="codes">${qr}${barcode}${missing}</div><div class="fields">${fields}</div></article>`;
+  return `<article class="label"><div class="fields">${fields}</div><div class="codes">${qr}${barcode}${missing}</div></article>`;
 }
 
-// Shared `.label`/`.codes`/`.fields` rules - the visual contract for one
+// Shared `.label`/`.fields`/`.codes` rules - the visual contract for one
 // label's content, independent of whatever positions the label on the page
 // (@page for a single label, absolute cell positioning for a bobina row, or
 // a scale() transform for the on-screen preview). Kept as its own function
 // (rather than inlined twice) so buildLabelSheetCss, buildBobinaCss and
 // LabelCanvas.tsx's preview can never drift from each other again.
 //
-// .codes direction adapts to the codes column's own available shape (not
-// the whole label's) - section 6: "organizar automaticamente de acordo com
-// largura/altura disponíveis; não permitir sobreposição". Stacking QR above
-// barcode (column) suits a portrait/near-square codes column; placing them
-// side by side (row) suits a wide, short one. Either way each code is capped
-// at <=48% of the relevant axis with a 1mm gap between, so two codes can
-// never together exceed the column's box - structurally impossible to
-// overlap regardless of the intrinsic SVG size chosen above.
+// Layout is a single column stack, always in this order (DOM order in
+// renderLabelMarkup drives it, no `order:` overrides): name/fields on top
+// (bold primary field, controlled wrapping, full label width), QR below at
+// a modest capped size, then Code128 last getting whatever height remains -
+// the "prioridade de leitura" code. This replaced an earlier row-beside-
+// column layout (fields beside a shared 42%-wide codes column, QR and
+// Code128 splitting that column ~50/50) that put the name laterally next to
+// the QR and gave both codes equal weight; every element here still gets an
+// aspect-preserving max-width/max-height cap (never `width/height: 100%`,
+// which would distort a barcode/QR that doesn't match its box's aspect
+// ratio) and `overflow: hidden` at every level, so nothing can grow past its
+// box or overlap a sibling regardless of how small the label is - a very
+// short label first loses the fields column's headroom (flex: 0 1 auto, not
+// flex: 1, so it never claims space Code128 needs) and the barcode's own
+// tiny-label behavior (see MIN_HEIGHT_MM_FOR_BARCODE_TEXT above), never the
+// barcode's bars themselves.
+//
 // `scope` namespaces every selector (e.g. "#label-preview-xyz") so this can
 // be safely injected as a plain <style> tag into the live React app's shared
 // DOM (LabelCanvas.tsx) without its bare `.label`/`.codes`/`.fields` classes
@@ -109,17 +156,24 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
 // unchanged (bare classes, exactly as before).
 export function buildLabelContentCss(model: LabelModelSnapshot, scope = "") {
   const prefix = scope ? `${scope} ` : "";
-  const codesColumnWidthMm = model.largura_mm * 0.42;
-  const wideCodesColumn = codesColumnWidthMm > model.altura_mm;
-  const codesDirection = wideCodesColumn ? "row" : "column";
-  const codesSvgLimit = wideCodesColumn ? "max-width: 48%; max-height: 100%;" : "max-width: 100%; max-height: 48%;";
+  // The "QR capped small, Code128 takes the rest" split only makes sense
+  // when both are actually present - a QR-only or Code128-only model must
+  // still get the *entire* codes area for its one code, not be shrunk by a
+  // rule written for the combined case.
+  const isCombined = model.tipo_identificacao === "ambos";
+  const qrFlex = isCombined
+    ? "flex: 0 0 auto; max-width: 60%; max-height: 34%;"
+    : "flex: 1 1 auto; min-height: 0; max-width: 100%; max-height: 100%;";
   return `
-    ${prefix}.label { padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; display: flex; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
-    ${prefix}.codes { width: 42%; display: flex; flex-direction: ${codesDirection}; justify-content: center; align-items: center; gap: 1mm; overflow: hidden; }
-    ${prefix}.codes svg { ${codesSvgLimit} }
-    ${prefix}.codes-missing { font-size: .6em; font-weight: 700; text-align: center; border: .25mm dashed #666; padding: 1mm; }
-    ${prefix}.fields { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
+    ${prefix}.label { padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; display: flex; flex-direction: column; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
+    ${prefix}.fields { flex: 0 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
     ${prefix}.field { overflow-wrap: anywhere; } ${prefix}.field.primary { font-weight: 700; } ${prefix}small { color: #555; font-size: .72em; }
+    ${prefix}.codes { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1mm; overflow: hidden; }
+    ${prefix}.codes .qr-code { ${qrFlex} width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    ${prefix}.codes .qr-code svg { max-width: 100%; max-height: 100%; }
+    ${prefix}.codes .barcode { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    ${prefix}.codes .barcode svg { max-width: 100%; max-height: 100%; }
+    ${prefix}.codes-missing { font-size: .6em; font-weight: 700; text-align: center; border: .25mm dashed #666; padding: 1mm; }
   `;
 }
 
