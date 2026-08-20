@@ -40,6 +40,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useCheckinCheckout } from "@/hooks/useCheckinCheckout";
 import { useCompanyRealtime } from "@/hooks/useCompanyRealtime";
+import { useModulePermission } from "@/hooks/useModulePermission";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getCustodyPermissions } from "@/lib/checkin-checkout-permissions";
 import {
@@ -104,11 +105,23 @@ export default function CheckinCheckout() {
     hasModule(MODULE_KEYS.CHECKIN_CHECKOUT) &&
     hasModule(MODULE_KEYS.GESTAO_MATERIAIS) &&
     hasModule(MODULE_KEYS.CONTROLE_ESTOQUE);
+  const { permission: custodyGrant } = useModulePermission({
+    companyId,
+    featureKey: MODULE_KEYS.CHECKIN_CHECKOUT,
+    role,
+  });
   const permissions = getCustodyPermissions({
     role,
     moduleEnabled,
     companyReadOnly: empresaReadOnly,
     companySelected: Boolean(companyId),
+    granular: custodyGrant
+      ? {
+          canCreate: custodyGrant.canCreate,
+          canEdit: custodyGrant.canEdit,
+          canDelete: custodyGrant.canDelete,
+        }
+      : null,
   });
   // Locações é um módulo adicional (não exigido pelas outras abas desta
   // página) - quando não contratado, a aba "Locações" simplesmente não é

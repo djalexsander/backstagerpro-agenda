@@ -23,12 +23,58 @@ describe("check-in/check-out permissions", () => {
     ).toBe(false);
   });
 
-  it("keeps ordinary users read-only under the current canonical roles", () => {
+  it("keeps ordinary users read-only without an explicit granular grant", () => {
     expect(
       getCustodyPermissions({
         role: "usuario",
         moduleEnabled: true,
         companyReadOnly: false,
+      }),
+    ).toEqual({ visualizar: true, checkout: false, checkin: false, cancelar: false });
+    expect(
+      getCustodyPermissions({
+        role: "usuario",
+        moduleEnabled: true,
+        companyReadOnly: false,
+        granular: { canCreate: false, canEdit: false, canDelete: false },
+      }),
+    ).toEqual({ visualizar: true, checkout: false, checkin: false, cancelar: false });
+  });
+
+  it("unlocks each write action independently for a usuario with an explicit grant", () => {
+    expect(
+      getCustodyPermissions({
+        role: "usuario",
+        moduleEnabled: true,
+        companyReadOnly: false,
+        granular: { canCreate: true, canEdit: false, canDelete: false },
+      }),
+    ).toEqual({ visualizar: true, checkout: true, checkin: false, cancelar: false });
+    expect(
+      getCustodyPermissions({
+        role: "usuario",
+        moduleEnabled: true,
+        companyReadOnly: false,
+        granular: { canCreate: false, canEdit: true, canDelete: false },
+      }),
+    ).toEqual({ visualizar: true, checkout: false, checkin: true, cancelar: false });
+    expect(
+      getCustodyPermissions({
+        role: "usuario",
+        moduleEnabled: true,
+        companyReadOnly: false,
+        granular: { canCreate: false, canEdit: false, canDelete: true },
+      }),
+    ).toEqual({ visualizar: true, checkout: false, checkin: false, cancelar: true });
+  });
+
+  it("still blocks a granted usuario when the company is read-only", () => {
+    expect(
+      getCustodyPermissions({
+        role: "usuario",
+        moduleEnabled: true,
+        companyReadOnly: true,
+        granular: { canCreate: true, canEdit: true, canDelete: true },
       }),
     ).toEqual({ visualizar: true, checkout: false, checkin: false, cancelar: false });
   });

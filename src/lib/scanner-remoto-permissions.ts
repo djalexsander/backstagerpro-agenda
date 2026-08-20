@@ -1,4 +1,8 @@
-import { getCustodyPermissions, type CustodyPermissions } from "./checkin-checkout-permissions";
+import {
+  getCustodyPermissions,
+  type CustodyGranularPermission,
+  type CustodyPermissions,
+} from "./checkin-checkout-permissions";
 
 // Scanner Remoto is not a separate commercial module - by decision, it is
 // the exact same Check-in/Check-out capability, reached from another
@@ -17,6 +21,8 @@ export function getScannerRemotoPermissions(args: {
   moduleEnabled: boolean;
   companyReadOnly: boolean;
   companySelected?: boolean;
+  /** Grant granular do usuário atual para 'checkin_checkout' - só relevante quando role === "usuario". */
+  granular?: CustodyGranularPermission | null;
 }): ScannerRemotoPermissions {
   return getCustodyPermissions(args);
 }

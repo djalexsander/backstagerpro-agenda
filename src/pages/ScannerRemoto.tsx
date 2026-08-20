@@ -17,6 +17,7 @@ import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useScannerRemoto } from "@/hooks/useScannerRemoto";
+import { useModulePermission } from "@/hooks/useModulePermission";
 import { useToast } from "@/hooks/use-toast";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getScannerRemotoPermissions } from "@/lib/scanner-remoto-permissions";
@@ -54,11 +55,23 @@ export default function ScannerRemoto() {
     hasModule(MODULE_KEYS.CHECKIN_CHECKOUT) &&
     hasModule(MODULE_KEYS.GESTAO_MATERIAIS) &&
     hasModule(MODULE_KEYS.CONTROLE_ESTOQUE);
+  const { permission: custodyGrant } = useModulePermission({
+    companyId,
+    featureKey: MODULE_KEYS.CHECKIN_CHECKOUT,
+    role,
+  });
   const permissions = getScannerRemotoPermissions({
     role,
     moduleEnabled,
     companyReadOnly: empresaReadOnly,
     companySelected: Boolean(companyId),
+    granular: custodyGrant
+      ? {
+          canCreate: custodyGrant.canCreate,
+          canEdit: custodyGrant.canEdit,
+          canDelete: custodyGrant.canDelete,
+        }
+      : null,
   });
   const { toast } = useToast();
 
@@ -84,10 +97,11 @@ export default function ScannerRemoto() {
       enabled: permissions.visualizar,
     });
 
+  const canStartSession = permissions.checkout || permissions.checkin;
   const locationsQuery = useQuery({
     queryKey: ["stock-locations", companyId],
     queryFn: () => listStockLocations(companyId!, true),
-    enabled: Boolean(companyId) && permissions.checkout,
+    enabled: Boolean(companyId) && canStartSession,
   });
   const responsiblesQuery = useQuery({
     queryKey: ["material-custody-responsibles", companyId],
@@ -266,10 +280,10 @@ export default function ScannerRemoto() {
               <CardTitle className="text-base">Nova sessão</CardTitle>
             </CardHeader>
             <CardContent>
-              {!permissions.checkout ? (
+              {!canStartSession ? (
                 <p className="text-sm text-muted-foreground">
                   Sua conta pode visualizar sessões, mas não tem permissão para
-                  iniciar check-out/check-in (mesma regra do Check-in/Check-out
+                  iniciar check-out nem check-in (mesma regra do Check-in/Check-out
                   no desktop).
                 </p>
               ) : (
