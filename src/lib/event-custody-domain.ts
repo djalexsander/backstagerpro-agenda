@@ -7,6 +7,16 @@ export interface EventCustodyMaterialSummary {
   quantidadeRetirada: number;
   quantidadeDevolvida: number;
   quantidadePendente: number;
+  /**
+   * As custódias individuais (não canceladas) deste material que ainda têm
+   * saldo pendente, mais antiga primeiro. Um material pode ter mais de uma
+   * (retiradas separadas para o mesmo evento) - o check-in sempre opera em
+   * UMA custódia por vez (registrar_checkin_material recebe um único
+   * _custodia_id), então a ação "Fazer check-in" resolve para a mais antiga
+   * pendente, mesmo critério de desempate que o modo 'misto' do Scanner
+   * Remoto já usa para a custódia aberta mais antiga de um material.
+   */
+  custodiasAbertas: CustodyOperationView[];
 }
 
 export interface EventCustodySummary {
@@ -44,14 +54,23 @@ export function summarizeEventCustody(
       quantidadeRetirada: 0,
       quantidadeDevolvida: 0,
       quantidadePendente: 0,
+      custodiasAbertas: [],
     };
     existing.quantidadeRetirada += operation.quantidade_retirada;
     existing.quantidadeDevolvida += operation.quantidade_devolvida;
     existing.quantidadePendente += operation.quantidade_pendente;
+    if (operation.quantidade_pendente > 0) {
+      existing.custodiasAbertas.push(operation);
+    }
     byMaterial.set(operation.material_id, existing);
   }
 
   const materiais = Array.from(byMaterial.values());
+  for (const item of materiais) {
+    item.custodiasAbertas.sort(
+      (a, b) => new Date(a.retirada_em).getTime() - new Date(b.retirada_em).getTime(),
+    );
+  }
 
   return {
     totalRetirado: materiais.reduce((sum, item) => sum + item.quantidadeRetirada, 0),

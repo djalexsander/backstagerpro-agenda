@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { Loader2, PackageCheck, PackageOpen } from "lucide-react";
+import { ClipboardCheck, Loader2, PackageCheck, PackageOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,27 +14,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
 import { listCustodyOperationsByReference } from "@/lib/checkin-checkout-service";
 import { summarizeEventCustody, type EventCustodyMaterialSummary } from "@/lib/event-custody-domain";
+import type { StockLocation } from "@/lib/stock-types";
 
-function MaterialRow({ item, badge }: { item: EventCustodyMaterialSummary; badge: string }) {
+function MaterialRow({
+  item,
+  badge,
+  action,
+}: {
+  item: EventCustodyMaterialSummary;
+  badge: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
       <div className="min-w-0">
         <p className="truncate font-medium">{item.materialNome}</p>
         <p className="text-xs text-muted-foreground">{item.materialCodigo}</p>
       </div>
-      <Badge variant="outline" className="shrink-0">{badge}</Badge>
+      <div className="flex shrink-0 items-center gap-2">
+        <Badge variant="outline">{badge}</Badge>
+        {action}
+      </div>
     </div>
   );
 }
 
-// Primeira etapa da conferência de retorno por evento: só leitura - mostra o
-// que foi retirado/devolvido/pendente para o evento selecionado. Nenhuma
-// ação de check-in/leitura em lote é oferecida aqui ainda (etapa futura,
-// deliberadamente fora deste escopo).
-export function EventCustodyPanel({ companyId }: { companyId: string }) {
+// Primeira etapa da conferência de retorno por evento: mostra o que foi
+// retirado/devolvido/pendente para o evento selecionado, e permite dar
+// check-in direto de um material pendente. Reaproveita o CheckinDialog e a
+// RPC de check-in já existentes por inteiro (mesma validação de quantidade/
+// pendente que a aba "Operações em aberto" já usa) - nenhuma lógica de
+// check-in nova foi criada aqui. Leitura em lote/QR/RFID por evento continua
+// fora de escopo.
+export function EventCustodyPanel({
+  companyId,
+  canCheckin,
+  locations,
+}: {
+  companyId: string;
+  canCheckin: boolean;
+  locations: StockLocation[];
+}) {
   const [eventId, setEventId] = useState("");
+  const [checkinOperation, setCheckinOperation] = useState<
+    EventCustodyMaterialSummary["custodiasAbertas"][number] | null
+  >(null);
+  const queryClient = useQueryClient();
 
   const eventsQuery = useQuery({
     queryKey: ["checkin-checkout-events", companyId],
@@ -57,6 +86,10 @@ export function EventCustodyPanel({ companyId }: { companyId: string }) {
   });
 
   const summary = custodyQuery.data ? summarizeEventCustody(custodyQuery.data) : null;
+
+  const refreshAfterCheckin = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["event-custody-operations", companyId, eventId] });
+  };
 
   return (
     <div className="space-y-4">
@@ -122,6 +155,17 @@ export function EventCustodyPanel({ companyId }: { companyId: string }) {
                       key={item.materialId}
                       item={item}
                       badge={`${item.quantidadePendente} pendente(s) de ${item.quantidadeRetirada}`}
+                      action={
+                        canCheckin && item.custodiasAbertas.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCheckinOperation(item.custodiasAbertas[0])}
+                          >
+                            <ClipboardCheck className="mr-1 h-4 w-4" /> Fazer check-in
+                          </Button>
+                        )
+                      }
                     />
                   ))
                 )}
@@ -152,6 +196,15 @@ export function EventCustodyPanel({ companyId }: { companyId: string }) {
           </div>
         </>
       )}
+
+      <CheckinDialog
+        open={!!checkinOperation}
+        onOpenChange={(open) => !open && setCheckinOperation(null)}
+        companyId={companyId}
+        operation={checkinOperation}
+        locations={locations}
+        onSaved={refreshAfterCheckin}
+      />
     </div>
   );
 }

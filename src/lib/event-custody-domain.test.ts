@@ -104,4 +104,42 @@ describe("summarizeEventCustody", () => {
       materiaisDevolvidos: [],
     });
   });
+
+  describe("custodiasAbertas (resolves which custody a check-in action targets)", () => {
+    it("carries the single open custody for a material with only one checkout", () => {
+      const summary = summarizeEventCustody([
+        operation({ id: "op1", material_id: "m1", quantidade_retirada: 3, quantidade_devolvida: 0, quantidade_pendente: 3, status: "aberta" }),
+      ]);
+      expect(summary.materiaisPendentes[0].custodiasAbertas).toHaveLength(1);
+      expect(summary.materiaisPendentes[0].custodiasAbertas[0].id).toBe("op1");
+    });
+
+    it("orders multiple open custodies for the same material oldest-first", () => {
+      const summary = summarizeEventCustody([
+        operation({ id: "op-newer", material_id: "m1", retirada_em: "2026-08-16T10:00:00Z", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+        operation({ id: "op-older", material_id: "m1", retirada_em: "2026-08-14T10:00:00Z", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+      ]);
+      expect(summary.materiaisPendentes[0].custodiasAbertas.map((item) => item.id)).toEqual([
+        "op-older",
+        "op-newer",
+      ]);
+    });
+
+    it("excludes an already fully-returned custody row from custodiasAbertas even when a sibling row for the same material is still pending", () => {
+      const summary = summarizeEventCustody([
+        operation({ id: "op-done", material_id: "m1", quantidade_retirada: 2, quantidade_devolvida: 2, quantidade_pendente: 0, status: "concluida" }),
+        operation({ id: "op-pending", material_id: "m1", quantidade_retirada: 3, quantidade_devolvida: 1, quantidade_pendente: 2, status: "parcial" }),
+      ]);
+      expect(summary.materiaisPendentes[0].custodiasAbertas.map((item) => item.id)).toEqual([
+        "op-pending",
+      ]);
+    });
+
+    it("leaves custodiasAbertas empty for a fully returned material - nothing left to check in", () => {
+      const summary = summarizeEventCustody([
+        operation({ id: "op1", material_id: "m1", quantidade_retirada: 2, quantidade_devolvida: 2, quantidade_pendente: 0, status: "concluida" }),
+      ]);
+      expect(summary.materiaisDevolvidos[0].custodiasAbertas).toEqual([]);
+    });
+  });
 });

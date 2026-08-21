@@ -375,7 +375,7 @@ export default function CheckinCheckout() {
         )}
         {companyId && (
           <TabsContent value="por-evento">
-            <EventCustodyPanel companyId={companyId} />
+            <EventCustodyPanel companyId={companyId} canCheckin={permissions.checkin} locations={locations} />
           </TabsContent>
         )}
         <TabsContent value="abertas">
