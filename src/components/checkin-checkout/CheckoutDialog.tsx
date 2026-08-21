@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -246,7 +247,7 @@ export function CheckoutDialog({
                 <SelectContent>
                   {events.map((event) => (
                     <SelectItem key={event.id} value={event.id}>
-                      {event.name} · {new Date(event.date).toLocaleDateString("pt-BR")}
+                      {event.name} · {format(parseISO(event.date), "dd/MM/yyyy")}
                     </SelectItem>
                   ))}
                 </SelectContent>

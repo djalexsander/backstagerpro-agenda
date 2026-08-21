@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 import { listCustodyEvents } from "@/lib/checkin-checkout-service";
 import {
   CUSTODY_CONDITION_LABELS,
@@ -40,6 +42,26 @@ export function CustodyHistoryDialog({
     queryFn: () => listCustodyEvents(companyId, operation!.id),
     enabled: open && Boolean(operation),
   });
+
+  // referencia_tipo/referencia_id already come back on `operation` from
+  // listar_custodias_materiais - this just resolves the linked event's
+  // name/date for display, the same direct-query pattern CheckoutDialog.tsx
+  // uses to list events (events has no RPC layer of its own).
+  const linkedEvent = useQuery({
+    queryKey: ["custody-linked-event", companyId, operation?.referencia_id],
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("events")
+        .select("id, name, date")
+        .eq("empresa_id", companyId)
+        .eq("id", operation!.referencia_id!)
+        .maybeSingle();
+      if (queryError) throw queryError;
+      return data;
+    },
+    enabled: open && operation?.referencia_tipo === "evento" && Boolean(operation?.referencia_id),
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -53,6 +75,9 @@ export function CustodyHistoryDialog({
           <div className="grid gap-2 rounded-lg border p-3 text-sm sm:grid-cols-2">
             <p>Responsável: <strong>{operation.responsavel_nome}</strong></p>
             <p>Finalidade: <strong>{CUSTODY_PURPOSE_LABELS[operation.finalidade]}</strong></p>
+            {operation.referencia_tipo === "evento" && linkedEvent.data && (
+              <p>Evento: <strong>{linkedEvent.data.name} · {format(parseISO(linkedEvent.data.date), "dd/MM/yyyy")}</strong></p>
+            )}
             <p>Condição na saída: <strong>{CUSTODY_CONDITION_LABELS[operation.condicao_saida]}</strong></p>
             <p>Status: <strong>{CUSTODY_STATUS_LABELS[operation.status]}</strong></p>
             <p>Quantidade: <strong>{operation.quantidade_devolvida} retornada(s) · {operation.quantidade_baixada} baixada(s) de {operation.quantidade_retirada}</strong></p>

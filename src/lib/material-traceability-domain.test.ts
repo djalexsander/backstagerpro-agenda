@@ -3,6 +3,7 @@ import {
   buildOndeEstaAgoraSummary,
   describeTimelineEntry,
   formatDateTime,
+  formatEventDate,
   situacaoBadgeTone,
   TRACEABILITY_SITUACAO_LABELS,
 } from "./material-traceability-domain";
@@ -33,6 +34,19 @@ describe("formatDateTime", () => {
   });
   it("formats a real timestamp to something other than the placeholder", () => {
     expect(formatDateTime("2026-08-14T18:42:00Z")).not.toBe("—");
+  });
+});
+
+describe("formatEventDate", () => {
+  it("returns an em-dash placeholder for null/undefined", () => {
+    expect(formatEventDate(null)).toBe("—");
+    expect(formatEventDate(undefined)).toBe("—");
+  });
+  it("reads a plain date column (no time-of-day) as local, not UTC - never off by one day", () => {
+    // events.date is a SQL `date`, not a timestamp - new Date("2026-03-15")
+    // would parse this as UTC midnight and could render as 14/03 in any
+    // timezone behind UTC. parseISO must not have that failure mode.
+    expect(formatEventDate("2026-03-15")).toBe("15/03/2026");
   });
 });
 
@@ -75,6 +89,7 @@ describe("buildOndeEstaAgoraSummary", () => {
       retirado_por: "João da Silva",
       liberado_por: "Alex",
       locacao: { locacao_id: "r1", locacao_numero: "LOC-2026-000234", cliente_id: "cl1", cliente_nome: "Empresa XYZ" },
+      evento: null,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe("Locado");
@@ -101,11 +116,36 @@ describe("buildOndeEstaAgoraSummary", () => {
       retirado_por: "Maria",
       liberado_por: "Alex",
       locacao: null,
+      evento: null,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe("Emprestado");
     expect(summary.linhas.some((linha) => linha.label === "Locação")).toBe(false);
+    expect(summary.linhas.some((linha) => linha.label === "Evento")).toBe(false);
     expect(summary.linhas.some((linha) => linha.label === "Previsão de retorno")).toBe(false);
+  });
+
+  it("emprestado with a linked event surfaces the event name and date", () => {
+    const resumo: TraceabilitySituacao = {
+      situacao: "emprestado",
+      custodia_id: "c3",
+      custodia_status: "aberta",
+      finalidade: "evento",
+      retirada_em: "2026-08-14T10:00:00Z",
+      previsao_retorno: null,
+      atrasado: false,
+      retirado_por: "Maria",
+      liberado_por: "Alex",
+      locacao: null,
+      evento: { evento_id: "e1", evento_nome: "Casamento João", evento_data: "2026-09-01" },
+    };
+    const summary = buildOndeEstaAgoraSummary(resumo);
+    expect(summary.linhas).toEqual(
+      expect.arrayContaining([
+        { label: "Evento", value: "Casamento João" },
+        { label: "Data do evento", value: "01/09/2026" },
+      ]),
+    );
   });
 
   it("em_manutencao surfaces the OS number and status", () => {
@@ -162,6 +202,21 @@ describe("describeTimelineEntry", () => {
       detalhes: { responsavel_nome: "Maria", executor_nome: "Alex" },
     };
     expect(describeTimelineEntry(entry)).toBe("Retirado por Maria · Liberado por Alex");
+  });
+
+  it("describes a checkout tied to an event", () => {
+    const entry: TraceabilityTimelineEntry = {
+      data: "2026-08-14T18:42:00Z",
+      tipo: "checkout",
+      detalhes: {
+        responsavel_nome: "João Silva",
+        evento_nome: "Casamento João",
+        executor_nome: "Alex",
+      },
+    };
+    expect(describeTimelineEntry(entry)).toBe(
+      "Retirado por João Silva · Evento: Casamento João · Liberado por Alex",
+    );
   });
 
   it("describes a checkin with who received it", () => {

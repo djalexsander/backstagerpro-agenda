@@ -19,6 +19,12 @@ export type TraceabilityRentalSummary = {
   cliente_nome: string;
 } | null;
 
+export type TraceabilityEventSummary = {
+  evento_id: string;
+  evento_nome: string;
+  evento_data: string;
+} | null;
+
 /**
  * Espelha o retorno de resumo_situacao_material (SQL) - discriminado por
  * `situacao`. 'locado' = custódia com finalidade 'locacao' (vinculada a uma
@@ -46,6 +52,7 @@ export type TraceabilitySituacao =
       retirado_por: string;
       liberado_por: string;
       locacao: TraceabilityRentalSummary;
+      evento: TraceabilityEventSummary;
     }
   | {
       situacao: Exclude<MaterialOperationalStatus, "disponivel" | "em_manutencao">;
@@ -104,6 +111,8 @@ export interface TraceabilityTimelineDetails {
   finalidade?: CustodyPurpose;
   locacao_numero?: string | null;
   cliente_nome?: string | null;
+  evento_nome?: string | null;
+  evento_data?: string | null;
   numero?: string;
   tipo?: string;
   defeito_relatado?: string;

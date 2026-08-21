@@ -62,9 +62,9 @@ function resultSummaryLine(resumo: TraceabilitySituacao): string {
       return "Disponível";
     case "locado":
     case "emprestado":
-      return resumo.locacao
-        ? `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.locacao.cliente_nome}`
-        : `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.retirado_por}`;
+      if (resumo.locacao) return `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.locacao.cliente_nome}`;
+      if (resumo.evento) return `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.evento.evento_nome}`;
+      return `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.retirado_por}`;
     case "em_manutencao":
       return `Em manutenção — OS ${resumo.manutencao_numero}`;
     default:
@@ -137,6 +137,11 @@ function MaterialDetail({
           {resumo.situacao === "locado" && resumo.locacao && (
             <Button asChild size="sm" variant="outline">
               <Link to={`/locacoes?locacao=${resumo.locacao.locacao_id}`}>Abrir locação {resumo.locacao.locacao_numero}</Link>
+            </Button>
+          )}
+          {resumo.situacao === "emprestado" && resumo.evento && (
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/evento/${resumo.evento.evento_id}`}>Abrir evento {resumo.evento.evento_nome}</Link>
             </Button>
           )}
         </CardContent>

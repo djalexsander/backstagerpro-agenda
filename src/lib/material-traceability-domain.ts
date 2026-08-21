@@ -1,3 +1,4 @@
+import { format, parseISO } from "date-fns";
 import type {
   TraceabilitySituacao,
   TraceabilityTimelineEntry,
@@ -39,6 +40,17 @@ export function formatDateTime(value: string | null | undefined): string {
   return new Date(value).toLocaleString("pt-BR");
 }
 
+// events.date is a plain SQL date (no time-of-day) - new Date(value) parses
+// a bare date string as UTC midnight, which toLocaleString/toLocaleDateString
+// then renders in the browser's local timezone, silently showing the
+// previous day for any timezone behind UTC (Brazil included). parseISO
+// reads it as local midnight instead - same fix Agenda.tsx already applies
+// to this exact events.date column.
+export function formatEventDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  return format(parseISO(value), "dd/MM/yyyy");
+}
+
 export const TIMELINE_ENTRY_LABELS: Record<TraceabilityTimelineEntryType, string> = {
   checkout: "Check-out",
   checkin: "Check-in",
@@ -64,12 +76,14 @@ export function describeTimelineEntry(entry: TraceabilityTimelineEntry): string 
       const parts = [`Retirado por ${details.responsavel_nome ?? "—"}`];
       if (details.locacao_numero) parts.push(`Locação ${details.locacao_numero}`);
       if (details.cliente_nome) parts.push(`Cliente: ${details.cliente_nome}`);
+      if (details.evento_nome) parts.push(`Evento: ${details.evento_nome}`);
       parts.push(`Liberado por ${details.executor_nome ?? "—"}`);
       return parts.join(" · ");
     }
     case "checkin": {
       const parts = [`Recebido por ${details.executor_nome ?? "—"}`];
       if (details.locacao_numero) parts.push(`Locação ${details.locacao_numero}`);
+      if (details.evento_nome) parts.push(`Evento: ${details.evento_nome}`);
       if (details.condicao) parts.push(`Condição: ${details.condicao}`);
       if (details.ocorrencia) parts.push(`Ocorrência: ${details.ocorrencia}`);
       return parts.join(" · ");
@@ -138,6 +152,10 @@ export function buildOndeEstaAgoraSummary(resumo: TraceabilitySituacao): OndeEst
       if (resumo.locacao) {
         linhas.push({ label: "Locação", value: resumo.locacao.locacao_numero });
         linhas.push({ label: "Cliente", value: resumo.locacao.cliente_nome });
+      }
+      if (resumo.evento) {
+        linhas.push({ label: "Evento", value: resumo.evento.evento_nome });
+        linhas.push({ label: "Data do evento", value: formatEventDate(resumo.evento.evento_data) });
       }
       linhas.push(
         { label: "Retirado por", value: resumo.retirado_por },
