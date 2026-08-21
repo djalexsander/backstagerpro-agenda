@@ -117,6 +117,30 @@ describe("check-in/check-out domain", () => {
     );
   });
 
+  it("requires an event reference when purpose is 'evento'", () => {
+    expect(
+      validateCheckout({ ...checkout, purpose: "evento", referenceId: undefined }, material),
+    ).toHaveProperty("referenceId");
+    expect(
+      validateCheckout({ ...checkout, purpose: "evento", referenceId: "" }, material),
+    ).toHaveProperty("referenceId");
+    expect(
+      validateCheckout(
+        { ...checkout, purpose: "evento", referenceId: "9c1b2a3d-0000-4000-8000-000000000001" },
+        material,
+      ),
+    ).not.toHaveProperty("referenceId");
+  });
+
+  it("does not require a reference for any other purpose", () => {
+    expect(validateCheckout({ ...checkout, purpose: "uso_interno" }, material)).not.toHaveProperty(
+      "referenceId",
+    );
+    expect(validateCheckout({ ...checkout, purpose: "manutencao" }, material)).not.toHaveProperty(
+      "referenceId",
+    );
+  });
+
   it("rejects inactive origin and missing responsible", () => {
     expect(
       validateCheckout(

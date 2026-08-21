@@ -34,6 +34,7 @@ export const CUSTODY_ERROR_MESSAGES = {
   CI019: "O histórico de custódia é imutável.",
   CI020: "O vínculo com o movimento de estoque é inválido.",
   CI021: "A quantidade baixada supera a quantidade ainda em custódia.",
+  CI022: "Selecione um evento válido desta empresa.",
   ST001: "Saldo insuficiente na localização de origem.",
   ST006: "Localização inativa não pode receber materiais.",
   ST013: "A chave idempotente já foi usada com dados diferentes.",

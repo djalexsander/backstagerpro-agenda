@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { MaterialPhotoImage } from "@/components/materials/MaterialPhotoImage";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { registerCheckout } from "@/lib/checkin-checkout-service";
 import {
   CUSTODY_CONDITION_LABELS,
@@ -60,6 +61,7 @@ export function CheckoutDialog({
   const [quantity, setQuantity] = useState("1");
   const [responsibleValue, setResponsibleValue] = useState("");
   const [purpose, setPurpose] = useState<CustodyPurpose>("uso_interno");
+  const [eventId, setEventId] = useState("");
   const [condition, setCondition] = useState<CustodyCondition>("bom");
   const [expectedReturn, setExpectedReturn] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
@@ -72,12 +74,31 @@ export function CheckoutDialog({
     [material],
   );
 
+  // Only fetched when the operator actually picks "Evento" - events has no
+  // RPC layer of its own (unlike materials), so this queries it directly,
+  // the same way Agenda.tsx already does for the same table.
+  const eventsQuery = useQuery({
+    queryKey: ["checkout-events", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("id, name, date")
+        .eq("empresa_id", companyId)
+        .order("date", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: open && purpose === "evento" && Boolean(companyId),
+  });
+  const events = eventsQuery.data ?? [];
+
   useEffect(() => {
     if (!open) return;
     setOriginId(balances.length === 1 ? balances[0].localizacao_id : "");
     setQuantity("1");
     setResponsibleValue("");
     setPurpose("uso_interno");
+    setEventId("");
     setCondition("bom");
     setExpectedReturn("");
     setEffectiveAt(nowAsDatetimeLocalValue());
@@ -107,6 +128,8 @@ export function CheckoutDialog({
           : null,
         effectiveAt: effectiveAt ? new Date(effectiveAt).toISOString() : null,
         note,
+        referenceType: purpose === "evento" ? "evento" : undefined,
+        referenceId: purpose === "evento" ? eventId : undefined,
         clientUuid,
       };
       const validation = validateCheckout(input, material);
@@ -211,6 +234,26 @@ export function CheckoutDialog({
               </SelectContent>
             </Select>
           </div>
+          {purpose === "evento" && (
+            <div className="space-y-2">
+              <Label>Evento *</Label>
+              <Select value={eventId} onValueChange={setEventId}>
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={eventsQuery.isLoading ? "Carregando eventos..." : "Selecione o evento"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {events.map((event) => (
+                    <SelectItem key={event.id} value={event.id}>
+                      {event.name} · {new Date(event.date).toLocaleDateString("pt-BR")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.referenceId && <p className="text-xs text-destructive">{errors.referenceId}</p>}
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Condição na saída *</Label>
             <Select value={condition} onValueChange={(value) => setCondition(value as CustodyCondition)}>

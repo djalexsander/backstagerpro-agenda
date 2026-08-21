@@ -136,6 +136,9 @@ export function validateCheckout(
   }
   if (!input.responsibleId) errors.responsibleId = "Selecione o responsável.";
   if (!input.purpose) errors.purpose = "Selecione a finalidade.";
+  if (input.purpose === "evento" && !input.referenceId) {
+    errors.referenceId = "Selecione o evento.";
+  }
   if (!input.condition) errors.condition = "Informe a condição de saída.";
   if (
     input.expectedReturn &&
