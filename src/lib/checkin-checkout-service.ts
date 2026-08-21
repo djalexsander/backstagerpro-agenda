@@ -98,6 +98,40 @@ export async function listCustodyOperations({
   };
 }
 
+// Same RPC as listCustodyOperations, filtered by referencia_tipo/referencia_id
+// instead of the free-text/date filter form - fetches every page (the RPC
+// caps _tamanho_pagina at 100 server-side) instead of driving a paginated
+// UI, same "fetch it all, aggregate client-side" shape RentalOperationsQueue
+// already uses for its queue. A page shorter than the page size is the
+// signal there's nothing left - the same "just keep paging" contract
+// listar_custodias_materiais already exposes via OFFSET/LIMIT, no new RPC
+// capability needed. REFERENCIA_PAGE_SIZE_CAP bounds the loop itself in
+// case the RPC ever misbehaves - far beyond any real event's custody count.
+const REFERENCIA_PAGE_SIZE = 100;
+const REFERENCIA_PAGE_SIZE_CAP = 1000;
+
+export async function listCustodyOperationsByReference(
+  companyId: string,
+  referenceType: string,
+  referenceId: string,
+): Promise<CustodyOperationView[]> {
+  const items: CustodyOperationView[] = [];
+  for (let page = 1; page <= REFERENCIA_PAGE_SIZE_CAP; page += 1) {
+    const { data, error } = await supabase.rpc("listar_custodias_materiais", {
+      _empresa_id: companyId,
+      _pagina: page,
+      _tamanho_pagina: REFERENCIA_PAGE_SIZE,
+      _referencia_tipo: referenceType,
+      _referencia_id: referenceId,
+    });
+    if (error) throwCustodyError(error, "list operations by reference");
+    const rows = data ?? [];
+    items.push(...rows.map((row) => row.item as unknown as CustodyOperationView));
+    if (rows.length < REFERENCIA_PAGE_SIZE) break;
+  }
+  return items;
+}
+
 export async function getCustodyIndicators(
   companyId: string,
 ): Promise<CustodyIndicators> {

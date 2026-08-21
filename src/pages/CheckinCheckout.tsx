@@ -35,6 +35,7 @@ import { CustodyHistoryDialog } from "@/components/checkin-checkout/CustodyHisto
 import { CustodyWriteOffDialog } from "@/components/checkin-checkout/CustodyWriteOffDialog";
 import { RentalOperationsQueue } from "@/components/checkin-checkout/RentalOperationsQueue";
 import { RemoteScannerSessionsPanel } from "@/components/checkin-checkout/RemoteScannerSessionsPanel";
+import { EventCustodyPanel } from "@/components/checkin-checkout/EventCustodyPanel";
 import { RentalDetailDialog } from "@/components/material-rentals/RentalDetailDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
@@ -364,11 +365,17 @@ export default function CheckinCheckout() {
         <TabsList>
           <TabsTrigger value="abertas">Operações em aberto</TabsTrigger>
           {rentalPermissions.visualizar && <TabsTrigger value="locacoes">Locações</TabsTrigger>}
+          <TabsTrigger value="por-evento">Por Evento</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
         {rentalPermissions.visualizar && companyId && (
           <TabsContent value="locacoes">
             <RentalOperationsQueue companyId={companyId} permissions={rentalPermissions} onSelect={setDetailRentalId} />
+          </TabsContent>
+        )}
+        {companyId && (
+          <TabsContent value="por-evento">
+            <EventCustodyPanel companyId={companyId} />
           </TabsContent>
         )}
         <TabsContent value="abertas">
