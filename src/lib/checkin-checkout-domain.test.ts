@@ -4,6 +4,7 @@ import {
   getCustodyMaterialActions,
   materialMatchesCustodyIdentifier,
   normalizeCustodyScan,
+  resolveCheckinOrigin,
   validateCheckin,
   validateCheckout,
 } from "./checkin-checkout-domain";
@@ -11,7 +12,46 @@ import type {
   CheckinInput,
   CheckoutInput,
   CustodyMaterialSearchResult,
+  CustodyOperationView,
 } from "./checkin-checkout-types";
+
+function custodyOperation(overrides: Partial<CustodyOperationView>): CustodyOperationView {
+  return {
+    id: "op1",
+    empresa_id: "empresa1",
+    material_id: "m1",
+    material_nome: "Mesa de Som",
+    material_codigo: "MESA-001",
+    material_identificador: null,
+    foto_path: null,
+    tipo_controle: "quantidade",
+    quantidade_retirada: 1,
+    quantidade_devolvida: 0,
+    quantidade_baixada: 0,
+    quantidade_pendente: 1,
+    localizacao_origem_id: "loc1",
+    localizacao_origem_nome: "Depósito",
+    retirada_em: "2026-08-14T18:42:00Z",
+    previsao_retorno: null,
+    executado_por: "user1",
+    executor_nome: "Alex",
+    responsavel_tipo: "funcionario",
+    responsavel_usuario_id: null,
+    responsavel_funcionario_id: "f1",
+    responsavel_nome: "João",
+    finalidade: "uso_interno",
+    referencia_tipo: null,
+    referencia_id: null,
+    observacao_saida: null,
+    condicao_saida: "bom",
+    status: "aberta",
+    movimento_saida_id: "mov1",
+    encerrada_em: null,
+    created_at: "2026-08-14T18:42:00Z",
+    updated_at: "2026-08-14T18:42:00Z",
+    ...overrides,
+  };
+}
 
 const material: CustodyMaterialSearchResult = {
   id: "6ad882a7-28de-4fb2-a2ee-dcc426d478da",
@@ -171,5 +211,79 @@ describe("check-in/check-out domain", () => {
     expect(deriveCustodyStatus(20, 0)).toBe("aberta");
     expect(deriveCustodyStatus(20, 15)).toBe("parcial");
     expect(deriveCustodyStatus(20, 20)).toBe("concluida");
+  });
+});
+
+describe("resolveCheckinOrigin", () => {
+  it("auto-selects the single open custody with a pending balance", () => {
+    const custody = custodyOperation({ id: "op1", quantidade_pendente: 1 });
+    expect(resolveCheckinOrigin([custody])).toEqual({ kind: "auto", custody });
+  });
+
+  it("does not auto-select when 2+ open custodies are pending - returns options instead", () => {
+    const first = custodyOperation({ id: "op1", quantidade_pendente: 2 });
+    const second = custodyOperation({ id: "op2", quantidade_pendente: 3 });
+    const result = resolveCheckinOrigin([first, second]);
+    expect(result.kind).toBe("choose");
+    if (result.kind !== "choose") throw new Error("expected choose");
+    expect(result.options).toHaveLength(2);
+    expect(result.options.map((item) => item.id)).toEqual(["op1", "op2"]);
+  });
+
+  it("preserves every simultaneous open custody for a quantity-controlled material - none dropped", () => {
+    const options = [
+      custodyOperation({ id: "op1", tipo_controle: "quantidade", quantidade_pendente: 5 }),
+      custodyOperation({ id: "op2", tipo_controle: "quantidade", quantidade_pendente: 2 }),
+      custodyOperation({ id: "op3", tipo_controle: "quantidade", quantidade_pendente: 1 }),
+    ];
+    const result = resolveCheckinOrigin(options);
+    expect(result.kind).toBe("choose");
+    if (result.kind !== "choose") throw new Error("expected choose");
+    expect(result.options.map((item) => item.id)).toEqual(["op1", "op2", "op3"]);
+  });
+
+  it("exposes finalidade and referencia_tipo/referencia_id per option so the caller can identify context", () => {
+    const eventoCustody = custodyOperation({
+      id: "op1",
+      quantidade_pendente: 1,
+      finalidade: "evento",
+      referencia_tipo: "evento",
+      referencia_id: "evt-1",
+    });
+    const usoInternoCustody = custodyOperation({
+      id: "op2",
+      quantidade_pendente: 1,
+      finalidade: "uso_interno",
+      referencia_tipo: null,
+      referencia_id: null,
+    });
+    const result = resolveCheckinOrigin([eventoCustody, usoInternoCustody]);
+    expect(result.kind).toBe("choose");
+    if (result.kind !== "choose") throw new Error("expected choose");
+    expect(result.options[0]).toMatchObject({
+      finalidade: "evento",
+      referencia_tipo: "evento",
+      referencia_id: "evt-1",
+      quantidade_pendente: 1,
+    });
+    expect(result.options[1]).toMatchObject({
+      finalidade: "uso_interno",
+      referencia_tipo: null,
+      referencia_id: null,
+      quantidade_pendente: 1,
+    });
+  });
+
+  it("ignores custodies with no pending balance and cancelled custodies", () => {
+    const settled = custodyOperation({ id: "op-settled", quantidade_pendente: 0, status: "concluida" });
+    const cancelled = custodyOperation({ id: "op-cancelled", quantidade_pendente: 1, status: "cancelada" });
+    const pending = custodyOperation({ id: "op-pending", quantidade_pendente: 1, status: "aberta" });
+    expect(resolveCheckinOrigin([settled, cancelled, pending])).toEqual({ kind: "auto", custody: pending });
+  });
+
+  it("returns none when there is no open custody with a pending balance", () => {
+    const settled = custodyOperation({ id: "op1", quantidade_pendente: 0, status: "concluida" });
+    expect(resolveCheckinOrigin([settled])).toEqual({ kind: "none" });
+    expect(resolveCheckinOrigin([])).toEqual({ kind: "none" });
   });
 });

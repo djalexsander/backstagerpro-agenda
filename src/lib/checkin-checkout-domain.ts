@@ -4,6 +4,7 @@ import type {
   CheckoutInput,
   CustodyCondition,
   CustodyMaterialSearchResult,
+  CustodyOperationView,
   CustodyPurpose,
   CustodyStatus,
 } from "./checkin-checkout-types";
@@ -171,4 +172,36 @@ export function validateCheckin(
     errors.returnCondition = "Informe a condição no retorno.";
   }
   return errors;
+}
+
+export type CheckinOriginResolution =
+  | { kind: "auto"; custody: CustodyOperationView }
+  | { kind: "choose"; options: CustodyOperationView[] }
+  | { kind: "none" };
+
+/**
+ * Resolve de qual custódia aberta um material identificado para check-in
+ * está voltando, a partir das custódias abertas desse material (qualquer
+ * finalidade/referência - evento, cliente, funcionário etc. -
+ * listar_custodias_materiais já expõe tudo isso em CustodyOperationView,
+ * nenhum campo novo). Com exatamente uma custódia com saldo pendente, essa é
+ * a origem (nada a perguntar). Com duas ou mais - comum em materiais por
+ * quantidade, que podem ter retiradas separadas simultâneas para o mesmo
+ * material - devolve todas como opções para quem chamar decidir com o
+ * usuário, em vez de adivinhar uma só (não aplica nenhum critério de
+ * desempate como "mais antiga primeiro" - isso é decisão de UI, fora desta
+ * função). Custódias já sem saldo (quantidade_pendente = 0) ou canceladas
+ * são ignoradas, mesmo filtro que summarizeEventCustody já usa. Não decide
+ * quantidade, localização de destino ou condição - isso continua no
+ * CheckinDialog/registrar_checkin_material, inalterados.
+ */
+export function resolveCheckinOrigin(
+  custodiasAbertas: CustodyOperationView[],
+): CheckinOriginResolution {
+  const pendentes = custodiasAbertas.filter(
+    (custody) => custody.status !== "cancelada" && custody.quantidade_pendente > 0,
+  );
+  if (pendentes.length === 0) return { kind: "none" };
+  if (pendentes.length === 1) return { kind: "auto", custody: pendentes[0] };
+  return { kind: "choose", options: pendentes };
 }
