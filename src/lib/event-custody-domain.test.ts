@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeEventCustody } from "./event-custody-domain";
+import { findPendingMaterialByCode, summarizeEventCustody } from "./event-custody-domain";
 import type { CustodyOperationView } from "./checkin-checkout-types";
 
 function operation(overrides: Partial<CustodyOperationView>): CustodyOperationView {
@@ -141,5 +141,75 @@ describe("summarizeEventCustody", () => {
       ]);
       expect(summary.materiaisDevolvidos[0].custodiasAbertas).toEqual([]);
     });
+  });
+});
+
+describe("findPendingMaterialByCode", () => {
+  it("matches by the material's internal code (material_codigo)", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", material_codigo: "MESA-001", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+    ]);
+    expect(findPendingMaterialByCode(summary.materiaisPendentes, "MESA-001")?.materialId).toBe("m1");
+  });
+
+  it("matches by the custody's material_identificador fallback (patrimônio/série/barcode/uuid)", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", material_codigo: "MESA-001", material_identificador: "PAT-900", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+    ]);
+    expect(findPendingMaterialByCode(summary.materiaisPendentes, "PAT-900")?.materialId).toBe("m1");
+  });
+
+  it("matches a QR by identificador_unico even when material_identificador holds a different value (patrimônio/série/barcode)", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", material_identificador: "PAT-900", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+    ]);
+    const identificadorUnicoPorMaterial = new Map([["m1", "15b13cd1-6921-49a4-b67d-54c1b0e39acc"]]);
+    expect(
+      findPendingMaterialByCode(
+        summary.materiaisPendentes,
+        "BACKSTAGE-PRO:MATERIAL:15b13cd1-6921-49a4-b67d-54c1b0e39acc",
+        identificadorUnicoPorMaterial,
+      )?.materialId,
+    ).toBe("m1");
+  });
+
+  it("does not match a QR belonging to a different material's identificador_unico", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+      operation({ id: "op2", material_id: "m2", material_nome: "Caixa de Som", material_codigo: "CAIXA-001", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+    ]);
+    const identificadorUnicoPorMaterial = new Map([
+      ["m1", "15b13cd1-6921-49a4-b67d-54c1b0e39acc"],
+      ["m2", "aaaaaaaa-6921-49a4-b67d-54c1b0e39acc"],
+    ]);
+    const found = findPendingMaterialByCode(
+      summary.materiaisPendentes,
+      "BACKSTAGE-PRO:MATERIAL:aaaaaaaa-6921-49a4-b67d-54c1b0e39acc",
+      identificadorUnicoPorMaterial,
+    );
+    expect(found?.materialId).toBe("m2");
+    expect(found?.materialId).not.toBe("m1");
+  });
+
+  it("is case-insensitive and trims keyboard-scanner whitespace", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", material_codigo: "MESA-001", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+    ]);
+    expect(findPendingMaterialByCode(summary.materiaisPendentes, "\tmesa-001\r\n")?.materialId).toBe("m1");
+  });
+
+  it("returns undefined for an empty or unmatched code", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", material_codigo: "MESA-001", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 1, status: "aberta" }),
+    ]);
+    expect(findPendingMaterialByCode(summary.materiaisPendentes, "")).toBeUndefined();
+    expect(findPendingMaterialByCode(summary.materiaisPendentes, "NAO-EXISTE")).toBeUndefined();
+  });
+
+  it("does not match a fully returned material - it has no pending row to search", () => {
+    const summary = summarizeEventCustody([
+      operation({ id: "op1", material_id: "m1", material_codigo: "MESA-001", quantidade_retirada: 2, quantidade_devolvida: 2, quantidade_pendente: 0, status: "concluida" }),
+    ]);
+    expect(findPendingMaterialByCode(summary.materiaisPendentes, "MESA-001")).toBeUndefined();
   });
 });

@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { ClipboardCheck, Loader2, PackageCheck, PackageOpen } from "lucide-react";
+import { ClipboardCheck, Loader2, PackageCheck, PackageOpen, ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -16,7 +17,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
 import { listCustodyOperationsByReference } from "@/lib/checkin-checkout-service";
-import { summarizeEventCustody, type EventCustodyMaterialSummary } from "@/lib/event-custody-domain";
+import {
+  findPendingMaterialByCode,
+  summarizeEventCustody,
+  type EventCustodyMaterialSummary,
+} from "@/lib/event-custody-domain";
 import type { StockLocation } from "@/lib/stock-types";
 
 function MaterialRow({
@@ -44,11 +49,14 @@ function MaterialRow({
 
 // Primeira etapa da conferência de retorno por evento: mostra o que foi
 // retirado/devolvido/pendente para o evento selecionado, e permite dar
-// check-in direto de um material pendente. Reaproveita o CheckinDialog e a
-// RPC de check-in já existentes por inteiro (mesma validação de quantidade/
-// pendente que a aba "Operações em aberto" já usa) - nenhuma lógica de
-// check-in nova foi criada aqui. Leitura em lote/QR/RFID por evento continua
-// fora de escopo.
+// check-in direto de um material pendente, seja pelo botão "Fazer check-in"
+// ou digitando/lendo o código do material (leitor USB/QR que emula teclado -
+// ver findPendingMaterialByCode). Os dois caminhos resolvem para a mesma
+// custódia (a mais antiga pendente) e abrem o mesmo CheckinDialog. Reaproveita
+// o CheckinDialog e a RPC de check-in já existentes por inteiro (mesma
+// validação de quantidade/pendente que a aba "Operações em aberto" já usa) -
+// nenhuma lógica de check-in nova foi criada aqui. Câmera, Scanner Remoto e
+// RFID/EPC por evento continuam fora de escopo.
 export function EventCustodyPanel({
   companyId,
   canCheckin,
@@ -62,6 +70,8 @@ export function EventCustodyPanel({
   const [checkinOperation, setCheckinOperation] = useState<
     EventCustodyMaterialSummary["custodiasAbertas"][number] | null
   >(null);
+  const [scanValue, setScanValue] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const eventsQuery = useQuery({
@@ -86,9 +96,44 @@ export function EventCustodyPanel({
   });
 
   const summary = custodyQuery.data ? summarizeEventCustody(custodyQuery.data) : null;
+  const pendingMaterialIds = summary ? summary.materiaisPendentes.map((item) => item.materialId) : [];
+
+  // identificador_unico não é exposto por listar_custodias_materiais (só o
+  // fallback material_identificador, que pode ser patrimônio/série/código de
+  // barras) - por isso é resolvido aqui, direto contra materiais, só para os
+  // materiais pendentes deste evento. Ver findPendingMaterialByCode.
+  const identifierQuery = useQuery({
+    queryKey: ["event-custody-material-identifiers", companyId, pendingMaterialIds],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("materiais")
+        .select("id, identificador_unico")
+        .eq("empresa_id", companyId)
+        .in("id", pendingMaterialIds);
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(companyId) && pendingMaterialIds.length > 0,
+  });
+  const identificadorUnicoPorMaterial = new Map(
+    (identifierQuery.data ?? []).map((row) => [row.id, row.identificador_unico]),
+  );
 
   const refreshAfterCheckin = async () => {
     await queryClient.invalidateQueries({ queryKey: ["event-custody-operations", companyId, eventId] });
+  };
+
+  const handleScanSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!summary) return;
+    const match = findPendingMaterialByCode(summary.materiaisPendentes, scanValue, identificadorUnicoPorMaterial);
+    if (!match || match.custodiasAbertas.length === 0) {
+      setScanError("Nenhum material pendente encontrado para este código.");
+      return;
+    }
+    setScanError(null);
+    setScanValue("");
+    setCheckinOperation(match.custodiasAbertas[0]);
   };
 
   return (
@@ -132,6 +177,34 @@ export function EventCustodyPanel({
 
       {eventId && summary && (
         <>
+          {canCheckin && (
+            <Card>
+              <CardContent className="space-y-2 p-4">
+                <Label htmlFor="event-custody-scan">Check-in por código</Label>
+                <form className="flex gap-2" onSubmit={handleScanSubmit}>
+                  <Input
+                    id="event-custody-scan"
+                    autoFocus
+                    value={scanValue}
+                    onChange={(event) => {
+                      setScanValue(event.target.value);
+                      setScanError(null);
+                    }}
+                    placeholder="Digite ou leia o código do material"
+                    autoComplete="off"
+                  />
+                  <Button type="submit" disabled={!scanValue.trim()}>
+                    <ScanLine className="mr-1 h-4 w-4" /> Buscar
+                  </Button>
+                </form>
+                <p className="text-xs text-muted-foreground">
+                  Scanners USB/Bluetooth funcionam como teclado: mantenha o cursor no campo e finalize com Enter.
+                </p>
+                {scanError && <p className="text-sm text-destructive">{scanError}</p>}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-3">
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total retirado</p><p className="text-2xl font-bold">{summary.totalRetirado}</p></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total devolvido</p><p className="text-2xl font-bold">{summary.totalDevolvido}</p></CardContent></Card>
