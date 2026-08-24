@@ -37,7 +37,7 @@ import { CustodyWriteOffDialog } from "@/components/checkin-checkout/CustodyWrit
 import { RentalOperationsQueue } from "@/components/checkin-checkout/RentalOperationsQueue";
 import { RemoteScannerSessionsPanel } from "@/components/checkin-checkout/RemoteScannerSessionsPanel";
 import { EventCustodyPanel } from "@/components/checkin-checkout/EventCustodyPanel";
-import { RentalDetailDialog } from "@/components/material-rentals/RentalDetailDialog";
+import { RentalWithdrawalDialog } from "@/components/checkin-checkout/RentalWithdrawalDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useCheckinCheckout } from "@/hooks/useCheckinCheckout";
@@ -443,7 +443,7 @@ export default function CheckinCheckout() {
       {companyId && <CustodyWriteOffDialog open={!!writeOffOperation} onOpenChange={(open) => !open && setWriteOffOperation(null)} companyId={companyId} operation={writeOffOperation} onSaved={refreshAfterOperation} />}
       {companyId && <CustodyHistoryDialog open={!!historyOperation} onOpenChange={(open) => !open && setHistoryOperation(null)} companyId={companyId} operation={historyOperation} />}
       {companyId && (
-        <RentalDetailDialog
+        <RentalWithdrawalDialog
           open={Boolean(detailRentalId)}
           onOpenChange={(next) => { if (!next) setDetailRentalId(null); }}
           companyId={companyId}
