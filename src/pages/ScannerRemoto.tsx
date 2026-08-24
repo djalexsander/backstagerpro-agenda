@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format, parseISO } from "date-fns";
 import { Camera, Loader2, LogOut, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useScannerRemoto } from "@/hooks/useScannerRemoto";
@@ -87,6 +89,7 @@ export default function ScannerRemoto() {
     purpose: "" as CustodyPurpose | "",
     originLocationId: "",
     destinationLocationId: "",
+    eventId: "",
     titulo: "",
   });
 
@@ -108,12 +111,29 @@ export default function ScannerRemoto() {
     queryFn: () => listCustodyResponsibles(companyId!),
     enabled: Boolean(companyId) && permissions.checkout,
   });
+  // Same query CheckoutDialog.tsx uses for its own purpose==='evento' Event
+  // picker - only fetched while a session with finalidade evento is being
+  // configured here.
+  const eventsQuery = useQuery({
+    queryKey: ["scanner-remoto-events", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("id, name, date")
+        .eq("empresa_id", companyId)
+        .order("date", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: form.purpose === "evento" && Boolean(companyId),
+  });
 
   const locations = locationsQuery.data ?? [];
   // Same simplification CheckinCheckout.tsx's own quick picker uses -
   // funcionario-type responsibles aren't offered here yet, the RPC already
   // supports them for whenever that picker is added.
   const responsibles = (responsiblesQuery.data ?? []).filter((item) => item.tipo === "usuario");
+  const events = eventsQuery.data ?? [];
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
 
   if (!companyId) {
@@ -152,6 +172,10 @@ export default function ScannerRemoto() {
       toast({ title: "Preencha origem, responsável e finalidade", variant: "destructive" });
       return;
     }
+    if (needsCheckoutFields && form.purpose === "evento" && !form.eventId) {
+      toast({ title: "Selecione o evento", variant: "destructive" });
+      return;
+    }
     if (needsCheckinFields && !form.destinationLocationId) {
       toast({ title: "Selecione a localização de destino", variant: "destructive" });
       return;
@@ -167,6 +191,8 @@ export default function ScannerRemoto() {
         purpose: form.purpose || undefined,
         originLocationId: form.originLocationId || undefined,
         destinationLocationId: form.destinationLocationId || undefined,
+        referenceType: form.purpose === "evento" ? "evento" : undefined,
+        referenceId: form.purpose === "evento" ? form.eventId : undefined,
         titulo: form.titulo.trim() || undefined,
         clientUuid: crypto.randomUUID(),
       });
@@ -397,6 +423,31 @@ export default function ScannerRemoto() {
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {form.purpose === "evento" && (
+                        <div className="space-y-1.5">
+                          <Label>Evento</Label>
+                          <Select
+                            value={form.eventId}
+                            onValueChange={(value) =>
+                              setForm((current) => ({ ...current, eventId: value }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue
+                                placeholder={eventsQuery.isLoading ? "Carregando eventos..." : "Selecione o evento"}
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {events.map((eventOption) => (
+                                <SelectItem key={eventOption.id} value={eventOption.id}>
+                                  {eventOption.name} · {format(parseISO(eventOption.date), "dd/MM/yyyy")}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </>
                   )}
 
