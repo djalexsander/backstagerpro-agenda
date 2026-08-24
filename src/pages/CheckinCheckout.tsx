@@ -30,6 +30,7 @@ import { MaterialPhotoImage } from "@/components/materials/MaterialPhotoImage";
 import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
 import { CheckoutDialog } from "@/components/checkin-checkout/CheckoutDialog";
 import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
+import { CheckinOriginDialog } from "@/components/checkin-checkout/CheckinOriginDialog";
 import { CancelCheckoutDialog } from "@/components/checkin-checkout/CancelCheckoutDialog";
 import { CustodyHistoryDialog } from "@/components/checkin-checkout/CustodyHistoryDialog";
 import { CustodyWriteOffDialog } from "@/components/checkin-checkout/CustodyWriteOffDialog";
@@ -49,6 +50,7 @@ import {
   CUSTODY_STATUS_LABELS,
   getCustodyMaterialActions,
   normalizeCustodyScan,
+  resolveCheckinOrigin,
 } from "@/lib/checkin-checkout-domain";
 import {
   listCustodyOperations,
@@ -148,6 +150,7 @@ export default function CheckinCheckout() {
   const [searchMessage, setSearchMessage] = useState("");
   const [checkoutMaterial, setCheckoutMaterial] = useState<CustodyMaterialSearchResult | null>(null);
   const [checkinOperation, setCheckinOperation] = useState<CustodyOperationView | null>(null);
+  const [checkinOriginChoices, setCheckinOriginChoices] = useState<CustodyOperationView[] | null>(null);
   const [cancelOperation, setCancelOperation] = useState<CustodyOperationView | null>(null);
   const [writeOffOperation, setWriteOffOperation] = useState<CustodyOperationView | null>(null);
   const [historyOperation, setHistoryOperation] = useState<CustodyOperationView | null>(null);
@@ -227,10 +230,13 @@ export default function CheckinCheckout() {
     }
   };
 
-  const openCheckinFromSearch = async (
-    material: CustodyMaterialSearchResult,
-    custodyId: string,
-  ) => {
+  // Fetches this material's open custodies (same listCustodyOperations call
+  // used everywhere else in this file - onlyOpen already returns
+  // CustodyOperationView, with finalidade/localizacao_origem_nome/
+  // quantidade_pendente, no new RPC) and hands them to resolveCheckinOrigin
+  // (checkin-checkout-domain.ts): exactly one open custody skips straight to
+  // CheckinDialog, two or more open CheckinOriginDialog instead of guessing.
+  const openCheckinFromSearch = async (material: CustodyMaterialSearchResult) => {
     if (!companyId) return;
     setSearching(true);
     try {
@@ -241,12 +247,22 @@ export default function CheckinCheckout() {
         filters: { ...INITIAL_FILTERS, search: material.codigo_interno },
         onlyOpen: true,
       });
-      const operation = page.items.find((item) => item.id === custodyId);
-      if (operation) setCheckinOperation(operation);
+      // The search filter above matches by text and could in principle
+      // surface another material sharing part of this codigo_interno -
+      // narrow to this exact material before resolving.
+      const materialOperations = page.items.filter((item) => item.material_id === material.id);
+      const resolution = resolveCheckinOrigin(materialOperations);
+      if (resolution.kind === "auto") setCheckinOperation(resolution.custody);
+      else if (resolution.kind === "choose") setCheckinOriginChoices(resolution.options);
       else setSearchMessage("A operação aberta foi atualizada. Faça uma nova leitura.");
     } finally {
       setSearching(false);
     }
+  };
+
+  const handleSelectCheckinOrigin = (operation: CustodyOperationView) => {
+    setCheckinOriginChoices(null);
+    setCheckinOperation(operation);
   };
 
   if (!companyId) {
@@ -331,11 +347,11 @@ export default function CheckinCheckout() {
                         <p className="mt-1 text-sm">Disponível: <strong>{actions.available}</strong> · Em custódia: <strong>{actions.pending}</strong></p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {actions.canCheckout && permissions.checkout && <Button size="sm" onClick={() => setCheckoutMaterial(material)}>Check-out</Button>}
-                          {actions.canCheckin && permissions.checkin && material.custodias_abertas.map((custody) => (
-                            <Button key={custody.id} size="sm" variant="outline" onClick={() => openCheckinFromSearch(material, custody.id)}>
-                              Check-in · {custody.responsavel_nome} ({custody.quantidade_pendente})
+                          {actions.canCheckin && permissions.checkin && (
+                            <Button size="sm" variant="outline" onClick={() => void openCheckinFromSearch(material)}>
+                              Check-in ({actions.pending})
                             </Button>
-                          ))}
+                          )}
                           {!actions.canCheckout && !actions.canCheckin && <Badge variant="secondary">Sem ação válida</Badge>}
                         </div>
                       </div>
@@ -414,6 +430,15 @@ export default function CheckinCheckout() {
 
       {companyId && <CheckoutDialog open={!!checkoutMaterial} onOpenChange={(open) => !open && setCheckoutMaterial(null)} companyId={companyId} material={checkoutMaterial} responsibles={responsibles} onSaved={refreshAfterOperation} />}
       {companyId && <CheckinDialog open={!!checkinOperation} onOpenChange={(open) => !open && setCheckinOperation(null)} companyId={companyId} operation={checkinOperation} locations={locations} onSaved={refreshAfterOperation} />}
+      {companyId && (
+        <CheckinOriginDialog
+          open={!!checkinOriginChoices}
+          onOpenChange={(open) => !open && setCheckinOriginChoices(null)}
+          companyId={companyId}
+          options={checkinOriginChoices ?? []}
+          onSelect={handleSelectCheckinOrigin}
+        />
+      )}
       {companyId && <CancelCheckoutDialog open={!!cancelOperation} onOpenChange={(open) => !open && setCancelOperation(null)} companyId={companyId} operation={cancelOperation} onSaved={refreshAfterOperation} />}
       {companyId && <CustodyWriteOffDialog open={!!writeOffOperation} onOpenChange={(open) => !open && setWriteOffOperation(null)} companyId={companyId} operation={writeOffOperation} onSaved={refreshAfterOperation} />}
       {companyId && <CustodyHistoryDialog open={!!historyOperation} onOpenChange={(open) => !open && setHistoryOperation(null)} companyId={companyId} operation={historyOperation} />}
