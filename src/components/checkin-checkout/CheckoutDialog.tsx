@@ -39,7 +39,18 @@ import type {
 } from "@/lib/checkin-checkout-types";
 import { nowAsDatetimeLocalValue } from "@/lib/datetime";
 
-const PURPOSES = Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[];
+// 'locacao' ('Locação futura') fica fora da lista selecionável aqui de
+// propósito: essa finalidade só deve nascer vinculada a um item real de
+// material_locacoes, pelo fluxo oficial de Locações
+// (registrar_retirada_locacao_material, que passa referencia_tipo=
+// 'locacao_item'). Este Check-out genérico não tem seletor de locação, então
+// selecioná-la aqui criaria uma custódia com finalidade='locacao' sem
+// vínculo algum. O valor continua no enum e em CUSTODY_PURPOSE_LABELS - ele
+// segue aparecendo normalmente no histórico das custódias já vinculadas pelo
+// fluxo oficial (passadas ou futuras).
+const PURPOSES = (Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[]).filter(
+  (purpose) => purpose !== "locacao",
+);
 const CONDITIONS = Object.keys(CUSTODY_CONDITION_LABELS) as CustodyCondition[];
 
 export function CheckoutDialog({
