@@ -8,6 +8,7 @@ import type {
 export const TRACEABILITY_SITUACAO_LABELS: Record<TraceabilitySituacao["situacao"], string> = {
   disponivel: "Disponível",
   locado: "Locado",
+  evento: "Evento",
   emprestado: "Emprestado",
   em_manutencao: "Em manutenção",
   avariado: "Avariado",
@@ -22,6 +23,7 @@ export function situacaoBadgeTone(situacao: TraceabilitySituacao["situacao"]): S
     case "disponivel":
       return "success";
     case "locado":
+    case "evento":
     case "emprestado":
       return "neutral";
     case "em_manutencao":
@@ -147,6 +149,7 @@ export function buildOndeEstaAgoraSummary(resumo: TraceabilitySituacao): OndeEst
       return { headline: "Disponível", linhas };
     }
     case "locado":
+    case "evento":
     case "emprestado": {
       const linhas: OndeEstaAgoraLine[] = [];
       if (resumo.locacao) {
@@ -168,7 +171,7 @@ export function buildOndeEstaAgoraSummary(resumo: TraceabilitySituacao): OndeEst
           value: formatDateTime(resumo.previsao_retorno) + (resumo.atrasado ? " · Atrasado" : ""),
         });
       }
-      return { headline: resumo.situacao === "locado" ? "Locado" : "Emprestado", linhas };
+      return { headline: TRACEABILITY_SITUACAO_LABELS[resumo.situacao], linhas };
     }
     case "em_manutencao": {
       const linhas: OndeEstaAgoraLine[] = [

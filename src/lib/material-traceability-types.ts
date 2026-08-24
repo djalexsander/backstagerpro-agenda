@@ -1,5 +1,5 @@
 import type { MaterialControlType, MaterialOperationalStatus } from "./material-types";
-import type { CustodyPurpose } from "./checkin-checkout-types";
+import type { CustodyCondition, CustodyPurpose } from "./checkin-checkout-types";
 import type { RfidTagStatus } from "./rfid-types";
 
 // ============================================================================
@@ -25,45 +25,83 @@ export type TraceabilityEventSummary = {
   evento_data: string;
 } | null;
 
+/** Uma custódia aberta (aberta/parcial) do material - item de `custodias_abertas`. */
+export interface TraceabilityOpenCustody {
+  custodia_id: string;
+  status: "aberta" | "parcial";
+  finalidade: CustodyPurpose;
+  referencia_tipo: string | null;
+  referencia_id: string | null;
+  quantidade_retirada: number;
+  quantidade_devolvida: number;
+  quantidade_pendente: number;
+  retirado_por: string;
+  liberado_por: string;
+  retirada_em: string;
+  previsao_retorno: string | null;
+  localizacao_origem_id: string | null;
+  localizacao_origem_nome: string | null;
+  condicao_saida: CustodyCondition;
+  evento: TraceabilityEventSummary;
+  locacao: TraceabilityRentalSummary;
+}
+
+/**
+ * Distribuição atual do material - presente em toda resposta de
+ * resumo_situacao_material desde 20260824100000_traceability_open_
+ * custodies_enrichment.sql, qualquer que seja `situacao` (por isso
+ * intersectado com toda a união abaixo, em vez de repetido em cada ramo).
+ */
+export interface TraceabilityDistribution {
+  custodias_abertas: TraceabilityOpenCustody[];
+  quantidade_total: number;
+  quantidade_disponivel: number;
+  quantidade_fora: number;
+}
+
 /**
  * Espelha o retorno de resumo_situacao_material (SQL) - discriminado por
  * `situacao`. 'locado' = custódia com finalidade 'locacao' (vinculada a uma
- * locação); 'emprestado' = qualquer outra finalidade de custódia aberta
- * (uso_interno/funcionario/evento/transferencia_operacional/outro). Não há
- * estado "em trânsito": não é modelado em nenhuma tabela deste domínio.
+ * locação); 'evento' = finalidade 'evento' ou referencia_tipo 'evento'
+ * (vinculada a um evento); 'emprestado' = qualquer outra finalidade de
+ * custódia aberta (uso_interno/funcionario/cliente/transferencia_
+ * operacional/outro). Não há estado "em trânsito": não é modelado em
+ * nenhuma tabela deste domínio.
  */
-export type TraceabilitySituacao =
-  | {
-      situacao: "em_manutencao";
-      manutencao_numero: string;
-      manutencao_status: string;
-      manutencao_aberta_em: string;
-      manutencao_previsao_conclusao_em: string | null;
-      manutencao_responsavel_nome: string | null;
-    }
-  | {
-      situacao: "locado" | "emprestado";
-      custodia_id: string;
-      custodia_status: "aberta" | "parcial";
-      finalidade: CustodyPurpose;
-      retirada_em: string;
-      previsao_retorno: string | null;
-      atrasado: boolean;
-      retirado_por: string;
-      liberado_por: string;
-      locacao: TraceabilityRentalSummary;
-      evento: TraceabilityEventSummary;
-    }
-  | {
-      situacao: Exclude<MaterialOperationalStatus, "disponivel" | "em_manutencao">;
-      justificativa_status: string | null;
-    }
-  | {
-      situacao: "disponivel";
-      localizacoes: { localizacao_id: string; localizacao_codigo: string; localizacao_nome: string }[];
-      ultimo_retorno_em: string | null;
-      ultimo_retorno_recebido_por: string | null;
-    };
+export type TraceabilitySituacao = TraceabilityDistribution &
+  (
+    | {
+        situacao: "em_manutencao";
+        manutencao_numero: string;
+        manutencao_status: string;
+        manutencao_aberta_em: string;
+        manutencao_previsao_conclusao_em: string | null;
+        manutencao_responsavel_nome: string | null;
+      }
+    | {
+        situacao: "locado" | "evento" | "emprestado";
+        custodia_id: string;
+        custodia_status: "aberta" | "parcial";
+        finalidade: CustodyPurpose;
+        retirada_em: string;
+        previsao_retorno: string | null;
+        atrasado: boolean;
+        retirado_por: string;
+        liberado_por: string;
+        locacao: TraceabilityRentalSummary;
+        evento: TraceabilityEventSummary;
+      }
+    | {
+        situacao: Exclude<MaterialOperationalStatus, "disponivel" | "em_manutencao">;
+        justificativa_status: string | null;
+      }
+    | {
+        situacao: "disponivel";
+        localizacoes: { localizacao_id: string; localizacao_codigo: string; localizacao_nome: string }[];
+        ultimo_retorno_em: string | null;
+        ultimo_retorno_recebido_por: string | null;
+      }
+  );
 
 export interface TraceabilitySearchResult {
   id: string;

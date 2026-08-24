@@ -27,6 +27,7 @@ import { getTraceabilityPermissions } from "@/lib/material-traceability-permissi
 import { getMaterialTraceability, searchMaterialTraceability } from "@/lib/material-traceability-service";
 import type {
   MaterialTraceabilityDetail,
+  TraceabilityOpenCustody,
   TraceabilitySituacao,
   TraceabilityTimelineEntry,
 } from "@/lib/material-traceability-types";
@@ -34,11 +35,13 @@ import {
   buildOndeEstaAgoraSummary,
   describeTimelineEntry,
   formatDateTime,
+  formatEventDate,
   situacaoBadgeTone,
   TIMELINE_ENTRY_LABELS,
   TRACEABILITY_SITUACAO_LABELS,
   type SituacaoBadgeTone,
 } from "@/lib/material-traceability-domain";
+import { CUSTODY_PURPOSE_LABELS } from "@/lib/checkin-checkout-domain";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -61,6 +64,7 @@ function resultSummaryLine(resumo: TraceabilitySituacao): string {
     case "disponivel":
       return "Disponível";
     case "locado":
+    case "evento":
     case "emprestado":
       if (resumo.locacao) return `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.locacao.cliente_nome}`;
       if (resumo.evento) return `${TRACEABILITY_SITUACAO_LABELS[resumo.situacao]} — ${resumo.evento.evento_nome}`;
@@ -90,6 +94,41 @@ function DetailField({ label, value }: { label: string; value: string | null | u
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
+// Uma linha da "Distribuição atual" (bloco "Onde está agora?") - uma
+// custódia aberta por vez, todos os campos já vêm prontos de
+// resumo_situacao_material (custodias_abertas), nenhuma derivação nova além
+// de formatação de texto (mesmo espírito de buildOndeEstaAgoraSummary).
+function OpenCustodyRow({ custody }: { custody: TraceabilityOpenCustody }) {
+  return (
+    <div className="rounded-md border p-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <DetailField label="Quantidade pendente" value={String(custody.quantidade_pendente)} />
+        <DetailField label="Finalidade" value={CUSTODY_PURPOSE_LABELS[custody.finalidade]} />
+        {custody.evento && (
+          <>
+            <DetailField label="Evento" value={custody.evento.evento_nome} />
+            <DetailField label="Data do evento" value={formatEventDate(custody.evento.evento_data)} />
+          </>
+        )}
+        {custody.locacao && (
+          <>
+            <DetailField label="Locação" value={custody.locacao.locacao_numero} />
+            <DetailField label="Cliente" value={custody.locacao.cliente_nome} />
+          </>
+        )}
+        <DetailField label="Responsável" value={custody.retirado_por} />
+        <DetailField label="Saída em" value={formatDateTime(custody.retirada_em)} />
+        {custody.previsao_retorno && (
+          <DetailField label="Previsão de retorno" value={formatDateTime(custody.previsao_retorno)} />
+        )}
+        {custody.localizacao_origem_nome && (
+          <DetailField label="Localização de origem" value={custody.localizacao_origem_nome} />
+        )}
+      </div>
     </div>
   );
 }
@@ -139,10 +178,26 @@ function MaterialDetail({
               <Link to={`/locacoes?locacao=${resumo.locacao.locacao_id}`}>Abrir locação {resumo.locacao.locacao_numero}</Link>
             </Button>
           )}
-          {resumo.situacao === "emprestado" && resumo.evento && (
+          {resumo.situacao === "evento" && resumo.evento && (
             <Button asChild size="sm" variant="outline">
               <Link to={`/evento/${resumo.evento.evento_id}`}>Abrir evento {resumo.evento.evento_nome}</Link>
             </Button>
+          )}
+
+          <Separator />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <DetailField label="Quantidade total" value={String(resumo.quantidade_total)} />
+            <DetailField label="Disponível em estoque" value={String(resumo.quantidade_disponivel)} />
+            <DetailField label="Atualmente fora" value={String(resumo.quantidade_fora)} />
+          </div>
+
+          {resumo.custodias_abertas.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Distribuição atual</p>
+              {resumo.custodias_abertas.map((custody) => (
+                <OpenCustodyRow key={custody.custodia_id} custody={custody} />
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

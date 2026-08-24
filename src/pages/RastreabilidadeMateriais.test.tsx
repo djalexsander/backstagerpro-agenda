@@ -53,6 +53,10 @@ const disponivelResumo = {
   localizacoes: [{ localizacao_id: "l1", localizacao_codigo: "EST-A", localizacao_nome: "Estoque Principal" }],
   ultimo_retorno_em: null,
   ultimo_retorno_recebido_por: null,
+  custodias_abertas: [],
+  quantidade_total: 3,
+  quantidade_disponivel: 3,
+  quantidade_fora: 0,
 };
 
 function searchResult(overrides: Partial<Record<string, unknown>> = {}) {
@@ -72,7 +76,7 @@ function searchResult(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function detailFor(materialId: string) {
+function detailFor(materialId: string, resumo: Record<string, unknown> = disponivelResumo) {
   return {
     material: {
       id: materialId,
@@ -92,7 +96,7 @@ function detailFor(materialId: string) {
       ativo: true,
       foto_path: null,
     },
-    resumo: disponivelResumo,
+    resumo,
     rfid_tags: null,
     timeline: [],
     permissoes: { estoque: true, custodia: true, locacao: true, manutencao: true, rfid: false },
@@ -146,6 +150,63 @@ describe("RastreabilidadeMateriais", () => {
     expect(await screen.findByText(/onde está agora/i)).toBeInTheDocument();
     expect(screen.getByText("DISPONÍVEL")).toBeInTheDocument();
     expect(screen.queryByText(/resultados/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the enriched distribution block (totals + one row per open custody) already returned by resumo_situacao_material", async () => {
+    const eventoResumo = {
+      situacao: "evento",
+      custodia_id: "cust-1",
+      custodia_status: "aberta",
+      finalidade: "evento",
+      retirada_em: "2026-08-14T10:20:00Z",
+      previsao_retorno: null,
+      atrasado: false,
+      retirado_por: "Alex Sandro",
+      liberado_por: "Alex Sandro",
+      locacao: null,
+      evento: { evento_id: "evt-1", evento_nome: "Festa do Peão", evento_data: "2026-08-26" },
+      custodias_abertas: [
+        {
+          custodia_id: "cust-1",
+          status: "aberta",
+          finalidade: "evento",
+          referencia_tipo: "evento",
+          referencia_id: "evt-1",
+          quantidade_retirada: 12,
+          quantidade_devolvida: 0,
+          quantidade_pendente: 12,
+          retirado_por: "Alex Sandro",
+          liberado_por: "Alex Sandro",
+          retirada_em: "2026-08-14T10:20:00Z",
+          previsao_retorno: null,
+          localizacao_origem_id: "loc-1",
+          localizacao_origem_nome: "Depósito Central",
+          condicao_saida: "bom",
+          evento: { evento_id: "evt-1", evento_nome: "Festa do Peão", evento_data: "2026-08-26" },
+          locacao: null,
+        },
+      ],
+      quantidade_total: 24,
+      quantidade_disponivel: 6,
+      quantidade_fora: 12,
+    };
+    mockRpc({
+      buscar_rastreabilidade_materiais: () => [{ item: searchResult({ resumo: eventoResumo }), total_count: 1 }],
+      obter_rastreabilidade_material: (args) => detailFor(args._material_id as string, eventoResumo),
+    });
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText(/nome, código, patrimônio/i), {
+      target: { value: "MIC-012" },
+    });
+
+    expect(await screen.findByText(/onde está agora/i)).toBeInTheDocument();
+    expect(screen.getByText("Quantidade total")).toBeInTheDocument();
+    expect(screen.getByText("Disponível em estoque")).toBeInTheDocument();
+    expect(screen.getByText("Atualmente fora")).toBeInTheDocument();
+    expect(screen.getByText("Distribuição atual")).toBeInTheDocument();
+    expect(screen.getByText("Quantidade pendente")).toBeInTheDocument();
+    expect(screen.getByText("Depósito Central")).toBeInTheDocument();
   });
 
   it("multiple matches show a result list; picking one opens its detail", async () => {

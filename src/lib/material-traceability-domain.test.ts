@@ -16,8 +16,9 @@ describe("situacaoBadgeTone", () => {
   it("em_manutencao is warning", () => {
     expect(situacaoBadgeTone("em_manutencao")).toBe("warning");
   });
-  it("locado/emprestado are neutral (custody open, not a problem)", () => {
+  it("locado/evento/emprestado are neutral (custody open, not a problem)", () => {
     expect(situacaoBadgeTone("locado")).toBe("neutral");
+    expect(situacaoBadgeTone("evento")).toBe("neutral");
     expect(situacaoBadgeTone("emprestado")).toBe("neutral");
   });
   it("manually-flagged statuses are destructive", () => {
@@ -57,6 +58,10 @@ describe("buildOndeEstaAgoraSummary", () => {
       localizacoes: [{ localizacao_id: "l1", localizacao_codigo: "EST-A", localizacao_nome: "Estoque Principal" }],
       ultimo_retorno_em: null,
       ultimo_retorno_recebido_por: null,
+      custodias_abertas: [],
+      quantidade_total: 10,
+      quantidade_disponivel: 10,
+      quantidade_fora: 0,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe("Disponível");
@@ -69,6 +74,10 @@ describe("buildOndeEstaAgoraSummary", () => {
       localizacoes: [],
       ultimo_retorno_em: "2026-08-14T03:20:00Z",
       ultimo_retorno_recebido_por: "Carlos",
+      custodias_abertas: [],
+      quantidade_total: 5,
+      quantidade_disponivel: 0,
+      quantidade_fora: 0,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.linhas[0]).toEqual({ label: "Localização", value: "Sem saldo em estoque" });
@@ -90,6 +99,10 @@ describe("buildOndeEstaAgoraSummary", () => {
       liberado_por: "Alex",
       locacao: { locacao_id: "r1", locacao_numero: "LOC-2026-000234", cliente_id: "cl1", cliente_nome: "Empresa XYZ" },
       evento: null,
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 1,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe("Locado");
@@ -117,6 +130,10 @@ describe("buildOndeEstaAgoraSummary", () => {
       liberado_por: "Alex",
       locacao: null,
       evento: null,
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 1,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe("Emprestado");
@@ -125,9 +142,9 @@ describe("buildOndeEstaAgoraSummary", () => {
     expect(summary.linhas.some((linha) => linha.label === "Previsão de retorno")).toBe(false);
   });
 
-  it("emprestado with a linked event surfaces the event name and date", () => {
+  it("evento (finalidade/referencia_tipo 'evento') surfaces the event name and date, headline 'Evento' - not 'Emprestado'", () => {
     const resumo: TraceabilitySituacao = {
-      situacao: "emprestado",
+      situacao: "evento",
       custodia_id: "c3",
       custodia_status: "aberta",
       finalidade: "evento",
@@ -138,14 +155,42 @@ describe("buildOndeEstaAgoraSummary", () => {
       liberado_por: "Alex",
       locacao: null,
       evento: { evento_id: "e1", evento_nome: "Casamento João", evento_data: "2026-09-01" },
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 1,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
+    expect(summary.headline).toBe("Evento");
     expect(summary.linhas).toEqual(
       expect.arrayContaining([
         { label: "Evento", value: "Casamento João" },
         { label: "Data do evento", value: "01/09/2026" },
       ]),
     );
+  });
+
+  it("evento without a resolved event (legacy custody, referencia_id never set) omits the evento lines instead of showing blanks", () => {
+    const resumo: TraceabilitySituacao = {
+      situacao: "evento",
+      custodia_id: "c4",
+      custodia_status: "aberta",
+      finalidade: "evento",
+      retirada_em: "2026-08-14T10:00:00Z",
+      previsao_retorno: null,
+      atrasado: false,
+      retirado_por: "Maria",
+      liberado_por: "Alex",
+      locacao: null,
+      evento: null,
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 1,
+    };
+    const summary = buildOndeEstaAgoraSummary(resumo);
+    expect(summary.headline).toBe("Evento");
+    expect(summary.linhas.some((linha) => linha.label === "Evento")).toBe(false);
   });
 
   it("em_manutencao surfaces the OS number and status", () => {
@@ -156,6 +201,10 @@ describe("buildOndeEstaAgoraSummary", () => {
       manutencao_aberta_em: "2026-08-14T09:00:00Z",
       manutencao_previsao_conclusao_em: null,
       manutencao_responsavel_nome: null,
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 0,
     };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe("Em manutenção");
@@ -165,14 +214,28 @@ describe("buildOndeEstaAgoraSummary", () => {
   });
 
   it("a manually-set status (avariado) surfaces the justificativa when present", () => {
-    const resumo: TraceabilitySituacao = { situacao: "avariado", justificativa_status: "Caiu durante o transporte" };
+    const resumo: TraceabilitySituacao = {
+      situacao: "avariado",
+      justificativa_status: "Caiu durante o transporte",
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 0,
+    };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.headline).toBe(TRACEABILITY_SITUACAO_LABELS.avariado);
     expect(summary.linhas).toEqual([{ label: "Justificativa", value: "Caiu durante o transporte" }]);
   });
 
   it("a manually-set status without justificativa renders no extra lines (never invents one)", () => {
-    const resumo: TraceabilitySituacao = { situacao: "baixado", justificativa_status: null };
+    const resumo: TraceabilitySituacao = {
+      situacao: "baixado",
+      justificativa_status: null,
+      custodias_abertas: [],
+      quantidade_total: 1,
+      quantidade_disponivel: 0,
+      quantidade_fora: 0,
+    };
     const summary = buildOndeEstaAgoraSummary(resumo);
     expect(summary.linhas).toEqual([]);
   });
