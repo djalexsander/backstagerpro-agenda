@@ -1,10 +1,18 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { Camera, Loader2, LogOut, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
+import { CheckinOriginDialog } from "@/components/checkin-checkout/CheckinOriginDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
@@ -26,16 +35,51 @@ import { getScannerRemotoPermissions } from "@/lib/scanner-remoto-permissions";
 import {
   CUSTODY_CONDITION_LABELS,
   CUSTODY_PURPOSE_LABELS,
+  materialMatchesCustodyIdentifier,
   normalizeCustodyScan,
+  resolveCheckinOrigin,
 } from "@/lib/checkin-checkout-domain";
-import { listCustodyResponsibles } from "@/lib/checkin-checkout-service";
+import {
+  listCustodyOperations,
+  listCustodyResponsibles,
+  searchCustodyMaterials,
+} from "@/lib/checkin-checkout-service";
 import { listStockLocations } from "@/lib/stock-service";
-import type { CustodyCondition, CustodyPurpose } from "@/lib/checkin-checkout-types";
+import type {
+  CustodyCondition,
+  CustodyFilters,
+  CustodyMaterialSearchResult,
+  CustodyOperationView,
+  CustodyPurpose,
+} from "@/lib/checkin-checkout-types";
+import { detectScannerRemotoOperation, maxScannerRemotoCheckoutQuantity } from "@/lib/scanner-remoto-domain";
 import {
   SCANNER_REMOTO_ACAO_LABELS,
   SCANNER_REMOTO_TIPO_OPERACAO_LABELS,
   type ScannerRemotoTipoOperacao,
 } from "@/lib/scanner-remoto-types";
+
+// listCustodyOperations' filters param mirrors CheckinCheckout.tsx's own
+// INITIAL_FILTERS (page-local there, not exported) - only `search` is ever
+// set here, the rest just need to satisfy the required shape.
+const EMPTY_CUSTODY_FILTERS: CustodyFilters = {
+  search: "",
+  status: "todos",
+  purpose: "todos",
+  responsible: "",
+  executorId: "",
+  locationId: "",
+  dateFrom: "",
+  dateTo: "",
+};
+
+interface PendingQuantityScan {
+  codigoLido: string;
+  material: CustodyMaterialSearchResult;
+  operacao: "checkout" | "checkin";
+  maxQuantity: number;
+  custodiaId: string | null;
+}
 
 const REALTIME_STATUS_LABEL: Record<string, string> = {
   connected: "Conectado",
@@ -82,6 +126,13 @@ export default function ScannerRemoto() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [pendingScan, setPendingScan] = useState<PendingQuantityScan | null>(null);
+  const [confirmQuantity, setConfirmQuantity] = useState(1);
+  const [checkinChoice, setCheckinChoice] = useState<{
+    codigoLido: string;
+    material: CustodyMaterialSearchResult;
+    options: CustodyOperationView[];
+  } | null>(null);
   const [form, setForm] = useState({
     tipoOperacao: "misto" as ScannerRemotoTipoOperacao,
     condicao: "bom" as CustodyCondition,
@@ -135,6 +186,12 @@ export default function ScannerRemoto() {
   const responsibles = (responsiblesQuery.data ?? []).filter((item) => item.tipo === "usuario");
   const events = eventsQuery.data ?? [];
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+
+  // Defaults the editable field to "confirm everything" each time a new
+  // scan needs confirmation - the common case for a load-in/load-out scan.
+  useEffect(() => {
+    if (pendingScan) setConfirmQuantity(pendingScan.maxQuantity);
+  }, [pendingScan]);
 
   if (!companyId) {
     return (
@@ -208,15 +265,20 @@ export default function ScannerRemoto() {
     }
   };
 
-  const submitScan = async (code: string) => {
-    const normalized = normalizeCustodyScan(code);
-    if (!normalized || !activeSessionId) return;
-    setScanning(true);
+  // Calls registrar_leitura_scanner_remoto exactly as before - quantidade/
+  // custodiaId are only ever non-empty for a confirmed quantity-controlled
+  // scan (see confirmPendingScan below); every other call site omits both,
+  // so the RPC's own defaults (1 unit, oldest open custody) apply, byte for
+  // byte the same as before this change.
+  const performRead = async (codigoLido: string, quantidade?: number, custodiaId?: string) => {
+    if (!activeSessionId) return;
     try {
       const read = await registerRead({
         sessaoId: activeSessionId,
-        codigoLido: normalized,
+        codigoLido,
         clientUuid: crypto.randomUUID(),
+        quantidade,
+        custodiaId,
       });
       const succeeded = read.acao_executada === "checkout" || read.acao_executada === "checkin";
       toast({
@@ -232,8 +294,110 @@ export default function ScannerRemoto() {
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
+    }
+  };
+
+  // Identifies the material before registering anything (buscar_materiais_
+  // custodia - pure lookup, same RPC the desktop search box uses). Individual
+  // materials, and anything the lookup can't identify, go straight through
+  // to performRead unchanged - registrar_leitura_scanner_remoto still does
+  // its own authoritative identification either way, this pre-check only
+  // decides whether to ask for a quantity first. Quantity-controlled
+  // materials open a confirmation step instead of registering immediately.
+  const submitScan = async (code: string) => {
+    const normalized = normalizeCustodyScan(code);
+    if (!normalized || !activeSessionId) return;
+    setScanning(true);
+    try {
+      let material: CustodyMaterialSearchResult | undefined;
+      try {
+        if (activeSession && companyId) {
+          const results = await searchCustodyMaterials(companyId, normalized);
+          material = results.find((item) => materialMatchesCustodyIdentifier(item, normalized)) ?? results[0];
+        }
+      } catch {
+        material = undefined;
+      }
+
+      if (!material || !activeSession || !companyId || material.tipo_controle === "individual") {
+        await performRead(normalized);
+        return;
+      }
+
+      const operacao = detectScannerRemotoOperation(
+        activeSession.tipo_operacao,
+        material.custodias_abertas.length > 0,
+      );
+
+      if (operacao === "checkout") {
+        const max = maxScannerRemotoCheckoutQuantity(material.saldos, activeSession.localizacao_origem_id);
+        if (max <= 0) {
+          toast({
+            title: "Sem saldo disponível na localização de origem da sessão.",
+            variant: "destructive",
+          });
+          return;
+        }
+        setPendingScan({ codigoLido: normalized, material, operacao, maxQuantity: max, custodiaId: null });
+        return;
+      }
+
+      // Check-in: needs the richer CustodyOperationView shape (finalidade/
+      // referência) to run resolveCheckinOrigin - same second lookup
+      // CheckinCheckout.tsx's openCheckinFromSearch already does for the
+      // desktop's own search-box check-in.
+      const page = await listCustodyOperations({
+        companyId,
+        page: 1,
+        pageSize: 100,
+        filters: { ...EMPTY_CUSTODY_FILTERS, search: material.codigo_interno },
+        onlyOpen: true,
+      });
+      const materialOperations = page.items.filter((item) => item.material_id === material!.id);
+      const resolution = resolveCheckinOrigin(materialOperations);
+      if (resolution.kind === "none") {
+        toast({
+          title: "A custódia aberta foi atualizada. Faça uma nova leitura.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (resolution.kind === "choose") {
+        setCheckinChoice({ codigoLido: normalized, material, options: resolution.options });
+        return;
+      }
+      setPendingScan({
+        codigoLido: normalized,
+        material,
+        operacao: "checkin",
+        maxQuantity: resolution.custody.quantidade_pendente,
+        custodiaId: resolution.custody.id,
+      });
     } finally {
       setManualCode("");
+      setScanning(false);
+    }
+  };
+
+  const handleChooseCheckinOrigin = (custody: CustodyOperationView) => {
+    if (!checkinChoice) return;
+    setPendingScan({
+      codigoLido: checkinChoice.codigoLido,
+      material: checkinChoice.material,
+      operacao: "checkin",
+      maxQuantity: custody.quantidade_pendente,
+      custodiaId: custody.id,
+    });
+    setCheckinChoice(null);
+  };
+
+  const confirmPendingScan = async () => {
+    if (!pendingScan) return;
+    setScanning(true);
+    try {
+      await performRead(pendingScan.codigoLido, confirmQuantity, pendingScan.custodiaId ?? undefined);
+    } finally {
+      setPendingScan(null);
       setScanning(false);
     }
   };
@@ -566,6 +730,60 @@ export default function ScannerRemoto() {
         onOpenChange={setCameraOpen}
         onDetected={(code) => void submitScan(code)}
       />
+
+      {companyId && (
+        <CheckinOriginDialog
+          open={!!checkinChoice}
+          onOpenChange={(open) => !open && setCheckinChoice(null)}
+          companyId={companyId}
+          options={checkinChoice?.options ?? []}
+          onSelect={handleChooseCheckinOrigin}
+        />
+      )}
+
+      <Dialog open={!!pendingScan} onOpenChange={(open) => !open && setPendingScan(null)}>
+        <DialogContent>
+          {pendingScan && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  Confirmar {pendingScan.operacao === "checkout" ? "check-out" : "check-in"}
+                </DialogTitle>
+                <DialogDescription>
+                  {pendingScan.material.nome} · {pendingScan.material.codigo_interno}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-1.5">
+                <Label>Quantidade (máximo {pendingScan.maxQuantity})</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={pendingScan.maxQuantity}
+                  value={confirmQuantity}
+                  onChange={(event) => setConfirmQuantity(Number(event.target.value))}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPendingScan(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={
+                    scanning ||
+                    !Number.isInteger(confirmQuantity) ||
+                    confirmQuantity < 1 ||
+                    confirmQuantity > pendingScan.maxQuantity
+                  }
+                  onClick={() => void confirmPendingScan()}
+                >
+                  {scanning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Confirmar {pendingScan.operacao === "checkout" ? "check-out" : "check-in"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

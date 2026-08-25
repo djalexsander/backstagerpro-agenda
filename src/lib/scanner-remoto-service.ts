@@ -69,6 +69,8 @@ export async function registerScannerRemotoRead(
     _codigo_lido: input.codigoLido,
     _client_uuid: input.clientUuid,
     _empresa_id: companyId,
+    _quantidade: input.quantidade,
+    _custodia_id: input.custodiaId,
   });
   if (error) throwScannerRemotoError(error, "register read");
   return data as ScannerRemotoLeitura;

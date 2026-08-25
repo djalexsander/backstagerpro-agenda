@@ -106,4 +106,12 @@ export interface RegisterScannerRemotoReadInput {
   sessaoId: string;
   codigoLido: string;
   clientUuid: string;
+  /**
+   * Ambos opcionais - omitidos, o RPC aplica o comportamento de sempre (1
+   * unidade, custódia aberta mais antiga). Só usados para material
+   * controlado por quantidade, após confirmação em modal (ver
+   * ScannerRemoto.tsx); material individual nunca envia nenhum dos dois.
+   */
+  quantidade?: number;
+  custodiaId?: string;
 }
