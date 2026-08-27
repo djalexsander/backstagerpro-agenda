@@ -526,6 +526,24 @@ SELECT ok(
   'evento_criado e core (sem feature_key) - qualquer membro ativo da empresa e elegivel, inclusive usuario sem nenhum grant especifico'
 );
 
+-- Evento so com nome+data (artist/city/venue NULL, apos
+-- 20260827100000_events_optional_artist_city_venue.sql). O trigger
+-- notificar_evento_criado concatena NEW.city na mensagem; sem o
+-- COALESCE(' · ' || NEW.city, '') a expressao inteira viraria NULL e
+-- criar_notificacao abortaria este INSERT.
+INSERT INTO public.events (empresa_id, date, name, created_by)
+VALUES ('9a000000-0000-4000-8000-000000000011', current_date + 11, '__push_evento_sem_cidade__', '9a000000-0000-4000-8000-000000000021');
+
+SELECT ok(
+  EXISTS (
+    SELECT 1 FROM public.notificacoes
+    WHERE empresa_id = '9a000000-0000-4000-8000-000000000011'
+      AND tipo = 'evento_criado'
+      AND mensagem = '__push_evento_sem_cidade__ · ' || to_char(current_date + 11, 'DD/MM/YYYY')
+  ),
+  'evento com city NULL ainda dispara evento_criado e a mensagem termina na data (sem " · " pendurado nem NULL)'
+);
+
 INSERT INTO public.financeiro_recebimentos (empresa_id, lancamento_id, tipo, valor, client_uuid, executado_por)
 VALUES ('9a000000-0000-4000-8000-000000000011', '9a000000-0000-4000-8000-000000000041', 'recebimento', 100.00, gen_random_uuid(), '9a000000-0000-4000-8000-000000000021');
 

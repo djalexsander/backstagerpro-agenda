@@ -10,12 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Plus, Minus, Music, Trash2, FileText, Download, Users } from "lucide-react";
+import { Upload, Plus, Minus, Music, Trash2, FileText, Download, Users, CalendarIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 import {
   removeEventFile,
@@ -62,12 +67,18 @@ export default function EventForm() {
   const [form, setForm] = useState({
     name: "",
     city: "",
+    state: "",
     venue: "",
     status: "pendente" as EventStatus,
     num_days: 1,
     observations: "",
     logistics_departure: "",
     material_list: "",
+    setup_time: "",
+    staff_notes: "",
+    contratante_nome: "",
+    contratante_cidade: "",
+    contratante_telefone: "",
   });
 
   const [days, setDays] = useState<DayForm[]>([emptyDay(1)]);
@@ -78,6 +89,7 @@ export default function EventForm() {
   const [deletedEventRiderIds, setDeletedEventRiderIds] = useState<string[]>([]);
   const [selectedFuncionarios, setSelectedFuncionarios] = useState<string[]>([]);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+  const [openDatePicker, setOpenDatePicker] = useState<number | null>(null);
 
   const { data: existingEvent, isLoading: isLoadingExistingEvent } = useQuery({
     queryKey: ["event", id],
@@ -144,13 +156,19 @@ export default function EventForm() {
     if (existingEvent) {
       setForm({
         name: existingEvent.name,
-        city: existingEvent.city,
-        venue: existingEvent.venue,
+        city: existingEvent.city || "",
+        state: existingEvent.state || "",
+        venue: existingEvent.venue || "",
         status: existingEvent.status,
         num_days: (existingEvent as any).num_days || 1,
         observations: existingEvent.observations || "",
         logistics_departure: existingEvent.logistics_departure?.slice(0, 16) || "",
         material_list: existingEvent.material_list || "",
+        setup_time: existingEvent.setup_time || "",
+        staff_notes: existingEvent.staff_notes || "",
+        contratante_nome: existingEvent.contratante_nome || "",
+        contratante_cidade: existingEvent.contratante_cidade || "",
+        contratante_telefone: existingEvent.contratante_telefone || "",
       });
     }
   }, [existingEvent]);
@@ -312,16 +330,33 @@ export default function EventForm() {
       assertEventFileAdministrator(role);
       if (!empresaId) throw new Error("Empresa não identificada");
       const firstDay = days[0];
+      // Campos textuais opcionais: string vazia ou só espaços vira NULL no
+      // banco (sem placeholder persistido). name e date continuam obrigatórios.
+      const toNullable = (value?: string | null) => {
+        const trimmed = (value ?? "").trim();
+        return trimmed === "" ? null : trimmed;
+      };
+      const eventDate = toNullable(firstDay?.date);
+      if (!form.name.trim() || !eventDate) {
+        toast({ title: "Campos obrigatórios", description: "Informe o nome do evento e a data do Dia 1.", variant: "destructive" });
+        return; // setSaving(false) roda no finally
+      }
       const payload = {
-        name: form.name,
-        artist: firstDay?.artist || "Vários",
-        date: firstDay?.date || new Date().toISOString().slice(0, 10),
+        name: form.name.trim(),
+        artist: toNullable(firstDay?.artist),
+        date: eventDate,
         status: form.status,
-        city: form.city,
-        venue: form.venue,
+        city: toNullable(form.city),
+        state: toNullable(form.state),
+        venue: toNullable(form.venue),
         show_time: firstDay?.show_time || null,
+        setup_time: toNullable(form.setup_time),
         logistics_departure: form.logistics_departure || null,
         observations: form.observations || null,
+        staff_notes: toNullable(form.staff_notes),
+        contratante_nome: toNullable(form.contratante_nome),
+        contratante_cidade: toNullable(form.contratante_cidade),
+        contratante_telefone: toNullable(form.contratante_telefone),
         material_list: null, // no longer using text field
         created_by: user?.id,
         empresa_id: empresaId,
@@ -488,13 +523,19 @@ export default function EventForm() {
                 <Label>Nome do Evento *</Label>
                 <Input value={form.name} onChange={set("name")} required />
               </div>
-              <div className="space-y-2">
-                <Label>Cidade *</Label>
-                <Input value={form.city} onChange={set("city")} required />
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2 col-span-2">
+                  <Label>Cidade</Label>
+                  <Input value={form.city} onChange={set("city")} placeholder="Opcional" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Estado / UF</Label>
+                  <Input value={form.state} onChange={set("state")} placeholder="Ex.: SP" />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Local *</Label>
-                <Input value={form.venue} onChange={set("venue")} required />
+                <Label>Local</Label>
+                <Input value={form.venue} onChange={set("venue")} placeholder="Opcional" />
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
@@ -534,13 +575,23 @@ export default function EventForm() {
           <Card>
             <CardHeader><CardTitle className="text-base">Logística & Observações</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Saída Logística</Label>
-                <Input type="datetime-local" value={form.logistics_departure} onChange={set("logistics_departure")} />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Saída Logística</Label>
+                  <Input type="datetime-local" value={form.logistics_departure} onChange={set("logistics_departure")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Horário de Montagem</Label>
+                  <Input value={form.setup_time} onChange={set("setup_time")} placeholder="Ex.: 14:00" />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Observações Gerais</Label>
                 <Textarea value={form.observations} onChange={set("observations")} rows={4} />
+              </div>
+              <div className="space-y-2">
+                <Label>Informações para a Equipe</Label>
+                <Textarea value={form.staff_notes} onChange={set("staff_notes")} rows={3} />
               </div>
               <div className="space-y-2">
                 <Label>Lista de Material (PDFs)</Label>
@@ -658,6 +709,27 @@ export default function EventForm() {
           </Card>
         </div>
 
+        {/* Contratante */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">Dados do Contratante</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Contratante</Label>
+                <Input value={form.contratante_nome} onChange={set("contratante_nome")} placeholder="Opcional" />
+              </div>
+              <div className="space-y-2">
+                <Label>Cidade do Contratante</Label>
+                <Input value={form.contratante_cidade} onChange={set("contratante_cidade")} placeholder="Opcional" />
+              </div>
+              <div className="space-y-2">
+                <Label>Telefone do Contratante</Label>
+                <Input value={form.contratante_telefone} onChange={set("contratante_telefone")} placeholder="Opcional" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Equipe Escalada */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -754,20 +826,45 @@ export default function EventForm() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="space-y-1">
-                    <Label className="text-xs">Data do Show</Label>
-                    <Input
-                      type="date"
-                      value={day.date}
-                      onChange={(e) => updateDay(i, "date", e.target.value)}
-                    />
+                    <Label className="text-xs">Data do Show{i === 0 ? " *" : ""}</Label>
+                    <Popover
+                      open={openDatePicker === i}
+                      onOpenChange={(isOpen) => setOpenDatePicker(isOpen ? i : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !day.date && "text-muted-foreground",
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {day.date ? format(parseISO(day.date), "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          locale={ptBR}
+                          selected={day.date ? parseISO(day.date) : undefined}
+                          onSelect={(selectedDate) => {
+                            if (selectedDate) updateDay(i, "date", format(selectedDate, "yyyy-MM-dd"));
+                            setOpenDatePicker(null);
+                          }}
+                          initialFocus
+                          className={cn("p-3 pointer-events-auto")}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Artista *</Label>
+                    <Label className="text-xs">Artista</Label>
                     <Input
                       value={day.artist}
                       onChange={(e) => updateDay(i, "artist", e.target.value)}
                       placeholder="Nome do artista"
-                      required
                     />
                   </div>
                   <div className="space-y-1">

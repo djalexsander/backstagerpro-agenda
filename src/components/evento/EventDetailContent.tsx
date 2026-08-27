@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Music, FileText, Download, Truck, Upload, Trash2, Users } from "lucide-react";
+import { Calendar, Clock, MapPin, Music, FileText, Download, Truck, Upload, Trash2, Users, Wrench, Phone, Building2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -109,7 +109,7 @@ export function EventDetailContent({
         <Card>
           <CardHeader><CardTitle className="text-base">Informações Gerais</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Local:</span> {event.venue}, {event.city}</div>
+            <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Local:</span> {[event.venue, event.city, event.state].filter(Boolean).join(", ") || "A definir"}</div>
             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Dias:</span> {(event as any).num_days || 1} dia(s)</div>
           </CardContent>
         </Card>
@@ -120,8 +120,14 @@ export function EventDetailContent({
             {event.logistics_departure && (
               <div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Saída:</span> {format(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</div>
             )}
+            {event.setup_time && (
+              <div className="flex items-center gap-2"><Wrench className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Montagem:</span> {event.setup_time}</div>
+            )}
             {event.observations && (
               <div><p className="text-muted-foreground mb-1">Observações:</p><p className="whitespace-pre-wrap">{event.observations}</p></div>
+            )}
+            {event.staff_notes && (
+              <div><p className="text-muted-foreground mb-1">Informações para a equipe:</p><p className="whitespace-pre-wrap">{event.staff_notes}</p></div>
             )}
             {(() => {
               const materialFiles = files.filter((f) => f.file_type === "material_list");
@@ -169,6 +175,24 @@ export function EventDetailContent({
           </CardContent>
         </Card>
       </div>
+
+      {/* Contratante */}
+      {(event.contratante_nome || event.contratante_cidade || event.contratante_telefone) && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Contratante</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {event.contratante_nome && (
+              <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Contratante:</span> {event.contratante_nome}</div>
+            )}
+            {event.contratante_cidade && (
+              <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Cidade:</span> {event.contratante_cidade}</div>
+            )}
+            {event.contratante_telefone && (
+              <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Telefone:</span> {event.contratante_telefone}</div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Equipe Escalada */}
       {teamMembers.length > 0 && (
@@ -225,7 +249,7 @@ export function EventDetailContent({
         <Card>
           <CardHeader><CardTitle className="text-base">Detalhes do Show</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2"><Music className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Artista:</span> {event.artist}</div>
+            <div className="flex items-center gap-2"><Music className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Artista:</span> {event.artist || "A definir"}</div>
             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Data:</span> {format(parseISO(event.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</div>
             {event.show_time && <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Horário:</span> {event.show_time.slice(0, 5)}</div>}
             {files.length > 0 && (

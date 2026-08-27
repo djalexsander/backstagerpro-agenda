@@ -1351,8 +1351,11 @@ export type Database = {
       }
       events: {
         Row: {
-          artist: string
-          city: string
+          artist: string | null
+          city: string | null
+          contratante_cidade: string | null
+          contratante_nome: string | null
+          contratante_telefone: string | null
           created_at: string
           created_by: string | null
           date: string
@@ -1363,14 +1366,20 @@ export type Database = {
           name: string
           num_days: number
           observations: string | null
+          setup_time: string | null
           show_time: string | null
+          staff_notes: string | null
+          state: string | null
           status: Database["public"]["Enums"]["event_status"]
           updated_at: string
-          venue: string
+          venue: string | null
         }
         Insert: {
-          artist: string
-          city: string
+          artist?: string | null
+          city?: string | null
+          contratante_cidade?: string | null
+          contratante_nome?: string | null
+          contratante_telefone?: string | null
           created_at?: string
           created_by?: string | null
           date: string
@@ -1381,14 +1390,20 @@ export type Database = {
           name: string
           num_days?: number
           observations?: string | null
+          setup_time?: string | null
           show_time?: string | null
+          staff_notes?: string | null
+          state?: string | null
           status?: Database["public"]["Enums"]["event_status"]
           updated_at?: string
-          venue: string
+          venue?: string | null
         }
         Update: {
-          artist?: string
-          city?: string
+          artist?: string | null
+          city?: string | null
+          contratante_cidade?: string | null
+          contratante_nome?: string | null
+          contratante_telefone?: string | null
           created_at?: string
           created_by?: string | null
           date?: string
@@ -1399,10 +1414,13 @@ export type Database = {
           name?: string
           num_days?: number
           observations?: string | null
+          setup_time?: string | null
           show_time?: string | null
+          staff_notes?: string | null
+          state?: string | null
           status?: Database["public"]["Enums"]["event_status"]
           updated_at?: string
-          venue?: string
+          venue?: string | null
         }
         Relationships: [
           {

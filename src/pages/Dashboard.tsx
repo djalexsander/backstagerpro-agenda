@@ -382,9 +382,9 @@ export default function Dashboard() {
           <CardContent>
             <h2 className="text-xl md:text-2xl font-bold mb-3">{nextEvent.name}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground"><Music className="h-4 w-4" /> {getEventArtists(nextEvent.id) || nextEvent.artist}</div>
+              <div className="flex items-center gap-2 text-muted-foreground"><Music className="h-4 w-4" /> {getEventArtists(nextEvent.id) || nextEvent.artist || "A definir"}</div>
               <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="h-4 w-4" /> {format(parseISO(nextEvent.date), "dd/MM/yyyy", { locale: ptBR })}</div>
-              <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {nextEvent.city} – {nextEvent.venue}</div>
+              <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {[nextEvent.city, nextEvent.venue].filter(Boolean).join(" – ") || "A definir"}</div>
             </div>
           </CardContent>
         </Card>
@@ -405,9 +405,9 @@ export default function Dashboard() {
                     <Badge className={`text-xs shrink-0 ${statusColors[event.status]}`}>{event.status}</Badge>
                   </div>
                   <div className="space-y-1 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1"><Music className="h-3 w-3" /> {getEventArtists(event.id) || event.artist}</div>
+                    <div className="flex items-center gap-1"><Music className="h-3 w-3" /> {getEventArtists(event.id) || event.artist || "A definir"}</div>
                     <div className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {format(parseISO(event.date), "EEE, dd/MM", { locale: ptBR })}</div>
-                    <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {event.city}</div>
+                    <div className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {event.city || "A definir"}</div>
                     {event.num_days > 1 && (
                       <div className="flex items-center gap-1">📅 {event.num_days} dias</div>
                     )}

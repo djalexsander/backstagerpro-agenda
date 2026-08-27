@@ -247,7 +247,7 @@ export function ReportExportModal({ open, onOpenChange, reportType, exportFormat
                 <SelectContent>
                   {events.map(e => (
                     <SelectItem key={e.id} value={e.id}>
-                      {e.name} — {e.artist} ({format(parseISO(e.date), "dd/MM/yy")})
+                      {[e.name, e.artist].filter(Boolean).join(" — ")} ({format(parseISO(e.date), "dd/MM/yy")})
                     </SelectItem>
                   ))}
                 </SelectContent>

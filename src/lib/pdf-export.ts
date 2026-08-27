@@ -187,9 +187,9 @@ export async function exportAgendaPDF(events: Event[], branding?: PdfBranding, f
       e.date ? formatDate(parseISO(e.date), "dd/MM/yyyy") : "—",
       e.status.charAt(0).toUpperCase() + e.status.slice(1),
       e.name,
-      e.artist,
-      e.city,
-      e.venue,
+      e.artist || "A definir",
+      e.city || "A definir",
+      e.venue || "A definir",
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [225, 29, 72] },
@@ -215,8 +215,8 @@ export async function exportEventPDF(event: Event, eventDays?: EventDay[], brand
 
   const rows = [
     ["Status", event.status.charAt(0).toUpperCase() + event.status.slice(1)],
-    ["Cidade", event.city],
-    ["Local", event.venue],
+    ["Cidade", event.city || "A definir"],
+    ["Local", event.venue || "A definir"],
     ["Dias", String(event.num_days || 1)],
     ["Saída Logística", event.logistics_departure ? formatDate(new Date(event.logistics_departure.replace(' ', 'T').replace(/([+-]\d{2}:\d{2}|Z)$/, '')), "dd/MM/yyyy HH:mm") : "—"],
     ["Observações", event.observations || "—"],
@@ -272,7 +272,7 @@ export async function exportEventPDF(event: Event, eventDays?: EventDay[], brand
     });
   }
 
-  const nameOpts: SmartPDFNameOptions = { tipo: "evento", evento: event.name, cidade: event.city, data: event.date };
+  const nameOpts: SmartPDFNameOptions = { tipo: "evento", evento: event.name, cidade: event.city || undefined, data: event.date };
   if (fmt === "png") {
     await smartSavePNG(doc, nameOpts);
   } else {

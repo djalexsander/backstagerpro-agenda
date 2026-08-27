@@ -18,8 +18,8 @@ export interface OperationalEventRow {
   name: string;
   date: string;
   status: string;
-  city: string;
-  venue: string;
+  city: string | null;
+  venue: string | null;
   teamCount: number;
   checklistTotal: number;
   checklistDone: number;
@@ -76,7 +76,7 @@ export async function exportOperationalReportPDF(
       e.name,
       e.date ? formatDate(parseISO(e.date), "dd/MM/yyyy") : "—",
       STATUS_LABELS[e.status] || e.status,
-      `${e.city} – ${e.venue}`,
+      [e.city, e.venue].filter(Boolean).join(" – ") || "A definir",
       String(e.teamCount),
       e.checklistTotal > 0 ? `${Math.round((e.checklistDone / e.checklistTotal) * 100)}% (${e.checklistDone}/${e.checklistTotal})` : "—",
     ]),

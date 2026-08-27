@@ -5,7 +5,7 @@ import { MODULE_KEYS } from "@/constants/module-keys";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Calendar, Clock, MapPin, Music, Users, Truck, FileText, ClipboardList, Info } from "lucide-react";
+import { Calendar, Clock, MapPin, Music, Users, Truck, FileText, ClipboardList, Info, Wrench, Phone, Building2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ChecklistItem } from "@/hooks/useEventChecklist";
@@ -87,7 +87,7 @@ export function EventOperationalPanel({ event, eventDays, teamMembers, files }: 
             <div className="flex items-center gap-2">
               <Music className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">Artista:</span>
-              <span className="font-medium">{event.artist}</span>
+              <span className="font-medium">{event.artist || "A definir"}</span>
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -104,7 +104,7 @@ export function EventOperationalPanel({ event, eventDays, teamMembers, files }: 
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">Local:</span>
-              <span>{event.venue}, {event.city}</span>
+              <span>{[event.venue, event.city, event.state].filter(Boolean).join(", ") || "A definir"}</span>
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -116,6 +116,13 @@ export function EventOperationalPanel({ event, eventDays, teamMembers, files }: 
                 <Truck className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Saída:</span>
                 <span>{format(new Date(event.logistics_departure), "dd/MM/yyyy HH:mm", { locale: ptBR })}</span>
+              </div>
+            )}
+            {event.setup_time && (
+              <div className="flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Montagem:</span>
+                <span>{event.setup_time}</span>
               </div>
             )}
           </CardContent>
@@ -195,6 +202,40 @@ export function EventOperationalPanel({ event, eventDays, teamMembers, files }: 
             )}
           </CardContent>
         </Card>
+
+        {/* Contratante */}
+        {(event.contratante_nome || event.contratante_cidade || event.contratante_telefone) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary" /> Contratante
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {event.contratante_nome && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Contratante:</span>
+                  <span>{event.contratante_nome}</span>
+                </div>
+              )}
+              {event.contratante_cidade && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Cidade:</span>
+                  <span>{event.contratante_cidade}</span>
+                </div>
+              )}
+              {event.contratante_telefone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Telefone:</span>
+                  <span>{event.contratante_telefone}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Observations */}
@@ -205,6 +246,18 @@ export function EventOperationalPanel({ event, eventDays, teamMembers, files }: 
           </CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">{event.observations}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Staff notes */}
+      {event.staff_notes && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Informações para a Equipe</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm whitespace-pre-wrap">{event.staff_notes}</p>
           </CardContent>
         </Card>
       )}

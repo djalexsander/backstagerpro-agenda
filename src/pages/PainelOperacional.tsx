@@ -193,13 +193,13 @@ export default function PainelOperacional() {
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Music className="h-3 w-3" /> {event.artist}
+                          <Music className="h-3 w-3" /> {event.artist || "A definir"}
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" /> {format(parseISO(event.date), "dd/MM/yyyy", { locale: ptBR })}
                         </span>
                         <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" /> {event.venue}, {event.city}
+                          <MapPin className="h-3 w-3" /> {[event.venue, event.city].filter(Boolean).join(", ") || "A definir"}
                         </span>
                         <span className="flex items-center gap-1">
                           <Users className="h-3 w-3" /> {team.length} membro(s)

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText, ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
+import { Plus, FileDown, CalendarDays, Edit, Trash2, Eye, ChevronDown, ChevronUp, FileText, ChevronLeft, ChevronRight, ImageIcon, FileUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { format, parseISO, isSameDay, startOfMonth, endOfMonth, isWithinInterval, isSameMonth } from "date-fns";
@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AgendaStats } from "@/components/agenda/AgendaStats";
 import { AgendaFilters } from "@/components/agenda/AgendaFilters";
 import { EventRowExpansion } from "@/components/agenda/EventRowExpansion";
+import { ImportAgendaDialog } from "@/components/agenda/ImportAgendaDialog";
 import { statusColors, statusLabels } from "@/components/agenda/statusColors";
 import {
   AlertDialog,
@@ -57,6 +58,7 @@ export default function Agenda() {
 
   // Export dialog state
   const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "month" | "period">("all");
   const [exportMonthVal, setExportMonthVal] = useState(format(new Date(), "MM"));
   const [exportYearVal, setExportYearVal] = useState(format(new Date(), "yyyy"));
@@ -109,14 +111,14 @@ export default function Agenda() {
     return [...new Set(artists)];
   };
 
-  const getEventArtistsDisplay = (eventId: string, fallback: string) => {
+  const getEventArtistsDisplay = (eventId: string, fallback: string | null) => {
     const artists = getEventArtists(eventId);
-    if (artists.length === 0) return fallback;
+    if (artists.length === 0) return fallback || "A definir";
     if (artists.length <= 2) return artists.join(", ");
     return `${artists[0]}, ${artists[1]} +${artists.length - 2}`;
   };
 
-  const cities = [...new Set(events.map((e) => e.city))].sort();
+  const cities = [...new Set(events.map((e) => e.city).filter(Boolean) as string[])].sort();
   const eventDates = events.filter((e) => e.date).map((e) => parseISO(e.date));
 
   // Count events per date for calendar indicators
@@ -132,12 +134,12 @@ export default function Agenda() {
   }, [events]);
 
   const filtered = events.filter((e) => {
-    const allArtists = getEventArtists(e.id).join(" ") || e.artist;
+    const allArtists = getEventArtists(e.id).join(" ") || e.artist || "";
     const matchesSearch =
       search === "" ||
       e.name.toLowerCase().includes(search.toLowerCase()) ||
       allArtists.toLowerCase().includes(search.toLowerCase()) ||
-      e.city.toLowerCase().includes(search.toLowerCase());
+      (e.city ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || e.status === statusFilter;
     const matchesCity = cityFilter === "all" || e.city === cityFilter;
     const matchesDate = !selectedDate || isSameDay(parseISO(e.date), selectedDate);
@@ -179,6 +181,11 @@ export default function Agenda() {
             {canExport && (
               <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
                 <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
+              </Button>
+            )}
+            {isAdmin && !empresaReadOnly && (
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                <FileUp className="h-4 w-4 mr-1" /> Importar agenda
               </Button>
             )}
             {isAdmin && !empresaReadOnly && (
@@ -299,6 +306,17 @@ export default function Agenda() {
           </DialogContent>
         </Dialog>
 
+        {/* Import (Gestão de Eventos Pro) */}
+        <ImportAgendaDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          onImported={() => {
+            queryClient.invalidateQueries({ queryKey: ["events"] });
+            queryClient.invalidateQueries({ queryKey: ["all-event-days"] });
+            queryClient.invalidateQueries({ queryKey: ["events-alertas"] });
+          }}
+        />
+
         {/* Delete Confirmation */}
         <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
           <AlertDialogContent>
@@ -386,7 +404,7 @@ export default function Agenda() {
                     paginatedFiltered.map((event) => {
                       const artists = getEventArtists(event.id);
                       const displayArtists = getEventArtistsDisplay(event.id, event.artist);
-                      const allArtistsText = artists.length > 0 ? artists.join(", ") : event.artist;
+                      const allArtistsText = artists.length > 0 ? artists.join(", ") : (event.artist || "A definir");
                       const isExpanded = expandedRow === event.id;
 
                       return (
@@ -412,7 +430,7 @@ export default function Agenda() {
                               <span>{displayArtists}</span>
                             )}
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">{event.city}</TableCell>
+                          <TableCell className="hidden md:table-cell">{event.city || <span className="text-muted-foreground">A definir</span>}</TableCell>
                           <TableCell className="hidden md:table-cell">
                             <Badge variant="outline">{event.num_days || 1} dia(s)</Badge>
                           </TableCell>
