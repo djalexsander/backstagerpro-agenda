@@ -4,6 +4,7 @@ const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc } }));
 
 import {
+  excluirMinhasNotificacoesLidas,
   getPushSubscriptionState,
   isPushSupported,
   listMinhasNotificacoes,
@@ -125,7 +126,7 @@ describe("push-notifications-service", () => {
     });
   });
 
-  describe("marcarNotificacaoLida / marcarTodasNotificacoesLidas / setNotificacaoPreferencia", () => {
+  describe("marcarNotificacaoLida / marcarTodasNotificacoesLidas / excluirMinhasNotificacoesLidas / setNotificacaoPreferencia", () => {
     it("marcarNotificacaoLida sends the destinatario id", async () => {
       rpc.mockResolvedValue({ error: null });
       await marcarNotificacaoLida("d1");
@@ -141,6 +142,17 @@ describe("push-notifications-service", () => {
       rpc.mockResolvedValue({ error: null });
       await marcarTodasNotificacoesLidas();
       expect(rpc).toHaveBeenCalledWith("marcar_todas_notificacoes_lidas");
+    });
+
+    it("excluirMinhasNotificacoesLidas calls the RPC with no args", async () => {
+      rpc.mockResolvedValue({ error: null });
+      await excluirMinhasNotificacoesLidas();
+      expect(rpc).toHaveBeenCalledWith("excluir_minhas_notificacoes_lidas");
+    });
+
+    it("excluirMinhasNotificacoesLidas throws on error", async () => {
+      rpc.mockResolvedValue({ error: { message: "falhou" } });
+      await expect(excluirMinhasNotificacoesLidas()).rejects.toThrow("falhou");
     });
 
     it("setNotificacaoPreferencia sends tipo and habilitada", async () => {

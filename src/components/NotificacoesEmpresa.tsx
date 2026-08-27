@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Bell, BellOff, BellRing, Calendar, AlertTriangle, Check, Clock, CreditCard, Loader2, X } from "lucide-react";
+import { Bell, BellOff, BellRing, Calendar, AlertTriangle, Check, Clock, CreditCard, Loader2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { format, parseISO, differenceInDays, startOfToday, addDays, formatDistan
 import { ptBR } from "date-fns/locale";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
+  excluirMinhasNotificacoesLidas,
   listMinhasNotificacoes,
   marcarNotificacaoLida,
   marcarTodasNotificacoesLidas,
@@ -84,6 +85,10 @@ export function NotificacoesEmpresa() {
     mutationFn: marcarTodasNotificacoesLidas,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["minhas-notificacoes", empresaId] }),
   });
+  const excluirLidasMutation = useMutation({
+    mutationFn: excluirMinhasNotificacoesLidas,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["minhas-notificacoes", empresaId] }),
+  });
 
   const handleNotificacaoClick = useCallback(
     (notificacao: MinhaNotificacao) => {
@@ -94,6 +99,7 @@ export function NotificacoesEmpresa() {
   );
 
   const unreadCount = notificacoes.filter((n) => !n.lida).length;
+  const readCount = notificacoes.filter((n) => n.lida).length;
 
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const handleDismiss = useCallback((id: string, e: React.MouseEvent) => {
@@ -262,6 +268,24 @@ export function NotificacoesEmpresa() {
                 title="Marcar todas como lidas"
               >
                 <Check className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {readCount > 0 && (
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Excluir as notificações já visualizadas? Elas serão removidas da sua conta em todos os dispositivos.",
+                    )
+                  ) {
+                    excluirLidasMutation.mutate();
+                  }
+                }}
+                disabled={excluirLidasMutation.isPending}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors mr-1 disabled:opacity-40"
+                title="Excluir visualizadas"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
             {push.state !== "unsupported" && (

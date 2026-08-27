@@ -168,8 +168,15 @@ SELECT ok(
   AND has_function_privilege('authenticated', 'public.listar_minhas_notificacoes(boolean,integer)', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.marcar_notificacao_lida(uuid)', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.marcar_todas_notificacoes_lidas()', 'EXECUTE')
+  AND has_function_privilege('authenticated', 'public.excluir_minhas_notificacoes_lidas()', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.set_notificacao_preferencia(text,boolean)', 'EXECUTE'),
-  'authenticated tem EXECUTE nas 6 RPCs voltadas ao usuario final'
+  'authenticated tem EXECUTE nas 7 RPCs voltadas ao usuario final'
+);
+
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.excluir_minhas_notificacoes_lidas()', 'EXECUTE')
+  AND NOT has_function_privilege('public', 'public.excluir_minhas_notificacoes_lidas()', 'EXECUTE'),
+  'excluir_minhas_notificacoes_lidas: PUBLIC/anon nao tem EXECUTE (REVOKE de PUBLIC preservado)'
 );
 
 SELECT ok(
@@ -445,6 +452,58 @@ SELECT is(
   (SELECT count(*) FROM public.listar_minhas_notificacoes(true, 50)),
   0::bigint,
   'marcar_todas_notificacoes_lidas zera o filtro somente-nao-lidas do proprio usuario'
+);
+
+-- excluir_minhas_notificacoes_lidas: o usuario apaga do proprio sino as
+-- notificacoes que ja marcou como lidas. Espelha marcar_todas_* (sem
+-- parametro, escopo travado em user_id = auth.uid()); a diferenca e DELETE em
+-- notificacoes_destinatarios, e so nas linhas lida = true. Admin A acabou de
+-- marcar tudo como lido - depois de excluir, o sino dele fica vazio.
+SELECT public.excluir_minhas_notificacoes_lidas();
+SELECT is(
+  (SELECT count(*) FROM public.listar_minhas_notificacoes(false, 100)),
+  0::bigint,
+  'apos excluir_minhas_notificacoes_lidas, o sino do proprio usuario (tudo lido) fica vazio - em qualquer dispositivo, ja que a lista vem do banco, nao de storage local'
+);
+RESET ROLE;
+
+-- A linha-mae em notificacoes NAO e apagada, mesmo quando o unico
+-- destinatario dela (admin A na notificacao financeira) acabou de ser
+-- removido - orfa fica, sem limpeza automatica nesta etapa. Assercao direta
+-- em tabela, no contexto do dono (mesmo padrao da secao 2).
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.notificacoes WHERE id = (SELECT value FROM push_scratch WHERE key = 'financeiro')),
+  'notificacoes: a linha-mae sobrevive a exclusao de todos os seus destinatarios (orfa, nao limpa automaticamente)'
+);
+SELECT is(
+  (SELECT count(*) FROM public.notificacoes_destinatarios WHERE user_id = '9a000000-0000-4000-8000-000000000021'),
+  0::bigint,
+  'notificacoes_destinatarios: nenhuma linha do proprio usuario restou (todas eram lidas)'
+);
+
+-- Isolamento + "nao apaga nao lida": a exclusao do admin A nao tocou nenhuma
+-- linha do usuario A; o usuario A entao roda a mesma RPC e SO a linha que ele
+-- proprio marcou como lida some - as nao lidas dele continuam no sino.
+SELECT set_config('request.jwt.claim.sub', '9a000000-0000-4000-8000-000000000022', true);
+SET LOCAL ROLE authenticated;
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.listar_minhas_notificacoes(false, 100) WHERE lida = true)
+  AND EXISTS (SELECT 1 FROM public.listar_minhas_notificacoes(true, 100)),
+  'excluir_minhas_notificacoes_lidas de um usuario nunca apaga linha de outro usuario (usuario A mantem sua lida e suas nao lidas)'
+);
+SELECT public.excluir_minhas_notificacoes_lidas();
+SELECT ok(
+  NOT EXISTS (SELECT 1 FROM public.listar_minhas_notificacoes(false, 100) WHERE lida = true),
+  'apos o proprio usuario A excluir: nenhuma notificacao lida restou no sino dele'
+);
+SELECT is(
+  (SELECT count(*) FROM public.listar_minhas_notificacoes(false, 100)),
+  (SELECT count(*) FROM public.listar_minhas_notificacoes(true, 100)),
+  'as notificacoes NAO lidas do usuario A continuam todas no sino - excluir so remove as lidas'
+);
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.listar_minhas_notificacoes(true, 100) WHERE tipo = 'teste_isolamento'),
+  'uma notificacao nao lida especifica do usuario A segue intacta apos ele excluir as visualizadas'
 );
 RESET ROLE;
 

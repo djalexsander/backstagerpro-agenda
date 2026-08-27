@@ -88,6 +88,11 @@ export async function marcarTodasNotificacoesLidas(): Promise<void> {
   if (error) throwServiceError(error, "Falha ao marcar notificações como lidas.", "mark all read");
 }
 
+export async function excluirMinhasNotificacoesLidas(): Promise<void> {
+  const { error } = await callRpc("excluir_minhas_notificacoes_lidas");
+  if (error) throwServiceError(error, "Falha ao excluir notificações visualizadas.", "delete read");
+}
+
 export async function setNotificacaoPreferencia(tipo: string, habilitada: boolean): Promise<void> {
   const { error } = await callRpc("set_notificacao_preferencia", { _tipo: tipo, _habilitada: habilitada });
   if (error) throwServiceError(error, "Falha ao salvar preferência de notificação.", "set preference");
