@@ -6,8 +6,12 @@ import {
   checkForTauriUpdate,
   installTauriUpdate,
   UpdateInstallError,
+  PWA_DISMISS_REARM_AFTER_MS,
 } from "./UpdateService";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+const UPDATE_RETRY_MESSAGE = "Não foi possível aplicar a atualização. Tente novamente.";
 
 interface UpdateContextType {
   updateAvailable: boolean;
@@ -32,6 +36,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [newVersion, setNewVersion] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const dismissedAtRef = useRef<number | null>(null);
   const autoInstallTriggered = useRef(false);
 
   useEffect(() => {
@@ -48,16 +53,40 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       checkTauri();
       const interval = setInterval(checkTauri, 5 * 60 * 1000);
       return () => clearInterval(interval);
-    } else {
-      registerPWAUpdate((available) => {
-        if (available) {
-          setUpdateAvailable(true);
-          setNewVersion(null);
-          setUpdateError(null);
-          setDismissed(false);
-        }
-      });
     }
+
+    const disposePWAUpdate = registerPWAUpdate((available) => {
+      if (available) {
+        setUpdateAvailable(true);
+        setNewVersion(null);
+        setUpdateError(null);
+        // A fresh detection also unsticks the button: if a previous
+        // activation attempt somehow left isUpdating true, a newly staged
+        // version clears it so "Atualizar agora" is clickable again.
+        setIsUpdating(false);
+        dismissedAtRef.current = null;
+        setDismissed(false);
+      }
+    });
+
+    // registerPWAUpdate already re-checks for a new worker on foreground.
+    // This is only about the banner's visibility: bring a *dismissed*
+    // banner back for an update that was already detected, once enough
+    // time has passed since the dismiss.
+    const onForegroundRearm = () => {
+      if (document.visibilityState !== "visible") return;
+      const dismissedAt = dismissedAtRef.current;
+      if (dismissedAt !== null && Date.now() - dismissedAt >= PWA_DISMISS_REARM_AFTER_MS) {
+        dismissedAtRef.current = null;
+        setDismissed(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onForegroundRearm);
+
+    return () => {
+      disposePWAUpdate();
+      document.removeEventListener("visibilitychange", onForegroundRearm);
+    };
   }, []);
 
   // Single install path for both the manual "Atualizar agora" button and
@@ -65,6 +94,12 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // place instead of duplicating (and previously drifting: the old
   // auto-install branch never reset isUpdating on failure, leaving the
   // banner stuck on "Atualizando..." forever).
+  //
+  // PWA path: installPWAUpdate() is fully bounded (waits at most ~15s for
+  // the service-worker handover) and reloads the page itself on success -
+  // so a failure/timeout always lands in catch and frees the button, and a
+  // success navigates away before isUpdating matters. Desktop path is
+  // unchanged (its own timed download/relaunch flow).
   const installUpdate = useCallback(async () => {
     setIsUpdating(true);
     setUpdateError(null);
@@ -76,12 +111,10 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch (err) {
       console.error("[UpdateProvider] Falha ao atualizar:", err);
-      setUpdateError(
-        err instanceof UpdateInstallError
-          ? err.message
-          : "Não foi possível concluir a atualização. Tente novamente mais tarde.",
-      );
+      const message = err instanceof UpdateInstallError ? err.message : UPDATE_RETRY_MESSAGE;
+      setUpdateError(message);
       setIsUpdating(false);
+      if (!isTauri()) toast.error(message);
     }
   }, []);
 
@@ -115,6 +148,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [updateAvailable, installUpdate]);
 
   const dismissUpdate = useCallback(() => {
+    dismissedAtRef.current = Date.now();
     setDismissed(true);
   }, []);
 

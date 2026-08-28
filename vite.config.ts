@@ -65,6 +65,10 @@ export default defineConfig(() => ({
       },
 
       manifest: {
+        // Explicit, stable identity so the browser never re-derives it
+        // from start_url heuristics - a reinstall or a start_url change
+        // could otherwise orphan the installed PWA instead of updating it.
+        id: "/",
         name: "Backstage Pro — Gestão de Eventos",
         short_name: "Backstage Pro",
         description: "Sistema de gestão de Agenda e Financeiro",
