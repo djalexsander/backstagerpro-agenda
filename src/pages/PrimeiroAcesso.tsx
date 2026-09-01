@@ -233,7 +233,7 @@ export default function PrimeiroAcesso() {
       if (!result.success) {
         toast({
           title: "Erro ao ativar conta",
-          description: result.message,
+          description: "message" in result ? result.message : undefined,
           variant: "destructive",
         });
         return;
