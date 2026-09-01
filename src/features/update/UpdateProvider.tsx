@@ -11,7 +11,6 @@ import {
   PWA_DISMISS_REARM_AFTER_MS,
 } from "./UpdateService";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const UPDATE_RETRY_MESSAGE = "Não foi possível aplicar a atualização. Tente novamente.";
 
