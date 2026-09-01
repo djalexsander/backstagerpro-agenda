@@ -225,7 +225,7 @@ export default function PrimeiroAcesso() {
             if (data?.error) return { error: data.error as string };
             return { error: null };
           },
-          signOut: () => supabase.auth.signOut(),
+          signOut: async () => { await supabase.auth.signOut(); },
         },
         { password, confirmPassword, flow },
       );
