@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ChevronLeft, ChevronRight, Edit, LayoutTemplate, PackageCheck, Plus, Printer, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
