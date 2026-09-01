@@ -1,5 +1,6 @@
 import { registerSW } from "virtual:pwa-register";
 import { isTauri as isTauriRuntime } from "@tauri-apps/api/core";
+import { APP_VERSION } from "@/lib/app-version";
 
 export type UpdateCallback = (available: boolean) => void;
 
@@ -436,4 +437,84 @@ export const installTauriUpdate = async (): Promise<void> => {
     console.error("[UpdateService] Atualização instalada, mas falha ao reiniciar automaticamente:", err);
     throw new UpdateInstallError("relaunch", err);
   }
+};
+
+// ============================================================================
+// Version manifest fallback (Android + iOS)
+// ============================================================================
+//
+// O caminho do Service Worker sozinho não é confiável em celular:
+// - iOS congela o app na "snapshot" e frequentemente não reexecuta o
+//   update() do registration;
+// - se o PWA foi instalado por um host que hoje redireciona (ex.: domínio
+//   antigo -> domínio próprio), o fetch do /sw.js devolve um redirect e o
+//   navegador aborta a atualização do worker para sempre.
+//
+// Por isso comparamos a versão embutida no bundle (APP_VERSION) com o
+// /version.json publicado a cada build. Se forem diferentes, existe uma
+// versão nova mesmo que o Service Worker jure que não.
+
+export const VERSION_MANIFEST_URL = "/version.json";
+
+/** Lê a versão publicada no servidor. Nunca lança; retorna null se falhar. */
+export const fetchDeployedVersion = async (): Promise<string | null> => {
+  try {
+    const res = await fetch(`${VERSION_MANIFEST_URL}?t=${Date.now()}`, {
+      cache: "no-store",
+      credentials: "omit",
+    });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    const version = (data as { version?: unknown } | null)?.version;
+    return typeof version === "string" && version.length > 0 ? version : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Existe versão nova publicada e diferente da que está rodando?
+ * Retorna a versão publicada quando há divergência, senão null.
+ */
+export const checkDeployedVersionMismatch = async (): Promise<string | null> => {
+  if (!APP_VERSION) return null;
+  const deployed = await fetchDeployedVersion();
+  if (!deployed || deployed === APP_VERSION) return null;
+  return deployed;
+};
+
+/**
+ * Último recurso: desregistra o(s) Service Worker(s) do app, apaga os
+ * caches do Workbox e recarrega furando cache. Funciona em Android e iOS
+ * mesmo quando o handover normal (SKIP_WAITING) nunca acontece.
+ * Não toca em caches de push/OneSignal (escopo separado).
+ */
+export const hardReloadToLatest = async (): Promise<void> => {
+  try {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.allSettled(registrations.map((reg) => reg.unregister()));
+    }
+  } catch (err) {
+    console.warn("[UpdateService] Falha ao desregistrar Service Worker:", err);
+  }
+
+  try {
+    if (typeof caches !== "undefined") {
+      const names = await caches.keys();
+      const workboxCaches = names.filter((name) =>
+        /(^|-)precache-v\d+-|(^|-)runtime-|workbox/.test(name),
+      );
+      await Promise.allSettled(workboxCaches.map((name) => caches.delete(name)));
+    }
+  } catch (err) {
+    console.warn("[UpdateService] Falha ao limpar caches:", err);
+  }
+
+  currentRegistration = null;
+  announcedWaitingWorker = null;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("_v", Date.now().toString(36));
+  window.location.replace(url.toString());
 };
