@@ -190,6 +190,7 @@ export function AppSidebar() {
       ];
 
   const configuracoesItems: NavItem[] = [
+    ...(!isUsuario ? [{ title: "Empresa", url: "/configuracoes/empresa", icon: Building2 }] : []),
     { title: "Impressoras", url: "/configuracoes/impressoras", icon: Printer },
     ...(isMasterAdmin || hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Backups", url: "/backups", icon: Database }] : []),
     // Mesma condição de visibilidade que "Assinatura e Módulos" já tinha:

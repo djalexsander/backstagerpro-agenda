@@ -21,6 +21,7 @@ import { addBrandingHeader } from "@/lib/pdf-branding";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import { resolveDocumentTemplateContent } from "@/lib/document-placeholders";
+import { useEmpresaDados } from "@/hooks/useEmpresaDados";
 
 const TIPOS_DOCUMENTO = [
   { value: "contrato", label: "Contrato de Show" },
@@ -40,6 +41,13 @@ const VARIAVEIS_DISPONIVEIS = [
   { key: "{{alimentacao}}", desc: "Custo alimentação" },
   { key: "{{hospedagem}}", desc: "Custo hospedagem" },
   { key: "{{empresa_nome}}", desc: "Nome da empresa" },
+  { key: "{{empresa_razao_social}}", desc: "Razão social da empresa" },
+  { key: "{{empresa_cnpj}}", desc: "CNPJ/CPF da empresa" },
+  { key: "{{empresa_telefone}}", desc: "Telefone da empresa" },
+  { key: "{{empresa_whatsapp}}", desc: "WhatsApp da empresa" },
+  { key: "{{empresa_email}}", desc: "E-mail da empresa" },
+  { key: "{{empresa_endereco}}", desc: "Endereço completo da empresa" },
+  { key: "{{empresa_cidade_uf}}", desc: "Cidade/UF da empresa" },
   { key: "{{data_atual}}", desc: "Data de hoje" },
   { key: "{{observacoes}}", desc: "Observações do evento" },
 ];
@@ -49,6 +57,9 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
 
 CONTRATANTE: ___________________________________
 CONTRATADA: {{empresa_nome}}
+CNPJ/CPF: {{empresa_cnpj}}
+Endereço: {{empresa_endereco}}
+Contato: {{empresa_telefone}} — {{empresa_email}}
 
 CLÁUSULA 1 - DO OBJETO
 O presente contrato tem por objeto a prestação de serviços artísticos para o evento "{{evento_nome}}", a ser realizado em {{evento_cidade}}, no local {{evento_local}}, na data {{evento_data}}.
@@ -193,16 +204,10 @@ export default function Documentos() {
     enabled: !!empresaId,
   });
 
-  const { data: empresa } = useQuery({
-    queryKey: ["empresa-docs", empresaId],
-    queryFn: async () => {
-      if (!empresaId) return null;
-      const { data, error } = await supabase.from("empresas").select("nome_empresa").eq("id", empresaId).single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!empresaId,
-  });
+  // Dados cadastrais da empresa atual — mesma fonte usada em Configurações →
+  // Empresa. Sempre os valores atuais (sem snapshot); alterar lá reflete no
+  // próximo documento gerado.
+  const { data: empresaDados } = useEmpresaDados();
 
   // Mutations
   const saveTemplate = useMutation({
@@ -294,7 +299,8 @@ export default function Documentos() {
       const content = await resolveDocumentTemplateContent({
         templateContent: selectedTemplate.conteudo,
         event,
-        companyName: empresa?.nome_empresa || "",
+        companyName: empresaDados?.nome_empresa || empresaNome || "",
+        company: empresaDados ?? undefined,
         loadFinancial: async () => {
           const { data, error } = await supabase
             .from("financials")

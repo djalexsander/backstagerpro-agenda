@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildDocumentPlaceholderContext,
+  COMPANY_DOCUMENT_PLACEHOLDERS,
   FINANCIAL_DOCUMENT_PLACEHOLDERS,
   resolveDocumentTemplateContent,
+  type DocumentCompanyData,
   type DocumentEventData,
   type DocumentFinancialData,
 } from "./document-placeholders";
@@ -28,15 +31,33 @@ const currentDate = new Date(2026, 7, 17, 12, 0, 0);
 async function render(
   templateContent: string,
   financialData: DocumentFinancialData | null = financial,
+  company?: DocumentCompanyData | null,
 ) {
   return resolveDocumentTemplateContent({
     templateContent,
     event,
     companyName: "Backstage Produções",
+    company,
     loadFinancial: vi.fn().mockResolvedValue(financialData),
     currentDate,
   });
 }
+
+const fullCompany: DocumentCompanyData = {
+  nome_empresa: "Alex Produções",
+  razao_social: "Alex Produções Artísticas LTDA",
+  cpf_cnpj: "12345678000190",
+  email: "contato@alex.com",
+  telefone: "(11) 4002-8922",
+  whatsapp: "(11) 99999-0000",
+  cep: "01310100",
+  endereco: "Av. Paulista",
+  numero: "1000",
+  complemento: "Sala 12",
+  bairro: "Bela Vista",
+  cidade: "São Paulo",
+  estado: "SP",
+};
 
 describe("document placeholder resolution", () => {
   it("fills the cache placeholder after financial data resolves", async () => {
@@ -121,5 +142,84 @@ describe("document placeholder resolution", () => {
     expect(previewContent).toBe(finalContent);
     expect(exportContent).toBe(finalContent);
     expect(finalContent).not.toMatch(/{{[^}]+}}/);
+  });
+});
+
+describe("company placeholder resolution (Documentos <- empresa atual)", () => {
+  it("fills every {{empresa_*}} placeholder from the current company data", async () => {
+    const output = await render(
+      COMPANY_DOCUMENT_PLACEHOLDERS.join("\n"),
+      null,
+      fullCompany,
+    );
+
+    expect(output).toBe(
+      [
+        "Alex Produções",
+        "Alex Produções Artísticas LTDA",
+        "12.345.678/0001-90",
+        "12.345.678/0001-90",
+        "(11) 4002-8922",
+        "(11) 99999-0000",
+        "contato@alex.com",
+        "01310-100",
+        "Av. Paulista, 1000, Sala 12 — Bela Vista — São Paulo/SP — CEP 01310-100",
+        "Bela Vista",
+        "São Paulo",
+        "SP",
+        "São Paulo/SP",
+      ].join("\n"),
+    );
+  });
+
+  it("uses the new company name over the legacy companyName fallback", async () => {
+    expect(await render("{{empresa_nome}}", null, fullCompany)).toBe("Alex Produções");
+  });
+
+  it("falls back to companyName for {{empresa_nome}} when no company data is provided", async () => {
+    expect(await render("{{empresa_nome}}", null)).toBe("Backstage Produções");
+    expect(await render("{{empresa_nome}}", null, null)).toBe("Backstage Produções");
+  });
+
+  it("leaves optional company fields blank without keeping any {{...}} in the document", async () => {
+    const output = await render(
+      "Empresa: {{empresa_nome}} | CNPJ: {{empresa_cnpj}} | End.: {{empresa_endereco}} | Tel.: {{empresa_telefone}}",
+      null,
+      { nome_empresa: "Alex Produções" },
+    );
+
+    expect(output).toBe("Empresa: Alex Produções | CNPJ:  | End.:  | Tel.: ");
+    expect(output).not.toMatch(/{{[^}]+}}/);
+  });
+
+  it("resolves partial company data (some fields present, others null)", () => {
+    const context = buildDocumentPlaceholderContext({
+      event,
+      companyName: "Backstage Produções",
+      company: { nome_empresa: null, telefone: "1140028922", cidade: "Campinas", estado: "SP" },
+      financial: null,
+      currentDate,
+    });
+
+    expect(context["{{empresa_nome}}"]).toBe("Backstage Produções");
+    expect(context["{{empresa_telefone}}"]).toBe("1140028922");
+    expect(context["{{empresa_cidade_uf}}"]).toBe("Campinas/SP");
+    // endereço "completo" cai para só a cidade/UF quando não há logradouro
+    expect(context["{{empresa_endereco}}"]).toBe("Campinas/SP");
+    expect(context["{{empresa_cnpj}}"]).toBe("");
+    expect(context["{{empresa_email}}"]).toBe("");
+  });
+
+  it("keeps {{empresa_endereco}} empty when the company has no address at all", () => {
+    const context = buildDocumentPlaceholderContext({
+      event,
+      companyName: "Backstage Produções",
+      company: { nome_empresa: "Alex Produções", telefone: "1140028922" },
+      financial: null,
+      currentDate,
+    });
+
+    expect(context["{{empresa_endereco}}"]).toBe("");
+    expect(context["{{empresa_cidade_uf}}"]).toBe("");
   });
 });

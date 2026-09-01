@@ -38,6 +38,7 @@ import Etiquetas from "@/pages/Etiquetas";
 import RfidConferencia from "@/pages/RfidConferencia";
 import RastreabilidadeMateriais from "@/pages/RastreabilidadeMateriais";
 import ConfiguracoesImpressoras from "@/pages/ConfiguracoesImpressoras";
+import ConfiguracoesEmpresa from "@/pages/ConfiguracoesEmpresa";
 import Cadastro from "@/pages/Cadastro";
 import EscolherPlano from "@/pages/EscolherPlano";
 import PagamentoPlano from "@/pages/PagamentoPlano";
@@ -96,6 +97,7 @@ const App = () => (
                   <Route path="/plano" element={<PlanoAssinatura />} />
                   <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
                   <Route path="/configuracoes/impressoras" element={<ProtectedRoute><ConfiguracoesImpressoras /></ProtectedRoute>} />
+                  <Route path="/configuracoes/empresa" element={<ProtectedRoute adminOnly><ConfiguracoesEmpresa /></ProtectedRoute>} />
                   <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
                   <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
                   <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />

@@ -624,17 +624,25 @@ export type Database = {
       }
       empresas: {
         Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
           cpf_cnpj: string | null
           created_at: string
           data_contrato: string | null
           email: string | null
+          endereco: string | null
+          estado: string | null
           id: string
           logo_url: string | null
           nome_empresa: string
+          numero: string | null
           plano: string | null
           plano_bloqueado: boolean
           plano_id: string | null
           precisa_escolher_plano: boolean
+          razao_social: string | null
           status: string | null
           status_pagamento: string | null
           telefone: string | null
@@ -642,19 +650,28 @@ export type Database = {
           trial_expires_at: string | null
           trial_started_at: string | null
           vencimento: string | null
+          whatsapp: string | null
         }
         Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
           cpf_cnpj?: string | null
           created_at?: string
           data_contrato?: string | null
           email?: string | null
+          endereco?: string | null
+          estado?: string | null
           id?: string
           logo_url?: string | null
           nome_empresa: string
+          numero?: string | null
           plano?: string | null
           plano_bloqueado?: boolean
           plano_id?: string | null
           precisa_escolher_plano?: boolean
+          razao_social?: string | null
           status?: string | null
           status_pagamento?: string | null
           telefone?: string | null
@@ -662,19 +679,28 @@ export type Database = {
           trial_expires_at?: string | null
           trial_started_at?: string | null
           vencimento?: string | null
+          whatsapp?: string | null
         }
         Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
           cpf_cnpj?: string | null
           created_at?: string
           data_contrato?: string | null
           email?: string | null
+          endereco?: string | null
+          estado?: string | null
           id?: string
           logo_url?: string | null
           nome_empresa?: string
+          numero?: string | null
           plano?: string | null
           plano_bloqueado?: boolean
           plano_id?: string | null
           precisa_escolher_plano?: boolean
+          razao_social?: string | null
           status?: string | null
           status_pagamento?: string | null
           telefone?: string | null
@@ -682,6 +708,7 @@ export type Database = {
           trial_expires_at?: string | null
           trial_started_at?: string | null
           vencimento?: string | null
+          whatsapp?: string | null
         }
         Relationships: [
           {
