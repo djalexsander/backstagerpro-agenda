@@ -25,6 +25,7 @@ const operation: CustodyOperationView = {
   foto_path: null,
   tipo_controle: "quantidade",
   quantidade_retirada: 6,
+  quantidade_baixada: 0,
   quantidade_devolvida: 0,
   quantidade_pendente: 6,
   localizacao_origem_id: "42000000-0000-4000-8000-000000000001",
