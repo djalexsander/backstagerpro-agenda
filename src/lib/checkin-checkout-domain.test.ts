@@ -127,6 +127,7 @@ describe("check-in/check-out domain", () => {
           {
             id: "0452577c-a907-4e87-aeb0-c07934ef9c27",
             quantidade_retirada: 1,
+            quantidade_baixada: 0,
             quantidade_devolvida: 0,
             quantidade_pendente: 1,
             responsavel_nome: "Técnico",

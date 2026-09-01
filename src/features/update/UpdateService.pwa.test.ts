@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 // Capture the options vite-plugin-pwa's registerSW is called with so the
 // test can drive the lifecycle callbacks by hand. Same "mock the virtual
@@ -82,7 +82,7 @@ describe("UpdateService - PWA update flow", () => {
   let originalLocation: Location;
   const disposers: Array<() => void> = [];
 
-  function register(callback: (available: boolean) => void = vi.fn()) {
+  function register(callback: Mock<(available: boolean) => void> = vi.fn()) {
     const dispose = registerPWAUpdate(callback);
     disposers.push(dispose);
     return { dispose, callback };

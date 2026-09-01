@@ -29,7 +29,7 @@ const detail = (overrides: Partial<RentalDetail> = {}): RentalDetail => ({
   quantidade_com_cliente: 0,
   atrasada: false,
   observacoes: null,
-  cliente: { id: "customer", tipo_pessoa: "pessoa_fisica", nome: "Cliente", nome_fantasia: null, cpf_cnpj: null, email: null, telefone: null, ativo: true },
+  cliente: { id: "customer", tipo_pessoa: "pessoa_fisica", nome: "Cliente", nome_fantasia: null, cpf_cnpj: null, email: null, telefone: null, ativo: true, observacoes: null },
   evento: null,
   itens: [{
     id: "item", material_id: "material", quantidade_contratada: 20,
@@ -89,7 +89,7 @@ describe("material rental domain", () => {
   });
 
   it("does not allow cancellation after any physical history", () => {
-    const reserved = detail({ status: "reservada", custodias: [{ id: "custody", referencia_id: "item", material_id: "material", status: "cancelada", quantidade_retirada: 1, quantidade_devolvida: 0, quantidade_pendente: 0, retirada_em: "2026-08-10", previsao_retorno: null }] });
+    const reserved = detail({ status: "reservada", custodias: [{ id: "custody", referencia_id: "item", material_id: "material", status: "cancelada", quantidade_retirada: 1, quantidade_baixada: 0, quantidade_devolvida: 0, quantidade_pendente: 0, retirada_em: "2026-08-10", previsao_retorno: null }] });
     expect(getRentalActions(reserved).canCancel).toBe(false);
   });
 
