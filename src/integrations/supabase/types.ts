@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_secrets: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       asaas_payments: {
         Row: {
           activation_completed_at: string | null
@@ -347,6 +365,95 @@ export type Database = {
           },
         ]
       }
+      empresa_bobina_perfis: {
+        Row: {
+          altura_etiqueta_mm: number
+          ativo: boolean
+          colunas: number
+          created_at: string
+          created_by: string | null
+          dpi: string
+          dpi_personalizado: number | null
+          empresa_id: string
+          espacamento_horizontal_mm: number
+          espacamento_vertical_mm: number
+          id: string
+          largura_etiqueta_mm: number
+          largura_midia_mm: number | null
+          margem_direita_mm: number
+          margem_esquerda_mm: number
+          margem_inferior_mm: number
+          margem_superior_mm: number
+          nome: string
+          offset_horizontal_mm: number
+          offset_vertical_mm: number
+          orientacao: string
+          padrao: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          altura_etiqueta_mm: number
+          ativo?: boolean
+          colunas?: number
+          created_at?: string
+          created_by?: string | null
+          dpi?: string
+          dpi_personalizado?: number | null
+          empresa_id: string
+          espacamento_horizontal_mm?: number
+          espacamento_vertical_mm?: number
+          id?: string
+          largura_etiqueta_mm: number
+          largura_midia_mm?: number | null
+          margem_direita_mm?: number
+          margem_esquerda_mm?: number
+          margem_inferior_mm?: number
+          margem_superior_mm?: number
+          nome: string
+          offset_horizontal_mm?: number
+          offset_vertical_mm?: number
+          orientacao?: string
+          padrao?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          altura_etiqueta_mm?: number
+          ativo?: boolean
+          colunas?: number
+          created_at?: string
+          created_by?: string | null
+          dpi?: string
+          dpi_personalizado?: number | null
+          empresa_id?: string
+          espacamento_horizontal_mm?: number
+          espacamento_vertical_mm?: number
+          id?: string
+          largura_etiqueta_mm?: number
+          largura_midia_mm?: number | null
+          margem_direita_mm?: number
+          margem_esquerda_mm?: number
+          margem_inferior_mm?: number
+          margem_superior_mm?: number
+          nome?: string
+          offset_horizontal_mm?: number
+          offset_vertical_mm?: number
+          orientacao?: string
+          padrao?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "empresa_bobina_perfis_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresa_impressora_config: {
         Row: {
           altura_mm: number | null
@@ -361,6 +468,7 @@ export type Database = {
           largura_mm: number | null
           nome_impressora: string | null
           orientacao: string
+          perfil_bobina_padrao_id: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -377,6 +485,7 @@ export type Database = {
           largura_mm?: number | null
           nome_impressora?: string | null
           orientacao?: string
+          perfil_bobina_padrao_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -393,6 +502,7 @@ export type Database = {
           largura_mm?: number | null
           nome_impressora?: string | null
           orientacao?: string
+          perfil_bobina_padrao_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -402,6 +512,13 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "empresa_impressora_config_perfil_bobina_padrao_id_fkey"
+            columns: ["perfil_bobina_padrao_id"]
+            isOneToOne: false
+            referencedRelation: "empresa_bobina_perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -1345,6 +1462,48 @@ export type Database = {
             columns: ["funcionario_id"]
             isOneToOne: false
             referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_import_origins: {
+        Row: {
+          empresa_id: string
+          event_id: string
+          id: string
+          imported_at: string
+          source_event_id: string
+          source_system: string
+        }
+        Insert: {
+          empresa_id: string
+          event_id: string
+          id?: string
+          imported_at?: string
+          source_event_id: string
+          source_system: string
+        }
+        Update: {
+          empresa_id?: string
+          event_id?: string
+          id?: string
+          imported_at?: string
+          source_event_id?: string
+          source_system?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_import_origins_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_import_origins_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]
@@ -2389,7 +2548,9 @@ export type Database = {
           ocorrencia: string | null
           payload_hash: string
           quantidade: number
-          status_operacional_resultante: Database["public"]["Enums"]["material_operational_status"] | null
+          status_operacional_resultante:
+            | Database["public"]["Enums"]["material_operational_status"]
+            | null
           tipo: Database["public"]["Enums"]["material_custody_event_type"]
         }
         Insert: {
@@ -2412,7 +2573,9 @@ export type Database = {
           ocorrencia?: string | null
           payload_hash: string
           quantidade: number
-          status_operacional_resultante?: Database["public"]["Enums"]["material_operational_status"] | null
+          status_operacional_resultante?:
+            | Database["public"]["Enums"]["material_operational_status"]
+            | null
           tipo: Database["public"]["Enums"]["material_custody_event_type"]
         }
         Update: {
@@ -2435,7 +2598,9 @@ export type Database = {
           ocorrencia?: string | null
           payload_hash?: string
           quantidade?: number
-          status_operacional_resultante?: Database["public"]["Enums"]["material_operational_status"] | null
+          status_operacional_resultante?:
+            | Database["public"]["Enums"]["material_operational_status"]
+            | null
           tipo?: Database["public"]["Enums"]["material_custody_event_type"]
         }
         Relationships: [
@@ -2513,8 +2678,8 @@ export type Database = {
           observacao_saida: string | null
           payload_hash: string
           previsao_retorno: string | null
-          quantidade_devolvida: number
           quantidade_baixada: number
+          quantidade_devolvida: number
           quantidade_retirada: number
           referencia_id: string | null
           referencia_tipo: string | null
@@ -2542,8 +2707,8 @@ export type Database = {
           observacao_saida?: string | null
           payload_hash: string
           previsao_retorno?: string | null
-          quantidade_devolvida?: number
           quantidade_baixada?: number
+          quantidade_devolvida?: number
           quantidade_retirada: number
           referencia_id?: string | null
           referencia_tipo?: string | null
@@ -2571,8 +2736,8 @@ export type Database = {
           observacao_saida?: string | null
           payload_hash?: string
           previsao_retorno?: string | null
-          quantidade_devolvida?: number
           quantidade_baixada?: number
+          quantidade_devolvida?: number
           quantidade_retirada?: number
           referencia_id?: string | null
           referencia_tipo?: string | null
@@ -3239,6 +3404,151 @@ export type Database = {
           },
         ]
       }
+      notificacao_preferencias: {
+        Row: {
+          empresa_id: string
+          habilitada: boolean
+          id: string
+          tipo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          empresa_id: string
+          habilitada?: boolean
+          id?: string
+          tipo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          empresa_id?: string
+          habilitada?: boolean
+          id?: string
+          tipo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacao_preferencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificacoes: {
+        Row: {
+          categoria: string
+          created_at: string
+          criado_por: string | null
+          dedupe_key: string | null
+          empresa_id: string
+          id: string
+          mensagem: string
+          metadata: Json
+          referencia_id: string | null
+          referencia_tipo: string | null
+          rota: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          categoria: string
+          created_at?: string
+          criado_por?: string | null
+          dedupe_key?: string | null
+          empresa_id: string
+          id?: string
+          mensagem: string
+          metadata?: Json
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          rota?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          criado_por?: string | null
+          dedupe_key?: string | null
+          empresa_id?: string
+          id?: string
+          mensagem?: string
+          metadata?: Json
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          rota?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificacoes_destinatarios: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          lida: boolean
+          lida_em: string | null
+          notificacao_id: string
+          push_processado_em: string | null
+          push_status: string
+          push_tentativas: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          lida?: boolean
+          lida_em?: string | null
+          notificacao_id: string
+          push_processado_em?: string | null
+          push_status?: string
+          push_tentativas?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          lida?: boolean
+          lida_em?: string | null
+          notificacao_id?: string
+          push_processado_em?: string | null
+          push_status?: string
+          push_tentativas?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_destinatarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_destinatarios_notificacao_id_fkey"
+            columns: ["notificacao_id"]
+            isOneToOne: false
+            referencedRelation: "notificacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes_master: {
         Row: {
           created_at: string
@@ -3426,6 +3736,420 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          ativo: boolean
+          auth: string
+          created_at: string
+          empresa_id: string
+          endpoint: string
+          falhas_consecutivas: number
+          id: string
+          p256dh: string
+          ultima_falha_em: string | null
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          auth: string
+          created_at?: string
+          empresa_id: string
+          endpoint: string
+          falhas_consecutivas?: number
+          id?: string
+          p256dh: string
+          ultima_falha_em?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          ativo?: boolean
+          auth?: string
+          created_at?: string
+          empresa_id?: string
+          endpoint?: string
+          falhas_consecutivas?: number
+          id?: string
+          p256dh?: string
+          ultima_falha_em?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rfid_read_sessions: {
+        Row: {
+          created_at: string
+          dispositivo_label: string | null
+          empresa_id: string
+          expected_count: number | null
+          expected_material_ids: string[]
+          finished_at: string | null
+          found_count: number | null
+          id: string
+          missing_count: number | null
+          read_epcs: string[]
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_user_id: string
+          resultado: Json | null
+          started_at: string
+          status: Database["public"]["Enums"]["rfid_read_session_status"]
+          tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+          unexpected_count: number | null
+          unknown_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dispositivo_label?: string | null
+          empresa_id: string
+          expected_count?: number | null
+          expected_material_ids?: string[]
+          finished_at?: string | null
+          found_count?: number | null
+          id?: string
+          missing_count?: number | null
+          read_epcs?: string[]
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          responsavel_user_id: string
+          resultado?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["rfid_read_session_status"]
+          tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+          unexpected_count?: number | null
+          unknown_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dispositivo_label?: string | null
+          empresa_id?: string
+          expected_count?: number | null
+          expected_material_ids?: string[]
+          finished_at?: string | null
+          found_count?: number | null
+          id?: string
+          missing_count?: number | null
+          read_epcs?: string[]
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          responsavel_user_id?: string
+          resultado?: Json | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["rfid_read_session_status"]
+          tipo?: Database["public"]["Enums"]["rfid_read_session_type"]
+          unexpected_count?: number | null
+          unknown_count?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rfid_read_sessions_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rfid_tags: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          desativada_em: string | null
+          empresa_id: string
+          epc: string
+          id: string
+          material_id: string
+          motivo_desativacao: string | null
+          status: Database["public"]["Enums"]["rfid_tag_status"]
+          substituida_por_tag_id: string | null
+          ultima_leitura_em: string | null
+          updated_at: string
+          updated_by: string | null
+          vinculada_em: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          desativada_em?: string | null
+          empresa_id: string
+          epc: string
+          id?: string
+          material_id: string
+          motivo_desativacao?: string | null
+          status?: Database["public"]["Enums"]["rfid_tag_status"]
+          substituida_por_tag_id?: string | null
+          ultima_leitura_em?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vinculada_em?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          desativada_em?: string | null
+          empresa_id?: string
+          epc?: string
+          id?: string
+          material_id?: string
+          motivo_desativacao?: string | null
+          status?: Database["public"]["Enums"]["rfid_tag_status"]
+          substituida_por_tag_id?: string | null
+          ultima_leitura_em?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vinculada_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rfid_tags_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rfid_tags_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_divergencias_saldo"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "rfid_tags_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_reconciliacao_legado"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "rfid_tags_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rfid_tags_substituida_por_tag_id_fkey"
+            columns: ["substituida_por_tag_id"]
+            isOneToOne: false
+            referencedRelation: "rfid_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scanner_remoto_leituras: {
+        Row: {
+          acao_executada: Database["public"]["Enums"]["scanner_remoto_acao"]
+          client_uuid: string
+          codigo_lido: string
+          created_at: string
+          custodia_id: string | null
+          empresa_id: string
+          id: string
+          lido_por: string
+          material_id: string | null
+          payload_hash: string
+          resultado: Json | null
+          sessao_id: string
+        }
+        Insert: {
+          acao_executada: Database["public"]["Enums"]["scanner_remoto_acao"]
+          client_uuid: string
+          codigo_lido: string
+          created_at?: string
+          custodia_id?: string | null
+          empresa_id: string
+          id?: string
+          lido_por: string
+          material_id?: string | null
+          payload_hash: string
+          resultado?: Json | null
+          sessao_id: string
+        }
+        Update: {
+          acao_executada?: Database["public"]["Enums"]["scanner_remoto_acao"]
+          client_uuid?: string
+          codigo_lido?: string
+          created_at?: string
+          custodia_id?: string | null
+          empresa_id?: string
+          id?: string
+          lido_por?: string
+          material_id?: string | null
+          payload_hash?: string
+          resultado?: Json | null
+          sessao_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scanner_remoto_leituras_empresa_custodia_fkey"
+            columns: ["empresa_id", "custodia_id"]
+            isOneToOne: false
+            referencedRelation: "material_custodias"
+            referencedColumns: ["empresa_id", "id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_leituras_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_leituras_empresa_material_fkey"
+            columns: ["empresa_id", "material_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_divergencias_saldo"
+            referencedColumns: ["empresa_id", "material_id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_leituras_empresa_material_fkey"
+            columns: ["empresa_id", "material_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_reconciliacao_legado"
+            referencedColumns: ["empresa_id", "material_id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_leituras_empresa_material_fkey"
+            columns: ["empresa_id", "material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["empresa_id", "id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_leituras_empresa_sessao_fkey"
+            columns: ["empresa_id", "sessao_id"]
+            isOneToOne: false
+            referencedRelation: "scanner_remoto_sessoes"
+            referencedColumns: ["empresa_id", "id"]
+          },
+        ]
+      }
+      scanner_remoto_sessoes: {
+        Row: {
+          aberta_em: string
+          client_uuid: string
+          condicao: Database["public"]["Enums"]["material_custody_condition"]
+          created_at: string
+          criado_por: string
+          empresa_id: string
+          encerrada_em: string | null
+          encerrada_por: string | null
+          finalidade:
+            | Database["public"]["Enums"]["material_custody_purpose"]
+            | null
+          id: string
+          localizacao_destino_id: string | null
+          localizacao_origem_id: string | null
+          observacao: string | null
+          payload_hash: string
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_id: string | null
+          responsavel_tipo:
+            | Database["public"]["Enums"]["material_custody_responsible_type"]
+            | null
+          status: Database["public"]["Enums"]["scanner_remoto_sessao_status"]
+          tipo_operacao: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          titulo: string | null
+          updated_at: string
+        }
+        Insert: {
+          aberta_em?: string
+          client_uuid: string
+          condicao: Database["public"]["Enums"]["material_custody_condition"]
+          created_at?: string
+          criado_por: string
+          empresa_id: string
+          encerrada_em?: string | null
+          encerrada_por?: string | null
+          finalidade?:
+            | Database["public"]["Enums"]["material_custody_purpose"]
+            | null
+          id?: string
+          localizacao_destino_id?: string | null
+          localizacao_origem_id?: string | null
+          observacao?: string | null
+          payload_hash: string
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          responsavel_id?: string | null
+          responsavel_tipo?:
+            | Database["public"]["Enums"]["material_custody_responsible_type"]
+            | null
+          status?: Database["public"]["Enums"]["scanner_remoto_sessao_status"]
+          tipo_operacao: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          titulo?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aberta_em?: string
+          client_uuid?: string
+          condicao?: Database["public"]["Enums"]["material_custody_condition"]
+          created_at?: string
+          criado_por?: string
+          empresa_id?: string
+          encerrada_em?: string | null
+          encerrada_por?: string | null
+          finalidade?:
+            | Database["public"]["Enums"]["material_custody_purpose"]
+            | null
+          id?: string
+          localizacao_destino_id?: string | null
+          localizacao_origem_id?: string | null
+          observacao?: string | null
+          payload_hash?: string
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          responsavel_id?: string | null
+          responsavel_tipo?:
+            | Database["public"]["Enums"]["material_custody_responsible_type"]
+            | null
+          status?: Database["public"]["Enums"]["scanner_remoto_sessao_status"]
+          tipo_operacao?: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          titulo?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scanner_remoto_sessoes_empresa_destino_fkey"
+            columns: ["empresa_id", "localizacao_destino_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_localizacoes"
+            referencedColumns: ["empresa_id", "id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_sessoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scanner_remoto_sessoes_empresa_origem_fkey"
+            columns: ["empresa_id", "localizacao_origem_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_localizacoes"
+            referencedColumns: ["empresa_id", "id"]
           },
         ]
       }
@@ -3733,6 +4457,17 @@ export type Database = {
       }
     }
     Functions: {
+      activate_company_modules_checked: {
+        Args: {
+          _empresa_id: string
+          _expires_at: string
+          _granted_by_admin: boolean
+          _module_ids: string[]
+          _origem: string
+          _prices: Json
+        }
+        Returns: number
+      }
       ajustar_estoque_material: {
         Args: {
           _client_uuid: string
@@ -4034,6 +4769,18 @@ export type Database = {
           item: Json
         }[]
       }
+      buscar_rastreabilidade_materiais: {
+        Args: {
+          _empresa_id?: string
+          _limite?: number
+          _offset?: number
+          _termo: string
+        }
+        Returns: {
+          item: Json
+          total_count: number
+        }[]
+      }
       can_manage_event_storage_object: {
         Args: { _file_path: string }
         Returns: boolean
@@ -4090,6 +4837,7 @@ export type Database = {
           observacao_saida: string | null
           payload_hash: string
           previsao_retorno: string | null
+          quantidade_baixada: number
           quantidade_devolvida: number
           quantidade_retirada: number
           referencia_id: string | null
@@ -4157,14 +4905,6 @@ export type Database = {
         Args: { _actor_id: string; _plan_id?: string; _selection_type: string }
         Returns: Json
       }
-      company_set_user_role: {
-        Args: {
-          _full_name: string
-          _role: string
-          _target_user_id: string
-        }
-        Returns: Json
-      }
       company_has_active_module: {
         Args: { _empresa_id: string; _feature_key: string }
         Returns: boolean
@@ -4180,6 +4920,10 @@ export type Database = {
       company_module_dependencies_satisfied: {
         Args: { _empresa_id: string; _module_id: string }
         Returns: boolean
+      }
+      company_set_user_role: {
+        Args: { _full_name: string; _role: string; _target_user_id: string }
+        Returns: Json
       }
       concluir_locacao_material: {
         Args: {
@@ -4329,6 +5073,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      criar_notificacao: {
+        Args: {
+          _categoria: string
+          _criado_por?: string
+          _dedupe_key?: string
+          _empresa_id: string
+          _feature_key?: string
+          _mensagem: string
+          _metadata?: Json
+          _referencia_id?: string
+          _referencia_tipo?: string
+          _rota?: string
+          _tipo: string
+          _titulo: string
+        }
+        Returns: string
+      }
       criar_ordem_manutencao: {
         Args: {
           _client_uuid: string
@@ -4404,6 +5165,41 @@ export type Database = {
         Args: { _empresa_id: string }
         Returns: undefined
       }
+      definir_perfil_bobina_padrao: {
+        Args: { _empresa_id?: string; _perfil_id: string }
+        Returns: {
+          altura_etiqueta_mm: number
+          ativo: boolean
+          colunas: number
+          created_at: string
+          created_by: string | null
+          dpi: string
+          dpi_personalizado: number | null
+          empresa_id: string
+          espacamento_horizontal_mm: number
+          espacamento_vertical_mm: number
+          id: string
+          largura_etiqueta_mm: number
+          largura_midia_mm: number | null
+          margem_direita_mm: number
+          margem_esquerda_mm: number
+          margem_inferior_mm: number
+          margem_superior_mm: number
+          nome: string
+          offset_horizontal_mm: number
+          offset_vertical_mm: number
+          orientacao: string
+          padrao: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresa_bobina_perfis"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       detach_company_user: {
         Args: {
           _actor_id: string
@@ -4412,9 +5208,85 @@ export type Database = {
         }
         Returns: Json
       }
+      dispatch_push_for_notification: {
+        Args: { _notificacao_id: string }
+        Returns: undefined
+      }
+      duplicar_perfil_bobina: {
+        Args: { _empresa_id?: string; _novo_nome?: string; _perfil_id: string }
+        Returns: {
+          altura_etiqueta_mm: number
+          ativo: boolean
+          colunas: number
+          created_at: string
+          created_by: string | null
+          dpi: string
+          dpi_personalizado: number | null
+          empresa_id: string
+          espacamento_horizontal_mm: number
+          espacamento_vertical_mm: number
+          id: string
+          largura_etiqueta_mm: number
+          largura_midia_mm: number | null
+          margem_direita_mm: number
+          margem_esquerda_mm: number
+          margem_inferior_mm: number
+          margem_superior_mm: number
+          nome: string
+          offset_horizontal_mm: number
+          offset_vertical_mm: number
+          orientacao: string
+          padrao: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresa_bobina_perfis"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       employee_belongs_to_company: {
         Args: { _empresa_id: string; _funcionario_id: string }
         Returns: boolean
+      }
+      encerrar_sessao_scanner_remoto: {
+        Args: { _empresa_id?: string; _sessao_id: string }
+        Returns: {
+          aberta_em: string
+          client_uuid: string
+          condicao: Database["public"]["Enums"]["material_custody_condition"]
+          created_at: string
+          criado_por: string
+          empresa_id: string
+          encerrada_em: string | null
+          encerrada_por: string | null
+          finalidade:
+            | Database["public"]["Enums"]["material_custody_purpose"]
+            | null
+          id: string
+          localizacao_destino_id: string | null
+          localizacao_origem_id: string | null
+          observacao: string | null
+          payload_hash: string
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_id: string | null
+          responsavel_tipo:
+            | Database["public"]["Enums"]["material_custody_responsible_type"]
+            | null
+          status: Database["public"]["Enums"]["scanner_remoto_sessao_status"]
+          tipo_operacao: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          titulo: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scanner_remoto_sessoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       equipment_active_maintenance_quantity: {
         Args: {
@@ -4517,6 +5389,11 @@ export type Database = {
         Args: { _empresa_id: string; _event_day_id: string; _event_id: string }
         Returns: boolean
       }
+      excluir_minhas_notificacoes_lidas: { Args: never; Returns: undefined }
+      excluir_perfil_bobina: {
+        Args: { _empresa_id?: string; _perfil_id: string }
+        Returns: boolean
+      }
       finalize_user_auth_deletion: {
         Args: { _audit_id: string; _error?: string; _success: boolean }
         Returns: undefined
@@ -4529,6 +5406,10 @@ export type Database = {
           _valor_recebido: number
         }
         Returns: string
+      }
+      gather_company_backup_data: {
+        Args: { _date_end?: string; _date_start?: string; _empresa_id: string }
+        Returns: Json
       }
       generate_material_barcode: {
         Args: { _material_id: string }
@@ -4558,6 +5439,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      importar_agenda_eventos: {
+        Args: { _eventos: Json; _source_system: string }
+        Returns: Json
+      }
       inativar_modelo_etiqueta: {
         Args: {
           _empresa_id?: string
@@ -4565,6 +5450,57 @@ export type Database = {
           _modelo_id: string
         }
         Returns: boolean
+      }
+      iniciar_sessao_scanner_remoto: {
+        Args: {
+          _client_uuid: string
+          _condicao: Database["public"]["Enums"]["material_custody_condition"]
+          _empresa_id?: string
+          _finalidade?: Database["public"]["Enums"]["material_custody_purpose"]
+          _localizacao_destino_id?: string
+          _localizacao_origem_id?: string
+          _observacao?: string
+          _referencia_id?: string
+          _referencia_tipo?: string
+          _responsavel_id?: string
+          _responsavel_tipo?: Database["public"]["Enums"]["material_custody_responsible_type"]
+          _tipo_operacao: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          _titulo?: string
+        }
+        Returns: {
+          aberta_em: string
+          client_uuid: string
+          condicao: Database["public"]["Enums"]["material_custody_condition"]
+          created_at: string
+          criado_por: string
+          empresa_id: string
+          encerrada_em: string | null
+          encerrada_por: string | null
+          finalidade:
+            | Database["public"]["Enums"]["material_custody_purpose"]
+            | null
+          id: string
+          localizacao_destino_id: string | null
+          localizacao_origem_id: string | null
+          observacao: string | null
+          payload_hash: string
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_id: string | null
+          responsavel_tipo:
+            | Database["public"]["Enums"]["material_custody_responsible_type"]
+            | null
+          status: Database["public"]["Enums"]["scanner_remoto_sessao_status"]
+          tipo_operacao: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          titulo: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scanner_remoto_sessoes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       is_master_admin: { Args: { _user_id: string }; Returns: boolean }
       is_valid_company_logo_path: { Args: { _path: string }; Returns: boolean }
@@ -4655,6 +5591,8 @@ export type Database = {
           _finalidade?: string
           _localizacao_id?: string
           _pagina?: number
+          _referencia_id?: string
+          _referencia_tipo?: string
           _responsavel?: string
           _somente_abertas?: boolean
           _status?: string
@@ -4695,6 +5633,12 @@ export type Database = {
           total_count: number
         }[]
       }
+      listar_eventos_agenda_ja_importados: {
+        Args: { _source_event_ids: string[]; _source_system: string }
+        Returns: {
+          source_event_id: string
+        }[]
+      }
       listar_eventos_custodia: {
         Args: { _custodia_id: string; _empresa_id?: string }
         Returns: {
@@ -4719,6 +5663,21 @@ export type Database = {
           total_count: number
         }[]
       }
+      listar_leituras_scanner_remoto: {
+        Args: { _empresa_id?: string; _sessao_id: string }
+        Returns: {
+          acao_executada: Database["public"]["Enums"]["scanner_remoto_acao"]
+          codigo_lido: string
+          created_at: string
+          custodia_id: string
+          id: string
+          lido_por: string
+          material_id: string
+          material_nome: string
+          resultado: Json
+          sessao_id: string
+        }[]
+      }
       listar_locacoes_materiais: {
         Args: {
           _busca?: string
@@ -4735,6 +5694,23 @@ export type Database = {
         Returns: {
           item: Json
           total_count: number
+        }[]
+      }
+      listar_minhas_notificacoes: {
+        Args: { _limite?: number; _somente_nao_lidas?: boolean }
+        Returns: {
+          categoria: string
+          created_at: string
+          destinatario_id: string
+          lida: boolean
+          lida_em: string
+          mensagem: string
+          notificacao_id: string
+          referencia_id: string
+          referencia_tipo: string
+          rota: string
+          tipo: string
+          titulo: string
         }[]
       }
       listar_modelos_etiqueta: {
@@ -4760,6 +5736,41 @@ export type Database = {
           total_count: number
         }[]
       }
+      listar_perfis_bobina: {
+        Args: { _empresa_id?: string }
+        Returns: {
+          altura_etiqueta_mm: number
+          ativo: boolean
+          colunas: number
+          created_at: string
+          created_by: string | null
+          dpi: string
+          dpi_personalizado: number | null
+          empresa_id: string
+          espacamento_horizontal_mm: number
+          espacamento_vertical_mm: number
+          id: string
+          largura_etiqueta_mm: number
+          largura_midia_mm: number | null
+          margem_direita_mm: number
+          margem_esquerda_mm: number
+          margem_inferior_mm: number
+          margem_superior_mm: number
+          nome: string
+          offset_horizontal_mm: number
+          offset_vertical_mm: number
+          orientacao: string
+          padrao: boolean
+          updated_at: string
+          updated_by: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "empresa_bobina_perfis"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       listar_responsaveis_custodia: {
         Args: { _empresa_id?: string }
         Returns: {
@@ -4768,6 +5779,43 @@ export type Database = {
           nome: string
           tipo: Database["public"]["Enums"]["material_custody_responsible_type"]
         }[]
+      }
+      listar_sessoes_scanner_remoto: {
+        Args: { _empresa_id?: string; _somente_abertas?: boolean }
+        Returns: {
+          aberta_em: string
+          client_uuid: string
+          condicao: Database["public"]["Enums"]["material_custody_condition"]
+          created_at: string
+          criado_por: string
+          empresa_id: string
+          encerrada_em: string | null
+          encerrada_por: string | null
+          finalidade:
+            | Database["public"]["Enums"]["material_custody_purpose"]
+            | null
+          id: string
+          localizacao_destino_id: string | null
+          localizacao_origem_id: string | null
+          observacao: string | null
+          payload_hash: string
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_id: string | null
+          responsavel_tipo:
+            | Database["public"]["Enums"]["material_custody_responsible_type"]
+            | null
+          status: Database["public"]["Enums"]["scanner_remoto_sessao_status"]
+          tipo_operacao: Database["public"]["Enums"]["scanner_remoto_tipo_operacao"]
+          titulo: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "scanner_remoto_sessoes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       marcar_locacao_pronta_retirada: {
         Args: {
@@ -4811,40 +5859,26 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      master_provision_company_module_entitlements: {
-        Args: { _empresa_id: string }
+      marcar_notificacao_lida: {
+        Args: { _destinatario_id: string }
         Returns: undefined
       }
-      registrar_baixa_custodia_material: {
-        Args: {
-          _classificacao: string
-          _client_uuid: string
-          _custodia_id: string
-          _data_efetiva?: string
-          _empresa_id?: string
-          _justificativa: string
-          _observacao?: string
-          _quantidade: number
-        }
-        Returns: Database["public"]["Tables"]["material_custodias"]["Row"]
-        SetofOptions: {
-          from: "*"
-          to: "material_custodias"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      marcar_todas_notificacoes_lidas: { Args: never; Returns: undefined }
       master_approve_module_batch_request: {
-        Args: { _batch_request_id: string; _observacao_admin?: string | null }
+        Args: { _batch_request_id: string; _observacao_admin?: string }
         Returns: Json
       }
       master_approve_module_payment: {
-        Args: { _observacao_admin?: string | null; _payment_id: string }
+        Args: { _observacao_admin?: string; _payment_id: string }
         Returns: Json
       }
       master_approve_module_request: {
-        Args: { _observacao?: string | null; _request_id: string }
+        Args: { _observacao?: string; _request_id: string }
         Returns: Json
+      }
+      master_provision_company_module_entitlements: {
+        Args: { _empresa_id: string }
+        Returns: undefined
       }
       master_set_company_plan: {
         Args: {
@@ -4852,13 +5886,13 @@ export type Database = {
           _plano_id: string
           _renew_trial?: boolean
           _status?: string
-          _vencimento?: string | null
+          _vencimento?: string
         }
         Returns: Json
       }
       master_set_user_role: {
         Args: {
-          _empresa_id: string | null
+          _empresa_id: string
           _full_name: string
           _role: string
           _target_user_id: string
@@ -4918,6 +5952,7 @@ export type Database = {
           largura_mm: number | null
           nome_impressora: string | null
           orientacao: string
+          perfil_bobina_padrao_id: string | null
           updated_at: string
           updated_by: string | null
         }[]
@@ -4954,6 +5989,10 @@ export type Database = {
       }
       obter_ordem_manutencao: {
         Args: { _empresa_id?: string; _ordem_id: string }
+        Returns: Json
+      }
+      obter_rastreabilidade_material: {
+        Args: { _empresa_id?: string; _material_id: string }
         Returns: Json
       }
       obter_resumo_financeiro_locacoes: {
@@ -5008,6 +6047,53 @@ export type Database = {
         Args: { _company_id: string; _rental_id: string }
         Returns: undefined
       }
+      registrar_baixa_custodia_material: {
+        Args: {
+          _classificacao: string
+          _client_uuid: string
+          _custodia_id: string
+          _data_efetiva?: string
+          _empresa_id?: string
+          _justificativa: string
+          _observacao?: string
+          _quantidade: number
+        }
+        Returns: {
+          client_uuid: string
+          condicao_saida: Database["public"]["Enums"]["material_custody_condition"]
+          created_at: string
+          empresa_id: string
+          encerrada_em: string | null
+          executado_por: string
+          finalidade: Database["public"]["Enums"]["material_custody_purpose"]
+          id: string
+          localizacao_origem_id: string
+          material_id: string
+          movimento_saida_id: string
+          observacao_saida: string | null
+          payload_hash: string
+          previsao_retorno: string | null
+          quantidade_baixada: number
+          quantidade_devolvida: number
+          quantidade_retirada: number
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_funcionario_id: string | null
+          responsavel_nome: string
+          responsavel_tipo: Database["public"]["Enums"]["material_custody_responsible_type"]
+          responsavel_usuario_id: string | null
+          retirada_em: string
+          status: Database["public"]["Enums"]["material_custody_status"]
+          tipo_controle: Database["public"]["Enums"]["material_control_type"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "material_custodias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       registrar_checkin_material: {
         Args: {
           _client_uuid: string
@@ -5035,6 +6121,7 @@ export type Database = {
           observacao_saida: string | null
           payload_hash: string
           previsao_retorno: string | null
+          quantidade_baixada: number
           quantidade_devolvida: number
           quantidade_retirada: number
           referencia_id: string | null
@@ -5087,6 +6174,7 @@ export type Database = {
           observacao_saida: string | null
           payload_hash: string
           previsao_retorno: string | null
+          quantidade_baixada: number
           quantidade_devolvida: number
           quantidade_retirada: number
           referencia_id: string | null
@@ -5135,6 +6223,7 @@ export type Database = {
           observacao_saida: string | null
           payload_hash: string
           previsao_retorno: string | null
+          quantidade_baixada: number
           quantidade_devolvida: number
           quantidade_retirada: number
           referencia_id: string | null
@@ -5151,6 +6240,36 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "material_custodias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      registrar_leitura_scanner_remoto: {
+        Args: {
+          _client_uuid: string
+          _codigo_lido: string
+          _custodia_id?: string
+          _empresa_id?: string
+          _quantidade?: number
+          _sessao_id: string
+        }
+        Returns: {
+          acao_executada: Database["public"]["Enums"]["scanner_remoto_acao"]
+          client_uuid: string
+          codigo_lido: string
+          created_at: string
+          custodia_id: string | null
+          empresa_id: string
+          id: string
+          lido_por: string
+          material_id: string | null
+          payload_hash: string
+          resultado: Json | null
+          sessao_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "scanner_remoto_leituras"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -5204,6 +6323,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      registrar_push_subscription: {
+        Args: {
+          _auth: string
+          _empresa_id: string
+          _endpoint: string
+          _p256dh: string
+          _user_agent?: string
+        }
+        Returns: string
       }
       registrar_recebimento_locacao: {
         Args: {
@@ -5273,6 +6402,7 @@ export type Database = {
           observacao_saida: string | null
           payload_hash: string
           previsao_retorno: string | null
+          quantidade_baixada: number
           quantidade_devolvida: number
           quantidade_retirada: number
           referencia_id: string | null
@@ -5334,6 +6464,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      remover_push_subscription: {
+        Args: { _endpoint: string }
+        Returns: undefined
+      }
+      request_company_module_batch: {
+        Args: { _module_ids: string[]; _observacao?: string }
+        Returns: Json
+      }
       resolve_custody_company: {
         Args: { _requested_company_id: string; _write: boolean }
         Returns: string
@@ -5370,6 +6508,10 @@ export type Database = {
         Args: { _requested_company_id: string; _write: boolean }
         Returns: string
       }
+      resolve_material_traceability_company: {
+        Args: { _requested_company_id: string }
+        Returns: string
+      }
       resolve_stock_company: {
         Args: { _requested_company_id: string; _write: boolean }
         Returns: string
@@ -5378,18 +6520,277 @@ export type Database = {
         Args: { _empresa_id: string; _payload: Json }
         Returns: Json
       }
-      gather_company_backup_data: {
+      resumo_situacao_material: {
+        Args: { _empresa_id: string; _material_id: string }
+        Returns: Json
+      }
+      rfid_deactivate_tag: {
         Args: {
-          _date_end?: string | null
-          _date_start?: string | null
-          _empresa_id: string
+          _motivo?: string
+          _novo_status?: Database["public"]["Enums"]["rfid_tag_status"]
+          _tag_id: string
         }
-        Returns: Json
+        Returns: {
+          created_at: string
+          created_by: string | null
+          desativada_em: string | null
+          empresa_id: string
+          epc: string
+          id: string
+          material_id: string
+          motivo_desativacao: string | null
+          status: Database["public"]["Enums"]["rfid_tag_status"]
+          substituida_por_tag_id: string | null
+          ultima_leitura_em: string | null
+          updated_at: string
+          updated_by: string | null
+          vinculada_em: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rfid_tags"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
-      request_company_module_batch: {
-        Args: { _module_ids: string[]; _observacao?: string | null }
-        Returns: Json
+      rfid_finish_read_session:
+        | {
+            Args: {
+              _session_id: string
+              _status: Database["public"]["Enums"]["rfid_read_session_status"]
+            }
+            Returns: {
+              created_at: string
+              dispositivo_label: string | null
+              empresa_id: string
+              expected_count: number | null
+              expected_material_ids: string[]
+              finished_at: string | null
+              found_count: number | null
+              id: string
+              missing_count: number | null
+              read_epcs: string[]
+              referencia_id: string | null
+              referencia_tipo: string | null
+              responsavel_user_id: string
+              resultado: Json | null
+              started_at: string
+              status: Database["public"]["Enums"]["rfid_read_session_status"]
+              tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+              unexpected_count: number | null
+              unknown_count: number | null
+              updated_at: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "rfid_read_sessions"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              _expected_count: number
+              _found_count: number
+              _missing_count: number
+              _resultado: Json
+              _session_id: string
+              _status: Database["public"]["Enums"]["rfid_read_session_status"]
+              _unexpected_count: number
+              _unknown_count: number
+            }
+            Returns: {
+              created_at: string
+              dispositivo_label: string | null
+              empresa_id: string
+              expected_count: number | null
+              expected_material_ids: string[]
+              finished_at: string | null
+              found_count: number | null
+              id: string
+              missing_count: number | null
+              read_epcs: string[]
+              referencia_id: string | null
+              referencia_tipo: string | null
+              responsavel_user_id: string
+              resultado: Json | null
+              started_at: string
+              status: Database["public"]["Enums"]["rfid_read_session_status"]
+              tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+              unexpected_count: number | null
+              unknown_count: number | null
+              updated_at: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "rfid_read_sessions"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+      rfid_link_or_replace_tag: {
+        Args: { _epc: string; _material_id: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          desativada_em: string | null
+          empresa_id: string
+          epc: string
+          id: string
+          material_id: string
+          motivo_desativacao: string | null
+          status: Database["public"]["Enums"]["rfid_tag_status"]
+          substituida_por_tag_id: string | null
+          ultima_leitura_em: string | null
+          updated_at: string
+          updated_by: string | null
+          vinculada_em: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rfid_tags"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
+      rfid_list_material_tags: {
+        Args: { _material_id: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          desativada_em: string | null
+          empresa_id: string
+          epc: string
+          id: string
+          material_id: string
+          motivo_desativacao: string | null
+          status: Database["public"]["Enums"]["rfid_tag_status"]
+          substituida_por_tag_id: string | null
+          ultima_leitura_em: string | null
+          updated_at: string
+          updated_by: string | null
+          vinculada_em: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "rfid_tags"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      rfid_record_read_session_epcs: {
+        Args: { _epcs: string[]; _session_id: string }
+        Returns: {
+          created_at: string
+          dispositivo_label: string | null
+          empresa_id: string
+          expected_count: number | null
+          expected_material_ids: string[]
+          finished_at: string | null
+          found_count: number | null
+          id: string
+          missing_count: number | null
+          read_epcs: string[]
+          referencia_id: string | null
+          referencia_tipo: string | null
+          responsavel_user_id: string
+          resultado: Json | null
+          started_at: string
+          status: Database["public"]["Enums"]["rfid_read_session_status"]
+          tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+          unexpected_count: number | null
+          unknown_count: number | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rfid_read_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rfid_resolve_epcs: {
+        Args: { _epcs: string[] }
+        Returns: {
+          epc: string
+          material_id: string
+          tag_status: Database["public"]["Enums"]["rfid_tag_status"]
+        }[]
+      }
+      rfid_start_read_session:
+        | {
+            Args: {
+              _dispositivo_label?: string
+              _referencia_id?: string
+              _referencia_tipo?: string
+              _tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+            }
+            Returns: {
+              created_at: string
+              dispositivo_label: string | null
+              empresa_id: string
+              expected_count: number | null
+              expected_material_ids: string[]
+              finished_at: string | null
+              found_count: number | null
+              id: string
+              missing_count: number | null
+              read_epcs: string[]
+              referencia_id: string | null
+              referencia_tipo: string | null
+              responsavel_user_id: string
+              resultado: Json | null
+              started_at: string
+              status: Database["public"]["Enums"]["rfid_read_session_status"]
+              tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+              unexpected_count: number | null
+              unknown_count: number | null
+              updated_at: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "rfid_read_sessions"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              _dispositivo_label: string
+              _expected_material_ids: string[]
+              _referencia_id: string
+              _referencia_tipo: string
+              _tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+            }
+            Returns: {
+              created_at: string
+              dispositivo_label: string | null
+              empresa_id: string
+              expected_count: number | null
+              expected_material_ids: string[]
+              finished_at: string | null
+              found_count: number | null
+              id: string
+              missing_count: number | null
+              read_epcs: string[]
+              referencia_id: string | null
+              referencia_tipo: string | null
+              responsavel_user_id: string
+              resultado: Json | null
+              started_at: string
+              status: Database["public"]["Enums"]["rfid_read_session_status"]
+              tipo: Database["public"]["Enums"]["rfid_read_session_type"]
+              unexpected_count: number | null
+              unknown_count: number | null
+              updated_at: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "rfid_read_sessions"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       salvar_cliente: {
         Args: {
           _cliente_id?: string
@@ -5436,6 +6837,7 @@ export type Database = {
           _largura_mm?: number
           _nome_impressora?: string
           _orientacao?: string
+          _perfil_bobina_padrao_id?: string
         }
         Returns: {
           altura_mm: number | null
@@ -5450,6 +6852,7 @@ export type Database = {
           largura_mm: number | null
           nome_impressora: string | null
           orientacao: string
+          perfil_bobina_padrao_id: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -5563,9 +6966,69 @@ export type Database = {
         }
         Returns: Json
       }
+      salvar_perfil_bobina: {
+        Args: {
+          _altura_etiqueta_mm: number
+          _colunas?: number
+          _dpi?: string
+          _dpi_personalizado?: number
+          _empresa_id?: string
+          _espacamento_horizontal_mm?: number
+          _espacamento_vertical_mm?: number
+          _expected_updated_at?: string
+          _largura_etiqueta_mm: number
+          _largura_midia_mm?: number
+          _margem_direita_mm?: number
+          _margem_esquerda_mm?: number
+          _margem_inferior_mm?: number
+          _margem_superior_mm?: number
+          _nome: string
+          _offset_horizontal_mm?: number
+          _offset_vertical_mm?: number
+          _orientacao?: string
+          _padrao?: boolean
+          _perfil_id?: string
+        }
+        Returns: {
+          altura_etiqueta_mm: number
+          ativo: boolean
+          colunas: number
+          created_at: string
+          created_by: string | null
+          dpi: string
+          dpi_personalizado: number | null
+          empresa_id: string
+          espacamento_horizontal_mm: number
+          espacamento_vertical_mm: number
+          id: string
+          largura_etiqueta_mm: number
+          largura_midia_mm: number | null
+          margem_direita_mm: number
+          margem_esquerda_mm: number
+          margem_inferior_mm: number
+          margem_superior_mm: number
+          nome: string
+          offset_horizontal_mm: number
+          offset_vertical_mm: number
+          orientacao: string
+          padrao: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "empresa_bobina_perfis"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_company_lifetime_subscription: {
         Args: { _empresa_id: string; _status?: string }
         Returns: Json
+      }
+      set_notificacao_preferencia: {
+        Args: { _habilitada: boolean; _tipo: string }
+        Returns: undefined
       }
       set_user_module_permissions: {
         Args: { _empresa_id: string; _permissions: Json; _user_id: string }
@@ -5776,8 +7239,8 @@ export type Database = {
         | "retirada"
         | "devolucao"
         | "cancelamento"
-        | "correcao"
         | "conclusao"
+        | "correcao"
       material_rental_status:
         | "rascunho"
         | "reservada"
@@ -5786,6 +7249,18 @@ export type Database = {
         | "parcialmente_devolvida"
         | "concluida"
         | "cancelada"
+      rfid_read_session_status: "em_andamento" | "concluida" | "cancelada"
+      rfid_read_session_type:
+        | "inventario"
+        | "conferencia_locacao"
+        | "checkout"
+        | "checkin"
+        | "conferencia_case"
+        | "conferencia_livre"
+      rfid_tag_status: "ativa" | "inativa" | "danificada" | "perdida"
+      scanner_remoto_acao: "checkout" | "checkin" | "nao_encontrado" | "erro"
+      scanner_remoto_sessao_status: "aberta" | "encerrada" | "cancelada"
+      scanner_remoto_tipo_operacao: "checkout" | "checkin" | "misto"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -6021,8 +7496,8 @@ export const Constants = {
         "retirada",
         "devolucao",
         "cancelamento",
-        "correcao",
         "conclusao",
+        "correcao",
       ],
       material_rental_status: [
         "rascunho",
@@ -6033,6 +7508,19 @@ export const Constants = {
         "concluida",
         "cancelada",
       ],
+      rfid_read_session_status: ["em_andamento", "concluida", "cancelada"],
+      rfid_read_session_type: [
+        "inventario",
+        "conferencia_locacao",
+        "checkout",
+        "checkin",
+        "conferencia_case",
+        "conferencia_livre",
+      ],
+      rfid_tag_status: ["ativa", "inativa", "danificada", "perdida"],
+      scanner_remoto_acao: ["checkout", "checkin", "nao_encontrado", "erro"],
+      scanner_remoto_sessao_status: ["aberta", "encerrada", "cancelada"],
+      scanner_remoto_tipo_operacao: ["checkout", "checkin", "misto"],
     },
   },
 } as const

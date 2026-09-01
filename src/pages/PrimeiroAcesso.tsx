@@ -225,7 +225,7 @@ export default function PrimeiroAcesso() {
             if (data?.error) return { error: data.error as string };
             return { error: null };
           },
-          signOut: () => supabase.auth.signOut(),
+          signOut: async () => { await supabase.auth.signOut(); },
         },
         { password, confirmPassword, flow },
       );
@@ -233,7 +233,7 @@ export default function PrimeiroAcesso() {
       if (!result.success) {
         toast({
           title: "Erro ao ativar conta",
-          description: result.message,
+          description: "message" in result ? result.message : undefined,
           variant: "destructive",
         });
         return;

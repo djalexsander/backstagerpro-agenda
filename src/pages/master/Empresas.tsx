@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,7 @@ export default function Empresas() {
 
         const { error } = await supabase
           .from("empresas")
-          .update(payload)
+          .update(payload as TablesUpdate<"empresas">)
           .eq("id", editItem.id);
         if (error) throw error;
 
@@ -225,7 +226,7 @@ export default function Empresas() {
             insertEmpresa: async (empresaPayload) => {
               const { data, error } = await supabase
                 .from("empresas")
-                .insert(empresaPayload)
+                .insert(empresaPayload as TablesInsert<"empresas">)
                 .select("id")
                 .single();
               if (error) throw error;
