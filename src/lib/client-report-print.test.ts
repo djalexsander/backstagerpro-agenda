@@ -98,6 +98,7 @@ describe("buildClientReportHtml", () => {
       cliente_id: "c1",
       cliente_nome: "Cliente Um",
       cliente_nome_fantasia: null,
+      total_pendente_regularizacao: 0,
       quantidade_titulos: 1,
       total_devido: 200,
       total_vencido: 0,

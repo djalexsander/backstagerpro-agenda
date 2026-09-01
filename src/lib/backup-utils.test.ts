@@ -90,7 +90,7 @@ function sampleFullData(empresaId = tenantA): BackupData {
         responsavel_nome: "Fulano", responsavel_tipo: "funcionario", finalidade: "uso_interno",
         condicao_saida: "boa", client_uuid: "client-uuid-2", payload_hash: "hash-2",
       },
-    ] as NonNullable<BackupData["material_custodias"]>,
+    ] as unknown as NonNullable<BackupData["material_custodias"]>,
     material_custodia_eventos: [
       {
         id: "custodia-evt-1", empresa_id: empresaId, custodia_id: "custodia-1", material_id: "material-1",
