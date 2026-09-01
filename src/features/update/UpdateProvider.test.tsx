@@ -279,30 +279,34 @@ describe("UpdateProvider + UpdateBanner integration", () => {
     expect(screen.getByRole("button", { name: /atualizar agora/i })).toBeEnabled();
   });
 
-  it("web/PWA: clicking shows 'Atualizando...' (disabled), then recovers with an error + toast on failure", async () => {
+  it("web/PWA: when the service-worker handover fails, it recovers by clearing the worker/caches and reloading", async () => {
+    // Sem worker novo disponível (cenário clássico do iOS): em vez de
+    // deixar o usuário preso na versão antiga, o app se recupera sozinho.
     let resolveGetRegistration: (v: unknown) => void = () => {};
+    const unregister = vi.fn().mockResolvedValue(true);
     Object.defineProperty(navigator, "serviceWorker", {
       configurable: true,
-      value: { getRegistration: () => new Promise((r) => { resolveGetRegistration = r; }) },
+      value: {
+        getRegistration: () => new Promise((r) => { resolveGetRegistration = r; }),
+        getRegistrations: () => Promise.resolve([{ unregister }]),
+      },
+    });
+    const replace = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { href: "https://app.example/agenda", replace },
     });
 
     await renderPwaBannerShowing();
 
     fireEvent.click(screen.getByRole("button", { name: /atualizar agora/i }));
-
-    // in-flight: button locked and labelled "Atualizando..."
     expect(await screen.findByRole("button", { name: /atualizando/i })).toBeDisabled();
 
-    // installPWAUpdate can't find a registration -> controlled failure
     resolveGetRegistration(undefined);
 
-    expect(
-      await screen.findByText("Não foi possível aplicar a atualização. Tente novamente."),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /atualizar agora/i })).toBeEnabled();
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Não foi possível aplicar a atualização. Tente novamente.",
-    );
+    await waitFor(() => expect(unregister).toHaveBeenCalled());
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    expect(String(replace.mock.calls[0][0])).toContain("_v=");
   });
 
   it("web/PWA: a stuck 'Atualizando...' is freed if a newer version is detected", async () => {
