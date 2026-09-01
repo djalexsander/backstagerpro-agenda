@@ -191,7 +191,7 @@ export default function Empresas() {
 
         const { error } = await supabase
           .from("empresas")
-          .update(payload)
+          .update(payload as TablesUpdate<"empresas">)
           .eq("id", editItem.id);
         if (error) throw error;
 
@@ -225,7 +225,7 @@ export default function Empresas() {
             insertEmpresa: async (empresaPayload) => {
               const { data, error } = await supabase
                 .from("empresas")
-                .insert(empresaPayload)
+                .insert(empresaPayload as TablesInsert<"empresas">)
                 .select("id")
                 .single();
               if (error) throw error;
