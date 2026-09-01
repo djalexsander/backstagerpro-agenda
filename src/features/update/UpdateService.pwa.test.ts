@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 // Capture the options vite-plugin-pwa's registerSW is called with so the
 // test can drive the lifecycle callbacks by hand. Same "mock the virtual
