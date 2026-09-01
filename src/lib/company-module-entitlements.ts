@@ -103,7 +103,7 @@ export function buildCompanyModuleEntitlementPayload({
 
   if (requestedStatus === "active") {
     payload.activated_at = existingActivatedAt ?? new Date().toISOString();
-  } else if (requestedStatus !== "active") {
+  } else {
     payload.activated_at = null;
   }
 
