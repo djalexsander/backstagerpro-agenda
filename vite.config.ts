@@ -54,6 +54,8 @@ export default defineConfig(() => ({
   plugins: [
     react(),
 
+    versionManifestPlugin(),
+
     // Keep the plugin loaded so "virtual:pwa-register" can be resolved.
     // Disable service worker generation when running inside Tauri.
     VitePWA({
