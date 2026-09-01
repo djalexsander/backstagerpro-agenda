@@ -107,7 +107,7 @@ describe("buildRentalReceiptHtml", () => {
       status: "parcial",
       vencimento: null,
       forma_pagamento: "pix",
-      recebimentos: [], forma_cobranca: "a_vista", valor_estornado: 0, requer_revisao_vencimento: false, parcelas: [],
+      recebimentos: [], forma_cobranca: "avista", valor_estornado: 0, requer_revisao_vencimento: false, parcelas: [],
     });
     expect(withFinance).toContain("Situação financeira");
     expect(withFinance).toContain(money.format(1000));
@@ -213,7 +213,7 @@ describe("buildRentalReceiptHtml", () => {
         status: "parcial",
         vencimento: null,
         forma_pagamento: "pix",
-        recebimentos: [], forma_cobranca: "a_vista", valor_estornado: 0, requer_revisao_vencimento: false, parcelas: [],
+        recebimentos: [], forma_cobranca: "avista", valor_estornado: 0, requer_revisao_vencimento: false, parcelas: [],
       },
       { widthMm: 58 },
     );
@@ -287,7 +287,7 @@ describe("buildRentalReceiptHtml", () => {
         status: "parcial",
         vencimento: null,
         forma_pagamento: "pix",
-        recebimentos: [], forma_cobranca: "a_vista", valor_estornado: 0, requer_revisao_vencimento: false, parcelas: [],
+        recebimentos: [], forma_cobranca: "avista", valor_estornado: 0, requer_revisao_vencimento: false, parcelas: [],
       },
     );
 

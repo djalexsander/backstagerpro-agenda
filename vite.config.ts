@@ -7,6 +7,22 @@ import { VitePWA } from "vite-plugin-pwa";
 const pkg = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
 const isTauri = !!process.env.TAURI_ENV_PLATFORM;
 
+// Publica /version.json a cada build. É a fonte de verdade que o PWA
+// consulta para saber que existe versão nova mesmo quando o Service
+// Worker não atualiza (caso clássico do iOS e de PWAs instalados por um
+// host que passou a redirecionar).
+const versionManifestPlugin = () => ({
+  name: "backstage-version-manifest",
+  apply: "build" as const,
+  generateBundle(this: { emitFile: (file: Record<string, unknown>) => void }) {
+    this.emitFile({
+      type: "asset",
+      fileName: "version.json",
+      source: JSON.stringify({ version: pkg.version, buildTime: new Date().toISOString() }),
+    });
+  },
+});
+
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
   define: {
@@ -37,6 +53,8 @@ export default defineConfig(() => ({
 
   plugins: [
     react(),
+
+    versionManifestPlugin(),
 
     // Keep the plugin loaded so "virtual:pwa-register" can be resolved.
     // Disable service worker generation when running inside Tauri.

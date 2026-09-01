@@ -6,10 +6,11 @@ import {
   checkForTauriUpdate,
   installTauriUpdate,
   UpdateInstallError,
+  checkDeployedVersionMismatch,
+  hardReloadToLatest,
   PWA_DISMISS_REARM_AFTER_MS,
 } from "./UpdateService";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const UPDATE_RETRY_MESSAGE = "Não foi possível aplicar a atualização. Tente novamente.";
 
@@ -83,9 +84,41 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     document.addEventListener("visibilitychange", onForegroundRearm);
 
+    // Rede de segurança independente do Service Worker: compara a versão
+    // do bundle em execução com /version.json publicado. É o que garante
+    // que Android e iOS percebam a nova versão mesmo quando o worker
+    // nunca chega ao estado "waiting".
+    let versionCheckDisposed = false;
+    const checkDeployedVersion = async () => {
+      const deployed = await checkDeployedVersionMismatch();
+      if (versionCheckDisposed || !deployed) return;
+      setUpdateAvailable(true);
+      setNewVersion(deployed);
+      setUpdateError(null);
+      setIsUpdating(false);
+      setDismissed((wasDismissed) => {
+        if (!wasDismissed) return false;
+        const dismissedAt = dismissedAtRef.current;
+        const rearm = dismissedAt === null || Date.now() - dismissedAt >= PWA_DISMISS_REARM_AFTER_MS;
+        if (rearm) dismissedAtRef.current = null;
+        return !rearm;
+      });
+    };
+    const onForegroundVersionCheck = () => {
+      if (document.visibilityState === "visible") void checkDeployedVersion();
+    };
+    void checkDeployedVersion();
+    const versionInterval = setInterval(() => void checkDeployedVersion(), 10 * 60 * 1000);
+    document.addEventListener("visibilitychange", onForegroundVersionCheck);
+    window.addEventListener("focus", onForegroundVersionCheck);
+
     return () => {
       disposePWAUpdate();
+      versionCheckDisposed = true;
+      clearInterval(versionInterval);
       document.removeEventListener("visibilitychange", onForegroundRearm);
+      document.removeEventListener("visibilitychange", onForegroundVersionCheck);
+      window.removeEventListener("focus", onForegroundVersionCheck);
     };
   }, []);
 
@@ -111,10 +144,16 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch (err) {
       console.error("[UpdateProvider] Falha ao atualizar:", err);
+      if (!isTauri()) {
+        // Handover do Service Worker falhou (ou nem havia worker novo,
+        // caso típico do iOS e de PWAs com worker "preso"). Recupera na
+        // marra: desregistra o worker, limpa os caches e recarrega.
+        await hardReloadToLatest();
+        return;
+      }
       const message = err instanceof UpdateInstallError ? err.message : UPDATE_RETRY_MESSAGE;
       setUpdateError(message);
       setIsUpdating(false);
-      if (!isTauri()) toast.error(message);
     }
   }, []);
 
