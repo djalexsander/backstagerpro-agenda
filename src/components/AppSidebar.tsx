@@ -21,9 +21,7 @@ import { canShowMaintenanceNavigation } from "@/lib/equipment-maintenance-permis
 import { canShowMaterialLabelsNavigation } from "@/lib/material-label-permissions";
 import { canShowRfidNavigation } from "@/lib/rfid-permissions";
 import { canShowTraceabilityNavigation } from "@/lib/material-traceability-permissions";
-import appVersion from "../../package.json";
-
-const APP_VERSION = appVersion.version;
+import { APP_VERSION } from "@/lib/app-version";
 
 interface NavItem {
   title: string;

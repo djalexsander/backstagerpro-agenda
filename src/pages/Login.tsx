@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import appVersion from "../../package.json";
+import { APP_VERSION } from "@/lib/app-version";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,7 @@ export default function Login() {
             {platformName}
           </h1>
         </div>
-        <p className="text-xs text-muted-foreground -mt-6 mb-6 text-center">v{appVersion.version}</p>
+        <p className="text-xs text-muted-foreground -mt-6 mb-6 text-center">v{APP_VERSION}</p>
         <Card>
           <CardHeader className="text-center">
             <CardTitle>Entrar</CardTitle>
