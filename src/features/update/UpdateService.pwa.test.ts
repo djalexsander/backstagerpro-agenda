@@ -82,7 +82,7 @@ describe("UpdateService - PWA update flow", () => {
   let originalLocation: Location;
   const disposers: Array<() => void> = [];
 
-  function register(callback: (available: boolean) => void = vi.fn()) {
+  function register(callback: Mock<(available: boolean) => void> = vi.fn()) {
     const dispose = registerPWAUpdate(callback);
     disposers.push(dispose);
     return { dispose, callback };
