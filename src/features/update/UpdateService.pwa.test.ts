@@ -10,6 +10,7 @@ vi.mock("virtual:pwa-register", () => ({ registerSW: registerSWMock }));
 
 import {
   checkForPWAUpdate,
+  hardReloadToLatest,
   installPWAUpdate,
   PWA_ACTIVATION_TIMEOUT_MS,
   PWA_UPDATE_CHECK_THROTTLE_MS,
@@ -113,8 +114,18 @@ describe("UpdateService - PWA update flow", () => {
     originalLocation = window.location;
     Object.defineProperty(window, "location", {
       configurable: true,
-      value: { href: "http://localhost/", origin: "http://localhost", reload: reloadMock },
+      value: {
+        href: "http://localhost/",
+        origin: "http://localhost",
+        reload: reloadMock,
+        replace: vi.fn(),
+      },
     });
+    try {
+      sessionStorage.clear();
+    } catch {
+      /* jsdom always has it; guard only for parity with the source */
+    }
   });
 
   afterEach(() => {
@@ -442,6 +453,42 @@ describe("UpdateService - PWA update flow", () => {
       expect(reloadMock).toHaveBeenCalledTimes(1);
     });
 
+    it("reloads as soon as the waiting worker reports 'activated', without sitting out the timeout (iOS: no controllerchange)", async () => {
+      register();
+      const reg = makeRegistration();
+      const waiting = makeSW("installed");
+      reg.waiting = waiting;
+      fireRegistered(reg);
+      setContainer(); // controllerchange never fires
+
+      const promise = installPWAUpdate();
+      await flushMicrotasks();
+      expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+      expect(reloadMock).not.toHaveBeenCalled();
+
+      // The new worker activates (clients.claim ran) but this container never
+      // dispatches controllerchange - the worker's own statechange is the signal.
+      waiting.setState("activating");
+      expect(reloadMock).not.toHaveBeenCalled();
+      waiting.setState("activated");
+
+      await promise;
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("reloads immediately when the worker is already 'activated' before the state listener is attached", async () => {
+      register();
+      const reg = makeRegistration();
+      const waiting = makeSW("activated"); // raced ahead
+      reg.waiting = waiting;
+      fireRegistered(reg);
+      setContainer();
+
+      await installPWAUpdate();
+
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+    });
+
     it("throws a controlled error when there is no service worker registration at all", async () => {
       register();
       setContainer({ getRegistration: vi.fn().mockResolvedValue(undefined) });
@@ -465,6 +512,54 @@ describe("UpdateService - PWA update flow", () => {
       const err = await outcome;
       expect(err).toBeInstanceOf(PWAUpdateError);
       expect((err as PWAUpdateError).reason).toBe("no-waiting-worker");
+    });
+  });
+
+  // ==========================================================================
+  describe("recovery: hardReloadToLatest", () => {
+    function setRecoveryContainer() {
+      const unregister = vi.fn().mockResolvedValue(true);
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        writable: true,
+        value: {
+          getRegistrations: vi.fn().mockResolvedValue([{ unregister }]),
+        },
+      });
+      return { unregister };
+    }
+
+    it("unregisters the worker and hard-navigates with a cache-busting param on the first call", async () => {
+      const { unregister } = setRecoveryContainer();
+
+      await hardReloadToLatest();
+
+      expect(unregister).toHaveBeenCalledTimes(1);
+      const replace = (window.location.replace as Mock).mock.calls[0][0] as string;
+      expect(replace).toContain("_v=");
+    });
+
+    it("does NOT unregister again on a repeat call within the loop window - just reloads (no destructive loop)", async () => {
+      const first = setRecoveryContainer();
+      await hardReloadToLatest();
+      expect(first.unregister).toHaveBeenCalledTimes(1);
+
+      const second = setRecoveryContainer();
+      await hardReloadToLatest();
+
+      expect(second.unregister).not.toHaveBeenCalled();
+      expect((window.location.replace as Mock)).toHaveBeenCalledTimes(2);
+    });
+
+    it("runs the destructive recovery again once the loop window has passed", async () => {
+      const first = setRecoveryContainer();
+      await hardReloadToLatest();
+
+      vi.setSystemTime(Date.now() + 61_000);
+
+      const later = setRecoveryContainer();
+      await hardReloadToLatest();
+      expect(later.unregister).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -516,13 +611,23 @@ describe("UpdateService - PWA update flow", () => {
   });
 });
 
-describe("vite.config.ts - PWA manifest", () => {
+describe("vite.config.ts - PWA config", () => {
+  // vitest runs from the repo root; the config isn't importable here (its
+  // plugin array captures options in closures), so these are source-contract
+  // checks - they fail loudly if the setting is dropped.
+  const configSrc = readFileSync(resolve(process.cwd(), "vite.config.ts"), "utf-8");
+
   it('declares manifest.id "/" so the PWA identity is stable across deploys', () => {
-    // vitest runs from the repo root; the config isn't importable here
-    // (its plugin array captures the manifest in closures), so this is a
-    // source-contract check - it fails loudly if manifest.id is dropped.
-    const configSrc = readFileSync(resolve(process.cwd(), "vite.config.ts"), "utf-8");
     expect(configSrc).toMatch(/manifest:\s*\{/);
     expect(configSrc).toMatch(/\bid:\s*["']\/["']/);
+  });
+
+  it("sets workbox.clientsClaim so an activated worker takes over every open client (fixes: reload keeps old bundle on an uncontrolled page)", () => {
+    expect(configSrc).toMatch(/\bclientsClaim:\s*true\b/);
+  });
+
+  it("keeps registerType 'prompt' - activation stays gated on the SKIP_WAITING message from the button, not automatic", () => {
+    expect(configSrc).toMatch(/registerType:\s*["']prompt["']/);
+    expect(configSrc).not.toMatch(/\bskipWaiting:\s*true\b/);
   });
 });

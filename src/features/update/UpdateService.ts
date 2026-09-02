@@ -189,6 +189,7 @@ const activateWaitingWorker = (
       done = true;
       clearTimeout(timer);
       container.removeEventListener("controllerchange", onControllerChange);
+      waiting.removeEventListener("statechange", onWaitingStateChange);
       run();
     };
 
@@ -197,6 +198,20 @@ const activateWaitingWorker = (
         reloadOnce();
         resolve();
       });
+
+    // Belt-and-suspenders for iOS Safari, where the new worker can activate
+    // (clients.claim() included) without this container ever dispatching
+    // `controllerchange`. Once the worker itself reports `activated` it IS
+    // the controller, so a reload now lands on the new version - no need to
+    // sit out the full timeout.
+    const onWaitingStateChange = (): void => {
+      if (waiting.state === "activated") {
+        settle(() => {
+          reloadOnce();
+          resolve();
+        });
+      }
+    };
 
     const timer = setTimeout(
       () =>
@@ -218,6 +233,7 @@ const activateWaitingWorker = (
     );
 
     container.addEventListener("controllerchange", onControllerChange);
+    waiting.addEventListener("statechange", onWaitingStateChange);
 
     // Post straight to registration.waiting. The generated sw.js listens
     // for exactly { type: "SKIP_WAITING" } and calls self.skipWaiting().
@@ -228,7 +244,12 @@ const activateWaitingWorker = (
       waiting.postMessage({ type: "SKIP_WAITING" });
     } catch (err) {
       settle(() => reject(new PWAUpdateError("skip-waiting-failed", err)));
+      return;
     }
+
+    // The worker may already have activated between installPWAUpdate()
+    // reading registration.waiting and this listener being attached.
+    onWaitingStateChange();
   });
 };
 
@@ -483,13 +504,51 @@ export const checkDeployedVersionMismatch = async (): Promise<string | null> => 
   return deployed;
 };
 
+// Marca a última vez que a recuperação destrutiva rodou nesta sessão. Se a
+// versão antiga voltar mesmo assim (cache de borda do host servindo um HTML
+// vencido), desregistrar + limpar caches de novo não muda nada e só produz
+// um loop de reload; dentro dessa janela a chamada seguinte apenas recarrega.
+const HARD_RELOAD_AT_KEY = "backstage:hard-reload-at";
+const HARD_RELOAD_LOOP_WINDOW_MS = 60 * 1000;
+
+const readHardReloadAt = (): number => {
+  try {
+    return Number(sessionStorage.getItem(HARD_RELOAD_AT_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+};
+const markHardReload = (): void => {
+  try {
+    sessionStorage.setItem(HARD_RELOAD_AT_KEY, String(Date.now()));
+  } catch {
+    /* sessionStorage indisponível (aba privada / bloqueado) - segue sem o guard */
+  }
+};
+
 /**
  * Último recurso: desregistra o(s) Service Worker(s) do app, apaga os
  * caches do Workbox e recarrega furando cache. Funciona em Android e iOS
  * mesmo quando o handover normal (SKIP_WAITING) nunca acontece.
  * Não toca em caches de push/OneSignal (escopo separado).
+ *
+ * Idempotente por sessão: se já rodou há menos de HARD_RELOAD_LOOP_WINDOW_MS
+ * e a versão antiga ainda está de pé, não repete a parte destrutiva - apenas
+ * recarrega, para não entrar em loop quando o problema é do lado do servidor.
  */
 export const hardReloadToLatest = async (): Promise<void> => {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_v", Date.now().toString(36));
+
+  if (Date.now() - readHardReloadAt() < HARD_RELOAD_LOOP_WINDOW_MS) {
+    console.warn(
+      "[UpdateService] hardReloadToLatest já rodou nesta janela - só recarregando (provável cache de HTML no host).",
+    );
+    window.location.replace(url.toString());
+    return;
+  }
+  markHardReload();
+
   try {
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -514,7 +573,5 @@ export const hardReloadToLatest = async (): Promise<void> => {
   currentRegistration = null;
   announcedWaitingWorker = null;
 
-  const url = new URL(window.location.href);
-  url.searchParams.set("_v", Date.now().toString(36));
   window.location.replace(url.toString());
 };

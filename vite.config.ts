@@ -80,6 +80,20 @@ export default defineConfig(() => ({
         // src/features/update/UpdateService.ts untouched). push-sw.js lives
         // in public/ so it is copied to the same output root as sw.js.
         importScripts: ["push-sw.js"],
+        // skipWaiting stays false: activation is still gated on the
+        // { type: "SKIP_WAITING" } message the "Atualizar" button posts, so
+        // the prompt flow is unchanged. clientsClaim is what was missing -
+        // without it, self.skipWaiting() only re-points clients that were
+        // ALREADY controlled by the old worker. A page opened uncontrolled
+        // (first visit after an install, a hard refresh, or right after a
+        // previous hardReloadToLatest unregistered the worker) never got a
+        // `controllerchange`, so "Atualizar" activated the new worker but
+        // the reload kept being served the old bundle until the fallback
+        // timeout. clients.claim() on activate makes the new worker take
+        // over every open client immediately, so `controllerchange` fires
+        // and the reload lands on the freshly precached assets - on desktop
+        // and iOS alike, with no cache clear / reinstall.
+        clientsClaim: true,
       },
 
       manifest: {
