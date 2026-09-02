@@ -28,6 +28,7 @@ import { registerCheckout } from "@/lib/checkin-checkout-service";
 import {
   CUSTODY_CONDITION_LABELS,
   CUSTODY_PURPOSE_LABELS,
+  SELECTABLE_CUSTODY_PURPOSES,
   validateCheckout,
 } from "@/lib/checkin-checkout-domain";
 import type {
@@ -39,18 +40,10 @@ import type {
 } from "@/lib/checkin-checkout-types";
 import { nowAsDatetimeLocalValue } from "@/lib/datetime";
 
-// 'locacao' ('Locação futura') fica fora da lista selecionável aqui de
-// propósito: essa finalidade só deve nascer vinculada a um item real de
-// material_locacoes, pelo fluxo oficial de Locações
-// (registrar_retirada_locacao_material, que passa referencia_tipo=
-// 'locacao_item'). Este Check-out genérico não tem seletor de locação, então
-// selecioná-la aqui criaria uma custódia com finalidade='locacao' sem
-// vínculo algum. O valor continua no enum e em CUSTODY_PURPOSE_LABELS - ele
-// segue aparecendo normalmente no histórico das custódias já vinculadas pelo
-// fluxo oficial (passadas ou futuras).
-const PURPOSES = (Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[]).filter(
-  (purpose) => purpose !== "locacao",
-);
+// 'locacao' ('Locação futura') fica fora da lista selecionável: ver
+// SELECTABLE_CUSTODY_PURPOSES em checkin-checkout-domain.ts (fonte única,
+// compartilhada com o Scanner Remoto).
+const PURPOSES = SELECTABLE_CUSTODY_PURPOSES;
 const CONDITIONS = Object.keys(CUSTODY_CONDITION_LABELS) as CustodyCondition[];
 
 export function CheckoutDialog({

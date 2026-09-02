@@ -4,6 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { useScannerRemoto } from "./useScannerRemoto";
 import {
+  endScannerRemotoSession,
   listScannerRemotoReads,
   listScannerRemotoSessions,
   registerScannerRemotoRead,
@@ -67,6 +68,30 @@ describe("useScannerRemoto", () => {
       clientUuid: "client-uuid-1",
     });
 
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(["scanner-remoto-sessoes", "company-1"]);
+    expect(invalidatedKeys).toContainEqual(["scanner-remoto-leituras", "company-1"]);
+  });
+
+  it("ends a session through the existing RPC and invalidates the open-sessions list", async () => {
+    const { queryClient, wrapper } = createWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    vi.mocked(endScannerRemotoSession).mockResolvedValue({
+      id: "session-7",
+      status: "encerrada",
+    } as ScannerRemotoSessao);
+
+    const { result } = renderHook(
+      () => useScannerRemoto({ companyId: "company-1", enabled: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(listScannerRemotoSessions).toHaveBeenCalledWith("company-1", true));
+
+    const ended = await result.current.endSession("session-7");
+
+    expect(endScannerRemotoSession).toHaveBeenCalledWith("company-1", "session-7");
+    expect(ended.status).toBe("encerrada");
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["scanner-remoto-sessoes", "company-1"]);
     expect(invalidatedKeys).toContainEqual(["scanner-remoto-leituras", "company-1"]);

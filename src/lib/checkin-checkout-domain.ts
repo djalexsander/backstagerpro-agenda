@@ -28,6 +28,24 @@ export const CUSTODY_PURPOSE_LABELS: Record<CustodyPurpose, string> = {
   outro: "Outro",
 };
 
+// Finalidades que um check-out manual pode oferecer no seletor - fonte única
+// compartilhada pela tela genérica de Check-in/Check-out (CheckoutDialog.tsx)
+// e pelo Scanner Remoto (ScannerRemoto.tsx), para a regra viver num lugar só.
+//
+// Exclui 'locacao' ('Locação futura'): essa finalidade só deve nascer
+// vinculada a um item real de material_locacoes, pelo fluxo oficial de
+// Locações (registrar_retirada_locacao_material, que passa
+// referencia_tipo='locacao_item'). Escolhê-la num check-out sem seletor de
+// locação criaria uma custódia com finalidade='locacao' sem vínculo - e o
+// servidor rejeita isso em registrar_checkout_material (CI023). O valor
+// continua no enum e em CUSTODY_PURPOSE_LABELS: ele segue aparecendo no
+// histórico das custódias já vinculadas pelo fluxo oficial. Derivado por
+// filtro (não uma lista escrita à mão) para acompanhar o enum automaticamente
+// se uma nova finalidade for adicionada.
+export const SELECTABLE_CUSTODY_PURPOSES: CustodyPurpose[] = (
+  Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[]
+).filter((purpose) => purpose !== "locacao");
+
 export const CUSTODY_STATUS_LABELS: Record<CustodyStatus, string> = {
   aberta: "Em custódia",
   parcial: "Retorno parcial",

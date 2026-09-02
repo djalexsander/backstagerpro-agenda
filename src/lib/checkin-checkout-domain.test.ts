@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  CUSTODY_PURPOSE_LABELS,
+  SELECTABLE_CUSTODY_PURPOSES,
   deriveCustodyStatus,
   getCustodyMaterialActions,
   materialMatchesCustodyIdentifier,
@@ -13,6 +15,7 @@ import type {
   CheckoutInput,
   CustodyMaterialSearchResult,
   CustodyOperationView,
+  CustodyPurpose,
 } from "./checkin-checkout-types";
 
 function custodyOperation(overrides: Partial<CustodyOperationView>): CustodyOperationView {
@@ -212,6 +215,36 @@ describe("check-in/check-out domain", () => {
     expect(deriveCustodyStatus(20, 0)).toBe("aberta");
     expect(deriveCustodyStatus(20, 15)).toBe("parcial");
     expect(deriveCustodyStatus(20, 20)).toBe("concluida");
+  });
+});
+
+describe("SELECTABLE_CUSTODY_PURPOSES - finalidades ofertáveis num check-out manual", () => {
+  it("never offers 'locacao' ('Locação futura') - the backend rejects it (CI023)", () => {
+    expect(SELECTABLE_CUSTODY_PURPOSES).not.toContain("locacao");
+    expect(SELECTABLE_CUSTODY_PURPOSES.map((p) => CUSTODY_PURPOSE_LABELS[p])).not.toContain(
+      "Locação futura",
+    );
+  });
+
+  it("keeps every other finalidade, in the enum's own order", () => {
+    expect(SELECTABLE_CUSTODY_PURPOSES).toEqual([
+      "uso_interno",
+      "funcionario",
+      "evento",
+      "cliente",
+      "manutencao",
+      "transferencia_operacional",
+      "outro",
+    ]);
+  });
+
+  it("still offers 'evento' (Evento continua selecionável e inalterado)", () => {
+    expect(SELECTABLE_CUSTODY_PURPOSES).toContain("evento");
+  });
+
+  it("covers exactly the enum minus 'locacao' - a new finalidade must be an explicit decision", () => {
+    const allPurposes = Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[];
+    expect([...SELECTABLE_CUSTODY_PURPOSES, "locacao"].sort()).toEqual([...allPurposes].sort());
   });
 });
 

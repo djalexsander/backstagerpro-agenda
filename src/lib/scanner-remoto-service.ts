@@ -71,6 +71,10 @@ export async function registerScannerRemotoRead(
     _empresa_id: companyId,
     _quantidade: input.quantidade,
     _custodia_id: input.custodiaId,
+    // Omitido (undefined -> Supabase não envia a chave) para sessões
+    // configuradas: o RPC cai no fluxo antigo. Só a confirmação da sessão
+    // automática neutra manda contexto.
+    _contexto: input.contexto,
   });
   if (error) throwScannerRemotoError(error, "register read");
   return data as ScannerRemotoLeitura;

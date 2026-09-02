@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Radio, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useScannerRemoto } from "@/hooks/useScannerRemoto";
+import { FinalizeScannerSessionButton } from "@/components/checkin-checkout/FinalizeScannerSessionButton";
 import { listScannerRemotoReads } from "@/lib/scanner-remoto-service";
 import {
   SCANNER_REMOTO_ACAO_LABELS,
@@ -65,7 +65,7 @@ function SessionReads({ companyId, sessionId }: { companyId: string; sessionId: 
 // without a refresh, for whoever is watching this screen.
 export function RemoteScannerSessionsPanel({ companyId }: { companyId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const { sessions, realtimeStatus } = useScannerRemoto({ companyId, enabled: true });
+  const { sessions, realtimeStatus, endSession } = useScannerRemoto({ companyId, enabled: true });
 
   if (sessions.length === 0) return null;
 
@@ -89,25 +89,34 @@ export function RemoteScannerSessionsPanel({ companyId }: { companyId: string })
           const expanded = expandedId === session.id;
           return (
             <div key={session.id} className="rounded-md border">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-2 p-2 text-left text-sm"
-                onClick={() => setExpandedId(expanded ? null : session.id)}
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {session.titulo || SCANNER_REMOTO_TIPO_OPERACAO_LABELS[session.tipo_operacao]}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Aberta em {new Date(session.aberta_em).toLocaleString("pt-BR")}
-                  </p>
-                </div>
-                {expanded ? (
-                  <ChevronUp className="h-4 w-4 shrink-0" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
-              </button>
+              <div className="flex w-full items-center gap-2 p-2 text-sm">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                  onClick={() => setExpandedId(expanded ? null : session.id)}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {session.titulo || SCANNER_REMOTO_TIPO_OPERACAO_LABELS[session.tipo_operacao]}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Aberta em {new Date(session.aberta_em).toLocaleString("pt-BR")}
+                    </p>
+                  </div>
+                  {expanded ? (
+                    <ChevronUp className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 shrink-0" />
+                  )}
+                </button>
+                <FinalizeScannerSessionButton
+                  session={session}
+                  endSession={endSession}
+                  onFinalized={(id) => {
+                    if (expandedId === id) setExpandedId(null);
+                  }}
+                />
+              </div>
               {expanded && <SessionReads companyId={companyId} sessionId={session.id} />}
             </div>
           );

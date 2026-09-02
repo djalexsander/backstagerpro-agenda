@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { Camera, Loader2, LogOut, Wifi, WifiOff } from "lucide-react";
+import { Camera, Loader2, ScanLine, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/select";
 import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
 import { CheckinOriginDialog } from "@/components/checkin-checkout/CheckinOriginDialog";
+import { FinalizeScannerSessionButton } from "@/components/checkin-checkout/FinalizeScannerSessionButton";
+import { ScannerPendingReadCard } from "@/components/checkin-checkout/ScannerPendingReadCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
@@ -35,6 +37,7 @@ import { getScannerRemotoPermissions } from "@/lib/scanner-remoto-permissions";
 import {
   CUSTODY_CONDITION_LABELS,
   CUSTODY_PURPOSE_LABELS,
+  SELECTABLE_CUSTODY_PURPOSES,
   materialMatchesCustodyIdentifier,
   normalizeCustodyScan,
   resolveCheckinOrigin,
@@ -45,6 +48,7 @@ import {
   searchCustodyMaterials,
 } from "@/lib/checkin-checkout-service";
 import { listStockLocations } from "@/lib/stock-service";
+import { searchMaterialTraceability } from "@/lib/material-traceability-service";
 import type {
   CustodyCondition,
   CustodyFilters,
@@ -52,7 +56,19 @@ import type {
   CustodyOperationView,
   CustodyPurpose,
 } from "@/lib/checkin-checkout-types";
-import { detectScannerRemotoOperation, maxScannerRemotoCheckoutQuantity } from "@/lib/scanner-remoto-domain";
+import type {
+  TraceabilitySearchResult,
+  TraceabilitySituacao,
+} from "@/lib/material-traceability-types";
+import {
+  buildScannerReadDispatch,
+  detectScannerRemotoOperation,
+  isNeutralScannerSession,
+  maxScannerRemotoCheckoutQuantity,
+  pickTraceabilityMatch,
+  type ScannerOperationContext,
+  type ScannerPendingRead,
+} from "@/lib/scanner-remoto-domain";
 import {
   SCANNER_REMOTO_ACAO_LABELS,
   SCANNER_REMOTO_TIPO_OPERACAO_LABELS,
@@ -101,6 +117,10 @@ export default function ScannerRemoto() {
     hasModule(MODULE_KEYS.CHECKIN_CHECKOUT) &&
     hasModule(MODULE_KEYS.GESTAO_MATERIAIS) &&
     hasModule(MODULE_KEYS.CONTROLE_ESTOQUE);
+  // Só o painel read-only (E4.5) usa Locações, e só quando finalidade='cliente':
+  // igual à aba "Locações" do Check-in/Check-out, some quando o módulo não está
+  // contratado, sem quebrar o resto do Scanner.
+  const rentalModuleEnabled = moduleEnabled && hasModule(MODULE_KEYS.LOCACAO_MATERIAIS);
   const { permission: custodyGrant } = useModulePermission({
     companyId,
     featureKey: MODULE_KEYS.CHECKIN_CHECKOUT,
@@ -123,6 +143,7 @@ export default function ScannerRemoto() {
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  const [startingAutomatic, setStartingAutomatic] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -131,6 +152,15 @@ export default function ScannerRemoto() {
   const [checkinChoice, setCheckinChoice] = useState<{
     codigoLido: string;
     material: CustodyMaterialSearchResult;
+    options: CustodyOperationView[];
+  } | null>(null);
+  // E4 (sessão automática neutra): leitura pendente read-only - só no estado
+  // do React, nunca no banco.
+  const [pendingRead, setPendingRead] = useState<ScannerPendingRead | null>(null);
+  const [pendingCustodyChoice, setPendingCustodyChoice] = useState<{
+    code: string;
+    material: TraceabilitySearchResult;
+    resumo: TraceabilitySituacao;
     options: CustodyOperationView[];
   } | null>(null);
   const [form, setForm] = useState({
@@ -193,6 +223,14 @@ export default function ScannerRemoto() {
     if (pendingScan) setConfirmQuantity(pendingScan.maxQuantity);
   }, [pendingScan]);
 
+  // E4: qualquer troca de sessão (nova, "Usar" outra, ou finalizar → null)
+  // descarta a leitura pendente. Uma leitura pendente não confirmada nunca
+  // gera movimentação nem registro.
+  useEffect(() => {
+    setPendingRead(null);
+    setPendingCustodyChoice(null);
+  }, [activeSessionId]);
+
   if (!companyId) {
     return (
       <div className="space-y-4">
@@ -219,6 +257,36 @@ export default function ScannerRemoto() {
       </div>
     );
   }
+
+  // Caminho principal do Scanner Remoto: abre uma sessão automática ('misto')
+  // sem contexto operacional. Origem, destino, responsável e finalidade
+  // passam a ser resolvidos por leitura (etapa E4), não aqui - nenhum valor é
+  // preenchido com default (nada de Barracão/origem/destino inventados). O
+  // payload leva só tipoOperacao/condicao/clientUuid; o service converte todo
+  // o resto em undefined e o Supabase omite essas chaves, então a RPC recebe
+  // exatamente { _tipo_operacao, _condicao, _client_uuid, _empresa_id }.
+  // iniciar_sessao_scanner_remoto aceita 'misto' neutro desde
+  // 20260902090000_scanner_remoto_neutral_misto_session.sql.
+  const handleStartAutomaticSession = async () => {
+    if (!companyId || startingAutomatic) return;
+    setStartingAutomatic(true);
+    try {
+      const session = await startSession({
+        tipoOperacao: "misto",
+        condicao: "bom",
+        clientUuid: crypto.randomUUID(),
+      });
+      setActiveSessionId(session.id);
+    } catch (error) {
+      toast({
+        title: "Não foi possível iniciar a sessão automática",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setStartingAutomatic(false);
+    }
+  };
 
   const handleStartSession = async (event: FormEvent) => {
     event.preventDefault();
@@ -297,6 +365,138 @@ export default function ScannerRemoto() {
     }
   };
 
+  // E4 - só sessão automática neutra: identifica o material e mostra a
+  // situação/contexto atual, SEM movimentar. NÃO chama
+  // registrar_leitura_scanner_remoto, NÃO grava scanner_remoto_leituras, NÃO
+  // toca estoque nem material_custodias. searchMaterialTraceability é
+  // read-only (RPC buscar_rastreabilidade_materiais) e já traz o resumo de
+  // resumo_situacao_material. A confirmação e a gravação real são E5/E6.
+  const identifyForPendingRead = async (normalized: string) => {
+    if (!companyId) return;
+    setScanning(true);
+    setPendingCustodyChoice(null);
+    try {
+      let page: Awaited<ReturnType<typeof searchMaterialTraceability>>;
+      try {
+        page = await searchMaterialTraceability(companyId, normalized);
+      } catch (error) {
+        toast({
+          title: "Não foi possível consultar o material",
+          description: error instanceof Error ? error.message : undefined,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const material = pickTraceabilityMatch(page.items, normalized);
+      if (!material) {
+        setPendingRead(null);
+        toast({ title: "Material não encontrado", variant: "destructive" });
+        return;
+      }
+
+      const openCustodies = material.resumo.custodias_abertas;
+      if (openCustodies.length <= 1) {
+        // Individual ou material por quantidade com no máximo uma custódia
+        // aberta: mostra a situação direto (não inventa unidade).
+        setPendingRead({
+          code: normalized,
+          material,
+          resumo: material.resumo,
+          selectedCustody: openCustodies[0] ?? null,
+          selectedOperation: null,
+          operationContext: null,
+        });
+        return;
+      }
+
+      // 2+ custódias abertas (só material por quantidade): o operador escolhe
+      // de qual custódia/lote está tratando - mesma máquina do check-in
+      // (listCustodyOperations + resolveCheckinOrigin + CheckinOriginDialog).
+      const opsPage = await listCustodyOperations({
+        companyId,
+        page: 1,
+        pageSize: 100,
+        filters: { ...EMPTY_CUSTODY_FILTERS, search: material.codigo_interno },
+        onlyOpen: true,
+      });
+      const materialOps = opsPage.items.filter((op) => op.material_id === material.id);
+      const resolution = resolveCheckinOrigin(materialOps);
+      if (resolution.kind === "choose") {
+        setPendingRead(null);
+        setPendingCustodyChoice({
+          code: normalized,
+          material,
+          resumo: material.resumo,
+          options: resolution.options,
+        });
+        return;
+      }
+      const chosen =
+        resolution.kind === "auto"
+          ? openCustodies.find((item) => item.custodia_id === resolution.custody.id) ??
+            openCustodies[0]
+          : openCustodies[0];
+      setPendingRead({
+        code: normalized,
+        material,
+        resumo: material.resumo,
+        selectedCustody: chosen ?? null,
+        selectedOperation: null,
+        operationContext: null,
+      });
+    } finally {
+      setManualCode("");
+      setScanning(false);
+    }
+  };
+
+  const handleChoosePendingCustody = (operation: CustodyOperationView) => {
+    if (!pendingCustodyChoice) return;
+    const custody =
+      pendingCustodyChoice.resumo.custodias_abertas.find(
+        (item) => item.custodia_id === operation.id,
+      ) ?? null;
+    setPendingRead({
+      code: pendingCustodyChoice.code,
+      material: pendingCustodyChoice.material,
+      resumo: pendingCustodyChoice.resumo,
+      selectedCustody: custody,
+      selectedOperation: null,
+      operationContext: null,
+    });
+    setPendingCustodyChoice(null);
+  };
+
+  // E5 - confirmação final da sessão automática neutra: registra a
+  // movimentação. registrar_leitura_scanner_remoto recebe o _contexto por
+  // leitura (buildScannerReadDispatch) e delega para a RPC de movimentação
+  // certa (check-in/out normal, evento, ou retirada/devolução de locação).
+  // Sucesso (acao checkout/checkin) -> limpa o pendingRead. Erro (acao 'erro',
+  // que NÃO rejeita a promise) -> propaga um Error para o card manter a
+  // leitura pendente e mostrar a mensagem, permitindo retry com novo
+  // client_uuid. Sessão configurada não passa por aqui (nunca manda contexto).
+  const handleExecuteOperation = async (context: ScannerOperationContext) => {
+    if (!activeSessionId || !pendingRead) return;
+    const dispatch = buildScannerReadDispatch(context);
+    const read = await registerRead({
+      sessaoId: activeSessionId,
+      codigoLido: pendingRead.code,
+      clientUuid: crypto.randomUUID(),
+      custodiaId: dispatch.custodiaId,
+      contexto: dispatch.contexto,
+    });
+    const succeeded =
+      read.acao_executada === "checkout" || read.acao_executada === "checkin";
+    if (!succeeded) {
+      throw new Error(
+        read.resultado?.mensagem ?? "Não foi possível registrar a operação.",
+      );
+    }
+    toast({ title: read.resultado?.mensagem ?? "Movimentação registrada" });
+    setPendingRead(null);
+  };
+
   // Identifies the material before registering anything (buscar_materiais_
   // custodia - pure lookup, same RPC the desktop search box uses). Individual
   // materials, and anything the lookup can't identify, go straight through
@@ -304,9 +504,20 @@ export default function ScannerRemoto() {
   // its own authoritative identification either way, this pre-check only
   // decides whether to ask for a quantity first. Quantity-controlled
   // materials open a confirmation step instead of registering immediately.
+  //
+  // Sessão automática neutra (E3/E4) NÃO passa por aqui: cai no fluxo
+  // read-only identifyForPendingRead acima, sem movimentar. Só sessões
+  // 'checkout'/'checkin' ou 'misto' configurada seguem para performRead ->
+  // registerRead -> registrar_leitura_scanner_remoto (fluxo inalterado).
   const submitScan = async (code: string) => {
     const normalized = normalizeCustodyScan(code);
     if (!normalized || !activeSessionId) return;
+
+    if (activeSession && isNeutralScannerSession(activeSession)) {
+      await identifyForPendingRead(normalized);
+      return;
+    }
+
     setScanning(true);
     try {
       let material: CustodyMaterialSearchResult | undefined;
@@ -407,20 +618,6 @@ export default function ScannerRemoto() {
     void submitScan(manualCode);
   };
 
-  const handleEndSession = async () => {
-    if (!activeSessionId) return;
-    try {
-      await endSession(activeSessionId);
-      setActiveSessionId(null);
-    } catch (error) {
-      toast({
-        title: "Não foi possível encerrar a sessão",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="flex items-center justify-between">
@@ -448,26 +645,62 @@ export default function ScannerRemoto() {
                     key={session.id}
                     className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
                   >
-                    <div>
-                      <p className="font-medium">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
                         {session.titulo || SCANNER_REMOTO_TIPO_OPERACAO_LABELS[session.tipo_operacao]}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Aberta em {new Date(session.aberta_em).toLocaleString("pt-BR")}
                       </p>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => setActiveSessionId(session.id)}>
-                      Usar
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setActiveSessionId(session.id)}>
+                        Usar
+                      </Button>
+                      <FinalizeScannerSessionButton
+                        session={session}
+                        endSession={endSession}
+                        onFinalized={(id) => {
+                          if (activeSessionId === id) setActiveSessionId(null);
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </CardContent>
             </Card>
           )}
 
+          {canStartSession && (
+            <Card className="border-primary/30">
+              <CardHeader>
+                <CardTitle className="text-base">Nova sessão automática</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Comece a escanear na hora. Origem, destino, responsável e
+                  finalidade são definidos a cada leitura — nada é preenchido agora.
+                </p>
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={startingAutomatic}
+                  onClick={() => void handleStartAutomaticSession()}
+                >
+                  {startingAutomatic ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ScanLine className="mr-2 h-4 w-4" />
+                  )}
+                  Nova sessão automática
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Nova sessão</CardTitle>
+              <CardTitle className="text-base">Nova sessão configurada</CardTitle>
             </CardHeader>
             <CardContent>
               {!canStartSession ? (
@@ -579,7 +812,7 @@ export default function ScannerRemoto() {
                             <SelectValue placeholder="Selecione" />
                           </SelectTrigger>
                           <SelectContent>
-                            {(Object.keys(CUSTODY_PURPOSE_LABELS) as CustodyPurpose[]).map((key) => (
+                            {SELECTABLE_CUSTODY_PURPOSES.map((key) => (
                               <SelectItem key={key} value={key}>
                                 {CUSTODY_PURPOSE_LABELS[key]}
                               </SelectItem>
@@ -666,9 +899,12 @@ export default function ScannerRemoto() {
               <CardTitle className="text-base">
                 {activeSession.titulo || SCANNER_REMOTO_TIPO_OPERACAO_LABELS[activeSession.tipo_operacao]}
               </CardTitle>
-              <Button size="sm" variant="outline" onClick={handleEndSession}>
-                <LogOut className="mr-1 h-3.5 w-3.5" /> Encerrar
-              </Button>
+              <FinalizeScannerSessionButton
+                session={activeSession}
+                endSession={endSession}
+                variant="outline"
+                onFinalized={() => setActiveSessionId(null)}
+              />
             </CardHeader>
             <CardContent className="space-y-3">
               <form className="flex gap-2" onSubmit={handleManualSubmit}>
@@ -688,6 +924,44 @@ export default function ScannerRemoto() {
               </Button>
             </CardContent>
           </Card>
+
+          {pendingRead && companyId && (
+            <ScannerPendingReadCard
+              pendingRead={pendingRead}
+              companyId={companyId}
+              locations={locations}
+              responsibles={responsibles}
+              rentalModuleEnabled={rentalModuleEnabled}
+              canCheckout={permissions.checkout}
+              canCheckin={permissions.checkin}
+              onChooseOperation={(operation) =>
+                setPendingRead((current) =>
+                  current
+                    ? { ...current, selectedOperation: operation, operationContext: null }
+                    : current,
+                )
+              }
+              onCancelOperation={() =>
+                setPendingRead((current) =>
+                  current
+                    ? { ...current, selectedOperation: null, operationContext: null }
+                    : current,
+                )
+              }
+              onOperationReady={(context) =>
+                setPendingRead((current) =>
+                  current ? { ...current, operationContext: context } : current,
+                )
+              }
+              onEditOperation={() =>
+                setPendingRead((current) =>
+                  current ? { ...current, operationContext: null } : current,
+                )
+              }
+              onExecuteOperation={handleExecuteOperation}
+              onClear={() => setPendingRead(null)}
+            />
+          )}
 
           <Card>
             <CardHeader>
@@ -738,6 +1012,16 @@ export default function ScannerRemoto() {
           companyId={companyId}
           options={checkinChoice?.options ?? []}
           onSelect={handleChooseCheckinOrigin}
+        />
+      )}
+
+      {companyId && (
+        <CheckinOriginDialog
+          open={!!pendingCustodyChoice}
+          onOpenChange={(open) => !open && setPendingCustodyChoice(null)}
+          companyId={companyId}
+          options={pendingCustodyChoice?.options ?? []}
+          onSelect={handleChoosePendingCustody}
         />
       )}
 

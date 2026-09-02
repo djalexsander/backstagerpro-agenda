@@ -102,6 +102,40 @@ export interface StartScannerRemotoSessionInput {
   clientUuid: string;
 }
 
+/**
+ * Contexto por leitura (E5): mandado só na confirmação final da sessão
+ * automática neutra. Omitido para sessões configuradas (fluxo antigo) - aí a
+ * própria sessão decide a operação e reaplica seu contexto. Mapeia do
+ * ScannerOperationContext (estado React) via buildScannerReadDispatch.
+ *
+ * O RPC roteia: checkin normal -> registrar_checkin_material; checkin de
+ * custódia locacao_item -> registrar_devolucao_locacao_material (o RPC deriva
+ * a locação da própria custódia); checkout normal/evento ->
+ * registrar_checkout_material; checkout finalidade='cliente' ->
+ * registrar_retirada_locacao_material.
+ */
+export type ScannerReadContext =
+  | {
+      operation: "checkin";
+      localizacao_destino_id: string;
+      condicao: CustodyCondition;
+    }
+  | {
+      operation: "checkout";
+      localizacao_origem_id: string;
+      responsavel_tipo: CustodyResponsibleType;
+      responsavel_id: string;
+      /** Nunca 'locacao' - o operador escolhe "Cliente" e o RPC traduz. */
+      finalidade: Exclude<CustodyPurpose, "locacao">;
+      condicao: CustodyCondition;
+      /** Só com finalidade='evento'. */
+      referencia_tipo?: "evento";
+      referencia_id?: string;
+      /** Só com finalidade='cliente' (retirada de locação). */
+      locacao_id?: string;
+      locacao_item_id?: string;
+    };
+
 export interface RegisterScannerRemotoReadInput {
   sessaoId: string;
   codigoLido: string;
@@ -114,4 +148,6 @@ export interface RegisterScannerRemotoReadInput {
    */
   quantidade?: number;
   custodiaId?: string;
+  /** E5: contexto da confirmação de uma sessão automática neutra. */
+  contexto?: ScannerReadContext;
 }
