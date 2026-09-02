@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Material } from "./material-types";
 import { EMPTY_MATERIAL_FORM } from "./material-types";
-import { generateMaterialBarcodeValue } from "./material-identification";
 import { MaterialIdentificationPendingError } from "./material-errors";
 
 const mocks = vi.hoisted(() => ({
@@ -44,7 +43,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { saveMaterial } from "./material-service";
+import { replaceMaterialBarcode, saveMaterial } from "./material-service";
 
 const empresaId = "31000000-0000-4000-8000-000000000001";
 const materialId = "33000000-0000-4000-8000-000000000001";
@@ -112,7 +111,12 @@ describe("material save identification flow", () => {
     mocks.updatePayload = null;
     mocks.insertResult = { data: row(), error: null };
     mocks.updateResult = { data: row(), error: null };
-    mocks.rpc.mockResolvedValue({ data: qrContent, error: null });
+    mocks.rpc.mockImplementation((name: string) =>
+      Promise.resolve({
+        data: name === "generate_material_barcode" ? "0000000018" : qrContent,
+        error: null,
+      }),
+    );
   });
 
   it("saves a normalized manually entered barcode", async () => {
@@ -139,25 +143,35 @@ describe("material save identification flow", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it("saves a barcode generated before submit", async () => {
-    const barcode = generateMaterialBarcodeValue(
-      () => "650e8400-e29b-41d4-a716-446655440000",
-    );
-    mocks.insertResult.data = row({
-      codigo_barras: barcode,
-      tipo_identificacao: "codigo_barras",
-    });
-
-    await saveMaterial({
+  it("requests automatic barcode generation only after persistence", async () => {
+    const saved = await saveMaterial({
       empresaId,
       values: values({
-        codigo_barras: barcode,
+        codigo_barras: "",
         tipo_identificacao: "codigo_barras",
       }),
       generateQrCode: false,
+      generateBarcode: true,
     });
 
-    expect(mocks.insertPayload).toMatchObject({ codigo_barras: barcode });
+    expect(mocks.insertPayload).toMatchObject({
+      codigo_barras: null,
+      tipo_identificacao: "qr_code",
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith("generate_material_barcode", {
+      _material_id: materialId,
+    });
+    expect(saved.codigo_barras).toBe("0000000018");
+    expect(saved.tipo_identificacao).toBe("codigo_barras");
+  });
+
+  it("requests an atomic server-side replacement for an existing barcode", async () => {
+    mocks.rpc.mockResolvedValue({ data: "0000000026", error: null });
+
+    await expect(replaceMaterialBarcode(materialId)).resolves.toBe("0000000026");
+    expect(mocks.rpc).toHaveBeenCalledWith("replace_material_barcode", {
+      _material_id: materialId,
+    });
   });
 
   it("returns the database UUID and canonical QR content on creation", async () => {
@@ -176,24 +190,41 @@ describe("material save identification flow", () => {
   });
 
   it("creates QR and barcode together in the same save action", async () => {
-    mocks.insertResult.data = row({
-      codigo_barras: "BSP-AUTOMATIC-001",
-      tipo_identificacao: "ambos",
-      status_identificacao: "ativa",
-    });
-
     const saved = await saveMaterial({
       empresaId,
       values: values({
-        codigo_barras: "BSP-AUTOMATIC-001",
+        codigo_barras: "",
         tipo_identificacao: "ambos",
       }),
       generateQrCode: true,
+      generateBarcode: true,
     });
 
-    expect(saved.codigo_barras).toBe("BSP-AUTOMATIC-001");
+    expect(saved.codigo_barras).toBe("0000000018");
     expect(saved.conteudo_qr_code).toBe(qrContent);
     expect(saved.tipo_identificacao).toBe("ambos");
+  });
+
+  it("reports a pending identification when barcode generation fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "barcode failure" },
+    });
+
+    const promise = saveMaterial({
+      empresaId,
+      values: values({ tipo_identificacao: "codigo_barras" }),
+      generateQrCode: false,
+      generateBarcode: true,
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      name: "MaterialIdentificationPendingError",
+      materialId,
+      message: expect.stringMatching(/código de barras/i),
+    });
+    expect(consoleError).toHaveBeenCalled();
   });
 
   it("does not regenerate or mutate UUID and QR content on edit", async () => {

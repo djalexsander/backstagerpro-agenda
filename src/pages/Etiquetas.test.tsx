@@ -15,7 +15,19 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ role: "admin_empres
 vi.mock("@/hooks/useCompanyModules", () => ({ useCompanyModules: () => ({ hasModule: () => true, isLoading: false }) }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock("@/components/material-labels/LabelModelDialog", () => ({ LabelModelDialog: () => null }));
-vi.mock("@/components/material-labels/LabelPrintDialog", () => ({ LabelPrintDialog: () => null }));
+vi.mock("@/components/material-labels/LabelPrintDialog", () => ({
+  LabelPrintDialog: ({ open, items }: { open: boolean; items: Array<{ material: LabelMaterial }> }) =>
+    open ? (
+      <div data-testid="label-print-dialog">
+        {items.map(({ material: item }) => (
+          <div key={item.id}>
+            <span>{item.codigo_barras}</span>
+            <span>{item.conteudo_qr_code}</span>
+          </div>
+        ))}
+      </div>
+    ) : null,
+}));
 vi.mock("@/lib/material-label-service", () => ({
   resolveLabelMaterialById: mocks.resolve,
   searchLabelMaterials: mocks.search,
@@ -75,6 +87,29 @@ describe("Etiquetas structured material navigation", () => {
     await waitFor(() => expect(search).toHaveValue("0003"));
     fireEvent.change(search, { target: { value: "cabo" } });
     await waitFor(() => expect(mocks.search).toHaveBeenCalledWith("company-a", "cabo"));
+  });
+
+  it("passes the current persisted QR and barcode to the existing print dialog", async () => {
+    const currentMaterial: LabelMaterial = {
+      ...material,
+      tipo_identificacao: "ambos",
+      codigo_barras: "0000000026",
+    };
+    const currentModel: LabelModel = {
+      ...model,
+      tipo_identificacao: "ambos",
+    };
+    mocks.resolve.mockResolvedValue({ status: "found", material: currentMaterial });
+    mocks.search.mockResolvedValue([currentMaterial]);
+    mocks.models.mockResolvedValue([currentModel]);
+    renderPage(`/etiquetas?material_id=${material.id}`);
+
+    expect(await screen.findByText("0003 - line array foi adicionado ao lote.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pré-visualizar lote" }));
+
+    expect(screen.getByTestId("label-print-dialog")).toBeVisible();
+    expect(screen.getByText("0000000026")).toBeVisible();
+    expect(screen.getByText(material.conteudo_qr_code!)).toBeVisible();
   });
 
   it("shows a safe fallback for an invalid structured parameter", async () => {

@@ -1,10 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, Copy, Loader2, QrCode, ScanBarcode } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Check, Copy, Loader2, Printer, QrCode, ScanBarcode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { buildMaterialQrContent } from "@/lib/material-identification";
 import {
   MATERIAL_IDENTIFICATION_STATUS_LABELS,
   MATERIAL_IDENTIFICATION_TYPE_LABELS,
@@ -13,32 +25,57 @@ import {
 import {
   generateMaterialBarcode,
   generateMaterialQrCode,
+  replaceMaterialBarcode,
 } from "@/lib/material-service";
+import { MaterialBarcodePreview } from "./MaterialBarcodePreview";
+
+type IdentificationKind = "qr" | "barcode";
+type BusyAction = IdentificationKind | "replace-barcode";
 
 export function MaterialIdentificationCard({
   material,
   canGenerate,
+  canPrint = false,
   onChanged,
 }: {
   material: MaterialWithRelations;
   canGenerate: boolean;
+  canPrint?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const { toast } = useToast();
-  const [busyAction, setBusyAction] = useState<"qr" | "barcode" | null>(null);
-  const [copied, setCopied] = useState(false);
-  const qrPending =
-    material.tipo_identificacao !== "codigo_barras" &&
-    !material.conteudo_qr_code;
+  const [qrContent, setQrContent] = useState(material.conteudo_qr_code);
+  const [barcode, setBarcode] = useState(material.codigo_barras);
+  const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
+  const [copiedKind, setCopiedKind] = useState<IdentificationKind | null>(null);
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
 
-  const runGeneration = async (kind: "qr" | "barcode") => {
+  useEffect(() => {
+    setQrContent(material.conteudo_qr_code);
+    setBarcode(material.codigo_barras);
+    setCopiedKind(null);
+  }, [material.id, material.conteudo_qr_code, material.codigo_barras]);
+
+  const qrPending =
+    material.tipo_identificacao !== "codigo_barras" && !qrContent;
+
+  const runGeneration = async (kind: IdentificationKind) => {
     setBusyAction(kind);
     try {
-      if (kind === "qr") {
-        await generateMaterialQrCode(material.id);
-      } else {
-        await generateMaterialBarcode(material.id);
+      if (kind === "qr" && qrContent) {
+        setQrContent(buildMaterialQrContent(material.identificador_unico));
+        toast({ title: "Visualização do QR Code reconstruída" });
+        return;
       }
+
+      if (kind === "qr") {
+        const generatedQr = await generateMaterialQrCode(material.id);
+        setQrContent(generatedQr);
+      } else {
+        const generatedBarcode = await generateMaterialBarcode(material.id);
+        setBarcode(generatedBarcode);
+      }
+
       await onChanged();
       toast({
         title:
@@ -57,17 +94,37 @@ export function MaterialIdentificationCard({
     }
   };
 
-  const copyQrContent = async () => {
-    if (!material.conteudo_qr_code) return;
+  const copyValue = async (kind: IdentificationKind) => {
+    const value = kind === "qr" ? qrContent : barcode;
+    if (!value) return;
     try {
-      await navigator.clipboard.writeText(material.conteudo_qr_code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(value);
+      setCopiedKind(kind);
+      window.setTimeout(() => setCopiedKind(null), 1500);
     } catch {
       toast({
         title: "Não foi possível copiar o conteúdo",
         variant: "destructive",
       });
+    }
+  };
+
+  const replaceBarcode = async () => {
+    setBusyAction("replace-barcode");
+    try {
+      const generatedBarcode = await replaceMaterialBarcode(material.id);
+      setBarcode(generatedBarcode);
+      setReplaceDialogOpen(false);
+      await onChanged();
+      toast({ title: "Código de barras substituído" });
+    } catch (error) {
+      toast({
+        title: "Não foi possível substituir o código de barras",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setBusyAction(null);
     }
   };
 
@@ -81,11 +138,7 @@ export function MaterialIdentificationCard({
           </CardTitle>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">
-              {
-                MATERIAL_IDENTIFICATION_TYPE_LABELS[
-                  material.tipo_identificacao
-                ]
-              }
+              {MATERIAL_IDENTIFICATION_TYPE_LABELS[material.tipo_identificacao]}
             </Badge>
             <Badge
               variant={
@@ -94,21 +147,20 @@ export function MaterialIdentificationCard({
                   : "secondary"
               }
             >
-              {
-                MATERIAL_IDENTIFICATION_STATUS_LABELS[
-                  material.status_identificacao
-                ]
-              }
+              {MATERIAL_IDENTIFICATION_STATUS_LABELS[material.status_identificacao]}
             </Badge>
             {qrPending && <Badge variant="destructive">QR pendente</Badge>}
           </div>
         </div>
       </CardHeader>
       <CardContent className="grid gap-5 sm:grid-cols-[190px_1fr]">
-        <div className="flex min-h-44 items-center justify-center rounded-lg border bg-white p-3">
-          {material.conteudo_qr_code ? (
+        <div
+          className="flex min-h-44 items-center justify-center rounded-lg border bg-white p-3"
+          data-testid="material-identification-qr-preview"
+        >
+          {qrContent ? (
             <QRCodeSVG
-              value={material.conteudo_qr_code}
+              value={qrContent}
               size={166}
               level="M"
               title={`QR Code de ${material.nome}`}
@@ -121,7 +173,7 @@ export function MaterialIdentificationCard({
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div>
             <p className="text-xs text-muted-foreground">
               Identificador técnico imutável
@@ -134,21 +186,32 @@ export function MaterialIdentificationCard({
           <div>
             <p className="text-xs text-muted-foreground">Conteúdo do QR Code</p>
             <code className="mt-1 block break-all rounded bg-muted px-2 py-1.5 text-xs">
-              {material.conteudo_qr_code || "Não gerado"}
+              {qrContent || "Não gerado"}
             </code>
           </div>
 
-          <div>
+          <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Código de barras</p>
-            <div className="mt-1 flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all rounded bg-muted px-2 py-1.5 text-xs">
-                {material.codigo_barras || "Não informado"}
-              </code>
-              <ScanBarcode className="h-5 w-5 shrink-0 text-muted-foreground" />
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Conteúdo textual compatível com futura renderização Code 128.
-            </p>
+            {barcode ? (
+              <>
+                <div
+                  className="flex min-h-28 items-center justify-center overflow-hidden rounded-md border bg-white p-2"
+                  data-testid="material-identification-barcode-preview"
+                >
+                  <MaterialBarcodePreview value={barcode} />
+                </div>
+                <code className="block break-all rounded bg-muted px-2 py-1.5 text-xs">
+                  {barcode}
+                </code>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 rounded bg-muted px-2 py-1.5 text-xs">
+                  Não informado
+                </code>
+                <ScanBarcode className="h-5 w-5 shrink-0 text-muted-foreground" />
+              </div>
+            )}
           </div>
 
           {material.identificacao_gerada_em && (
@@ -174,46 +237,96 @@ export function MaterialIdentificationCard({
           )}
 
           <div className="flex flex-wrap gap-2">
-            {material.conteudo_qr_code ? (
-              <Button type="button" variant="outline" onClick={copyQrContent}>
-                {copied ? (
-                  <Check className="mr-2 h-4 w-4" />
-                ) : (
-                  <Copy className="mr-2 h-4 w-4" />
-                )}
-                {copied ? "Copiado" : "Copiar conteúdo"}
-              </Button>
-            ) : (
-              canGenerate && (
-                <Button
-                  type="button"
-                  onClick={() => runGeneration("qr")}
-                  disabled={busyAction !== null}
-                >
-                  {busyAction === "qr" ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <QrCode className="mr-2 h-4 w-4" />
-                  )}
-                  Gerar QR Code
+            {canPrint && (
+              busyAction === null ? (
+                <Button type="button" variant="outline" asChild>
+                  <Link to={`/etiquetas?material_id=${encodeURIComponent(material.id)}`}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimir etiqueta
+                  </Link>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" disabled>
+                  <Printer className="mr-2 h-4 w-4" />
+                  Imprimir etiqueta
                 </Button>
               )
             )}
 
-            {!material.codigo_barras && canGenerate && (
+            {qrContent && (
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => runGeneration("barcode")}
+                onClick={() => copyValue("qr")}
+              >
+                {copiedKind === "qr" ? (
+                  <Check className="mr-2 h-4 w-4" />
+                ) : (
+                  <Copy className="mr-2 h-4 w-4" />
+                )}
+                {copiedKind === "qr" ? "Copiado" : "Copiar QR Code"}
+              </Button>
+            )}
+
+            {canGenerate && (
+              <Button
+                type="button"
+                onClick={() => runGeneration("qr")}
                 disabled={busyAction !== null}
               >
-                {busyAction === "barcode" ? (
+                {busyAction === "qr" ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <ScanBarcode className="mr-2 h-4 w-4" />
+                  <QrCode className="mr-2 h-4 w-4" />
                 )}
-                Gerar código de barras
+                Gerar QR Code
               </Button>
+            )}
+
+            {barcode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => copyValue("barcode")}
+                >
+                  {copiedKind === "barcode" ? (
+                    <Check className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Copy className="mr-2 h-4 w-4" />
+                  )}
+                  {copiedKind === "barcode"
+                    ? "Copiado"
+                    : "Copiar código de barras"}
+                </Button>
+                {canGenerate && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setReplaceDialogOpen(true)}
+                    disabled={busyAction !== null}
+                  >
+                    <ScanBarcode className="mr-2 h-4 w-4" />
+                    Substituir código de barras
+                  </Button>
+                )}
+              </>
+            ) : (
+              canGenerate && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => runGeneration("barcode")}
+                  disabled={busyAction !== null}
+                >
+                  {busyAction === "barcode" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ScanBarcode className="mr-2 h-4 w-4" />
+                  )}
+                  Gerar código de barras
+                </Button>
+              )
             )}
           </div>
 
@@ -229,6 +342,40 @@ export function MaterialIdentificationCard({
           )}
         </div>
       </CardContent>
+      <AlertDialog
+        open={replaceDialogOpen}
+        onOpenChange={(open) =>
+          busyAction !== "replace-barcode" && setReplaceDialogOpen(open)
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir código de barras?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Um novo código automático será gerado e salvo. Etiquetas físicas
+              antigas podem deixar de corresponder a este material. Esta ação
+              não altera o QR Code nem o identificador técnico.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busyAction === "replace-barcode"}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busyAction === "replace-barcode"}
+              onClick={(event) => {
+                event.preventDefault();
+                void replaceBarcode();
+              }}
+            >
+              {busyAction === "replace-barcode" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Confirmar substituição
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

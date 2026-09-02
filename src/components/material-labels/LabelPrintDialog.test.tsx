@@ -285,6 +285,27 @@ describe("LabelPrintDialog bobina profile resolution", () => {
     expect(within(grid).getAllByText("Furadeira")).toHaveLength(2);
   });
 
+  it("passes the resolved physical profile to the content preview", async () => {
+    const physicalProfile = bobinaProfile({
+      largura_etiqueta_mm: 45,
+      altura_etiqueta_mm: 25,
+      margem_esquerda_mm: 3,
+      margem_superior_mm: 2,
+      offset_horizontal_mm: 1,
+      offset_vertical_mm: 0.5,
+    });
+    listPrinterConfigsMock.mockResolvedValue([labelPrinterConfig(physicalProfile.id)]);
+    listBobinaProfilesMock.mockResolvedValue([physicalProfile]);
+    renderDialog();
+
+    const canvas = await screen.findByTestId("label-canvas");
+    await waitFor(() => {
+      expect(canvas).toHaveAttribute("data-effective-width-mm", "45");
+      expect(canvas).toHaveAttribute("data-effective-height-mm", "25");
+      expect(canvas.querySelector(".cell")).toHaveStyle({ left: "4mm", top: "2.5mm" });
+    });
+  });
+
   it("uses this terminal's local bobina profile for both preview and the real desktop batch", async () => {
     const companyProfile = bobinaProfile({ id: "profile-company", nome: "Bobina empresa", padrao: true });
     const localProfile = bobinaProfile({ id: "profile-local", nome: "Bobina terminal", colunas: 3 });

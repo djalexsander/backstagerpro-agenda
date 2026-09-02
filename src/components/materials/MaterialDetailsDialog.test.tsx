@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./MaterialPhotoGallery", () => ({ MaterialPhotoGallery: () => null }));
 vi.mock("./MaterialPhotoImage", () => ({ MaterialPhotoImage: () => null }));
-vi.mock("./MaterialIdentificationCard", () => ({ MaterialIdentificationCard: () => null }));
+vi.mock("./MaterialIdentificationCard", () => ({
+  MaterialIdentificationCard: ({ material, canPrint }: { material: { id: string }; canPrint: boolean }) =>
+    canPrint ? <a href={`/etiquetas?material_id=${material.id}`}>Imprimir etiqueta</a> : null,
+}));
 vi.mock("./MaterialRfidSection", () => ({ MaterialRfidSection: () => null }));
 
 import { MaterialDetailsDialog } from "./MaterialDetailsDialog";
@@ -37,7 +40,7 @@ describe("MaterialDetailsDialog label navigation", () => {
       </MemoryRouter></QueryClientProvider>,
     );
 
-    expect(screen.getByRole("link", { name: "Criar etiqueta" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Imprimir etiqueta" })).toHaveAttribute(
       "href",
       "/etiquetas?material_id=11bd7b83-dc2f-43aa-8a4d-73f1d0388a51",
     );

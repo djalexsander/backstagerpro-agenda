@@ -68,6 +68,24 @@ describe("renderLabelMarkup", () => {
     expect(html).not.toContain("Localiza"); // label for the skipped empty field never appears
   });
 
+  it("groups long name and company in the non-compressible identity area", () => {
+    const identityModel: LabelModelSnapshot = { ...model, campos: ["nome", "empresa", "codigo_interno"] };
+    const longMaterial: LabelMaterialSnapshot = {
+      ...material,
+      nome: "LINE ARRAY NEO 210 COM NOME MUITO LONGO PARA A ETIQUETA",
+      empresa: "EMPRESA COM RAZAO SOCIAL MUITO LONGA",
+    };
+    const html = renderLabelMarkup(identityModel, longMaterial);
+    const identityEnd = html.indexOf("</div><div class=\"secondary-fields\"");
+
+    expect(html).toContain('class="identity-fields"');
+    expect(html).toContain('class="field field-nome primary"');
+    expect(html).toContain('class="field field-empresa ');
+    expect(html.indexOf(longMaterial.nome)).toBeLessThan(identityEnd);
+    expect(html.indexOf(longMaterial.empresa)).toBeLessThan(identityEnd);
+    expect(html.indexOf(material.codigo_interno)).toBeGreaterThan(identityEnd);
+  });
+
   it("shows a clear, safe marker instead of a barcode when the material has no codigo_barras - never invents one", () => {
     const barcodeOnlyModel: LabelModelSnapshot = { ...model, tipo_identificacao: "codigo_barras" };
     const materialWithoutBarcode: LabelMaterialSnapshot = { ...material, codigo_barras: null };
@@ -107,13 +125,27 @@ describe("renderLabelMarkup", () => {
 });
 
 describe("buildLabelContentCss", () => {
-  it("stacks .label as a column (fields on top, codes below) regardless of label dimensions", () => {
+  it("stacks fields and codes in explicit grid rows regardless of label dimensions", () => {
     const tallModel: LabelModelSnapshot = { ...model, largura_mm: 40, altura_mm: 60 };
     const wideModel: LabelModelSnapshot = { ...model, largura_mm: 100, altura_mm: 30 };
     for (const m of [tallModel, wideModel]) {
       const css = buildLabelContentCss(m);
-      expect(css).toMatch(/\.label \{[^}]*flex-direction: column/);
+      expect(css).toMatch(/\.label \{[^}]*display: grid;[^}]*grid-template-rows:/);
     }
+  });
+
+  it.each([
+    [50, 30, "11mm"],
+    [60, 40, "16mm"],
+  ])("reserves a predictable information row for a %sx%s label", (width, height, informationHeight) => {
+    const css = buildLabelContentCss({ ...model, largura_mm: width, altura_mm: height, campos: ["nome", "empresa"] });
+    expect(css).toContain(`grid-template-rows: minmax(0, ${informationHeight}) minmax(0, 1fr)`);
+  });
+
+  it("limits name to two lines and company to one line", () => {
+    const css = buildLabelContentCss({ ...model, campos: ["nome", "empresa"] });
+    expect(css).toMatch(/\.field-nome \{[^}]*-webkit-line-clamp: 2;[^}]*overflow: hidden/);
+    expect(css).toMatch(/\.field-empresa,[^{]+\{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis/);
   });
 
   it("in combined mode, caps the QR to a modest share and lets Code128 take the remaining (priority) space", () => {
@@ -133,24 +165,27 @@ describe("buildLabelContentCss", () => {
     expect(css).toMatch(/\.barcode \{ flex: 1 1 auto;/);
   });
 
-  it("every code's svg is capped with aspect-ratio-preserving max-width/max-height, never a distorting width/height:100%", () => {
+  it("keeps QR aspect ratio and prevents CSS from shrinking Code128 below its calculated module width", () => {
     const css = buildLabelContentCss({ ...model, tipo_identificacao: "ambos" });
     expect(css).toMatch(/\.qr-code svg \{ max-width: 100%; max-height: 100%; \}/);
-    expect(css).toMatch(/\.barcode svg \{ max-width: 100%; max-height: 100%; \}/);
-    expect(css).not.toContain("width: 100%; height: 100%");
+    expect(css).toMatch(/\.barcode svg \{[^}]*max-width: none; max-height: 100%; \}/);
+    expect(css).not.toMatch(/\.barcode svg \{[^}]*max-width: 100%/);
   });
 
-  it("keeps overflow:hidden on every container so content can never visually escape its box on a small label", () => {
+  it("keeps identity text visible while containing secondary fields and codes", () => {
     const css = buildLabelContentCss({ ...model, largura_mm: 40, altura_mm: 27 });
     expect(css).toMatch(/\.label \{[^}]*overflow: hidden/);
-    expect(css).toMatch(/\.fields \{[^}]*overflow: hidden/);
+    expect(css).toMatch(/\.fields \{[^}]*overflow: visible/);
+    expect(css).toMatch(/\.identity-fields \{ overflow: visible/);
+    expect(css).toMatch(/\.secondary-fields \{[^}]*overflow: hidden/);
     expect(css).toMatch(/\.codes \{[^}]*overflow: hidden/);
   });
 
-  it("gives the fields block flex: 0 1 auto (content-sized, never grows to steal space Code128 needs)", () => {
+  it("makes the label fill the preview surface and prevents barcode flex from compressing the information row", () => {
     const css = buildLabelContentCss(model);
-    expect(css).toMatch(/\.fields \{ flex: 0 1 auto;/);
-    expect(css).toMatch(/\.codes \{ flex: 1 1 auto;/);
+    expect(css).toMatch(/\.label \{[^}]*width: 100%; height: 100%;[^}]*grid-template-rows:/);
+    expect(css).not.toMatch(/\.fields \{[^}]*flex:/);
+    expect(css).not.toMatch(/\.codes \{[^}]*flex:/);
   });
 
   it("emits bare selectors by default (the print path's isolated documents never need scoping)", () => {
@@ -202,12 +237,78 @@ describe("renderLabelMarkup layout order (combined model)", () => {
 
     renderLabelMarkup(model, material);
     const options = jsBarcodeMock.mock.calls.at(-1)?.[2] as {
-      marginLeft: number; marginRight: number; marginTop: number; marginBottom: number;
+      width: number; marginLeft: number; marginRight: number; marginTop: number; marginBottom: number;
     };
-    expect(options.marginLeft).toBeGreaterThan(0);
-    expect(options.marginRight).toBeGreaterThan(0);
+    expect(options.marginLeft).toBeCloseTo(options.width * 10, 6);
+    expect(options.marginRight).toBeCloseTo(options.width * 10, 6);
     expect(options.marginTop).toBe(0);
     expect(options.marginBottom).toBe(0);
+  });
+
+  it.each([
+    [50, 30, 203, 2],
+    [50, 30, 300, 3],
+    [60, 40, 203, 2],
+    [60, 40, 300, 3],
+  ])("uses Code128 C with an integer-dot module for a numeric code on %sx%s at %s DPI", (widthMm, heightMm, dpi, expectedDots) => {
+    jsBarcodeMock.mockClear();
+    const value = "1234567890";
+    const html = renderLabelMarkup(
+      { ...model, largura_mm: widthMm, altura_mm: heightMm, tipo_identificacao: "codigo_barras" },
+      { ...material, codigo_barras: value },
+      { widthMm, heightMm, dpi },
+    );
+    const [, generatedValue, options] = jsBarcodeMock.mock.calls.at(-1)!;
+
+    expect(generatedValue).toBe(value);
+    expect(options).toEqual(expect.objectContaining({ format: "CODE128C", displayValue: true }));
+    expect((options as { width: number }).width * dpi / 96).toBeCloseTo(expectedDots, 6);
+    expect(html).toContain(`data-module-dots=\"${expectedDots}\"`);
+    expect(html).toContain("<text");
+    const svg = new DOMParser().parseFromString(html, "text/html").querySelector(".barcode svg") as SVGElement;
+    expect(Number.parseFloat(svg.style.width)).toBeLessThanOrEqual(widthMm - 3);
+  });
+
+  it.each([
+    [50, 30, 203, 1],
+    [50, 30, 300, 1],
+    [60, 40, 203, 1],
+    [60, 40, 300, 2],
+  ])("keeps a legacy BSP barcode printable on %sx%s at %s DPI without sub-dot modules", (widthMm, heightMm, dpi, expectedDots) => {
+    jsBarcodeMock.mockClear();
+    const value = "BSP-A968A4040E074A928FBF";
+    const html = renderLabelMarkup(
+      { ...model, largura_mm: widthMm, altura_mm: heightMm, tipo_identificacao: "codigo_barras" },
+      { ...material, codigo_barras: value },
+      { widthMm, heightMm, dpi },
+    );
+    const [, generatedValue, options] = jsBarcodeMock.mock.calls.at(-1)!;
+
+    expect(generatedValue).toBe(value);
+    expect(options).toEqual(expect.objectContaining({ format: "CODE128", displayValue: false }));
+    expect((options as { width: number }).width * dpi / 96).toBeCloseTo(expectedDots, 6);
+    expect(html).toContain(`data-module-dots=\"${expectedDots}\"`);
+    expect(html).toContain('data-quiet-zone-modules="10"');
+    expect(html).not.toContain("<text");
+    const svg = new DOMParser().parseFromString(html, "text/html").querySelector(".barcode svg") as SVGElement;
+    expect(Number.parseFloat(svg.style.width)).toBeLessThanOrEqual(widthMm - 3);
+  });
+
+  it("keeps the human-readable value bold and separated below bars when safe width fits", () => {
+    jsBarcodeMock.mockClear();
+    renderLabelMarkup(
+      { ...model, tipo_identificacao: "codigo_barras" },
+      { ...material, codigo_barras: "1234567890" },
+      { widthMm: 50, heightMm: 30, dpi: 203 },
+    );
+    const options = jsBarcodeMock.mock.calls.at(-1)?.[2];
+    expect(options).toEqual(expect.objectContaining({
+      font: "Arial",
+      fontOptions: "bold",
+      fontSize: 13,
+      textMargin: 2,
+      displayValue: true,
+    }));
   });
 });
 
@@ -427,20 +528,11 @@ describe("printLabelBatch with a multi-column bobina profile", () => {
     await printLabelBatch("company-1", batch, undefined, threeColumnProfile);
     const jobs = printHtmlBatchMock.mock.calls[0][0].jobs as Array<{ html: string }>;
     expect(jobs).toHaveLength(1);
-    const html = jobs[0].html;
-    // Each material's own name must appear closer to its own barcode value
-    // than to either sibling's - proves the row was built by zipping
-    // name+code from the SAME item, not two independently-ordered lists.
-    for (const [name, code] of [["Alpha", "1111111111"], ["Beta", "2222222222"], ["Gamma", "3333333333"]] as const) {
-      const nameIndex = html.indexOf(name);
-      const codeIndex = html.indexOf(code);
-      expect(nameIndex).toBeGreaterThanOrEqual(0);
-      expect(codeIndex).toBeGreaterThanOrEqual(0);
-      const distanceToOwnCode = Math.abs(nameIndex - codeIndex);
-      for (const [otherName, otherCode] of [["Alpha", "1111111111"], ["Beta", "2222222222"], ["Gamma", "3333333333"]] as const) {
-        if (otherName === name) continue;
-        expect(distanceToOwnCode).toBeLessThan(Math.abs(nameIndex - html.indexOf(otherCode)));
-      }
+    const document = new DOMParser().parseFromString(jobs[0].html, "text/html");
+    const cells = Array.from(document.querySelectorAll(".cell"));
+    for (const [index, [name, code]] of [["Alpha", "1111111111"], ["Beta", "2222222222"], ["Gamma", "3333333333"]].entries()) {
+      expect(cells[index]?.textContent).toContain(name);
+      expect(cells[index]?.textContent).toContain(code);
     }
   });
 });

@@ -148,19 +148,43 @@ export async function saveMaterial({
   values,
   id,
   generateQrCode,
+  generateBarcode,
 }: {
   empresaId: string;
   values: MaterialFormValues;
   id?: string;
   generateQrCode?: boolean;
+  generateBarcode?: boolean;
 }): Promise<Material> {
+  const shouldGenerateBarcode = Boolean(
+    generateBarcode && !values.codigo_barras.trim(),
+  );
+  const shouldGenerateQrCode =
+    !id && (generateQrCode ?? values.tipo_identificacao !== "codigo_barras");
+  const formPayload = materialFormToPayload(values);
   const payload = {
     empresa_id: empresaId,
-    ...materialFormToPayload(values),
+    ...formPayload,
+    // `codigo_barras` cannot be generated safely before the row exists. The
+    // temporary QR type satisfies the existing table constraint; the RPC
+    // atomically writes the barcode and restores codigo_barras/ambos.
+    ...(shouldGenerateBarcode
+      ? { codigo_barras: null, tipo_identificacao: "qr_code" as const }
+      : {}),
   };
 
+  let saved: Material;
   if (id) {
-    const { empresa_id: _ignoredCompanyId, ...updatePayload } = payload;
+    const { empresa_id: _ignoredCompanyId, ...editablePayload } = payload;
+    // If another request assigned a barcode after this form was opened, do
+    // not clear it before generate_material_barcode obtains its row lock.
+    const updatePayload = shouldGenerateBarcode
+      ? (({
+          codigo_barras: _ignoredBarcode,
+          tipo_identificacao: _ignoredIdentificationType,
+          ...rest
+        }) => rest)(editablePayload)
+      : editablePayload;
     const { data, error } = await supabase
       .from("materiais")
       .update(updatePayload as never)
@@ -175,40 +199,59 @@ export async function saveMaterial({
         "Não foi possível atualizar o material. Tente novamente.",
       );
     }
-    return data;
+    saved = data;
+  } else {
+    const { data, error } = await supabase
+      .from("materiais")
+      .insert(payload as never)
+      .select("*")
+      .single();
+    if (error) {
+      throwPersistenceError(
+        error,
+        "Falha inesperada ao criar material",
+        "Não foi possível criar o material. Tente novamente.",
+      );
+    }
+    saved = data;
   }
 
-  const { data, error } = await supabase
-    .from("materiais")
-    .insert(payload as never)
-    .select("*")
-    .single();
-  if (error) {
-    throwPersistenceError(
-      error,
-      "Falha inesperada ao criar material",
-      "Não foi possível criar o material. Tente novamente.",
-    );
+  if (shouldGenerateBarcode) {
+    try {
+      const barcode = await generateMaterialBarcode(saved.id);
+      saved = {
+        ...saved,
+        codigo_barras: barcode,
+        status_identificacao: "ativa",
+        tipo_identificacao: saved.conteudo_qr_code ? "ambos" : "codigo_barras",
+      };
+    } catch (barcodeError) {
+      throw new MaterialIdentificationPendingError(
+        saved.id,
+        barcodeError,
+        "código de barras",
+      );
+    }
   }
-  const shouldGenerateQrCode =
-    generateQrCode ?? values.tipo_identificacao !== "codigo_barras";
-  if (!shouldGenerateQrCode) return data;
 
-  try {
-    const qrContent = await generateMaterialQrCode(data.id);
-    return {
-      ...data,
-      conteudo_qr_code: qrContent,
-      status_identificacao: "ativa",
-      tipo_identificacao: data.codigo_barras ? "ambos" : "qr_code",
-    };
-  } catch (qrError) {
-    // A tabela não concede DELETE ao cliente, portanto remover o registro
-    // recém-criado não é uma compensação segura disponível. O trigger mantém
-    // o QR nulo; o frontend recarrega e abre o material como "QR pendente",
-    // sem apresentar a operação como integralmente concluída.
-    throw new MaterialIdentificationPendingError(data.id, qrError);
+  if (shouldGenerateQrCode) {
+    try {
+      const qrContent = await generateMaterialQrCode(saved.id);
+      saved = {
+        ...saved,
+        conteudo_qr_code: qrContent,
+        status_identificacao: "ativa",
+        tipo_identificacao: saved.codigo_barras ? "ambos" : "qr_code",
+      };
+    } catch (qrError) {
+      // A tabela não concede DELETE ao cliente, portanto remover o registro
+      // recém-criado não é uma compensação segura disponível. O frontend
+      // recarrega o material e permite concluir a identificação nos detalhes.
+      throw new MaterialIdentificationPendingError(saved.id, qrError);
+    }
   }
+
+  return saved;
 }
 
 export async function setMaterialActive({
@@ -255,6 +298,22 @@ export async function generateMaterialBarcode(
       error,
       "Falha inesperada ao gerar código de barras",
       "Não foi possível gerar o código de barras. Tente novamente.",
+    );
+  }
+  return data;
+}
+
+export async function replaceMaterialBarcode(
+  materialId: string,
+): Promise<string> {
+  const { data, error } = await supabase.rpc("replace_material_barcode", {
+    _material_id: materialId,
+  });
+  if (error) {
+    throwPersistenceError(
+      error,
+      "Falha inesperada ao substituir código de barras",
+      "Não foi possível substituir o código de barras. O código anterior foi preservado.",
     );
   }
   return data;

@@ -1,5 +1,6 @@
 import { useId } from "react";
-import { buildLabelContentCss, renderLabelMarkup } from "@/lib/material-label-print";
+import { computeSheetGeometry, legacyProfileFromModel, type BobinaPrintProfile } from "@/lib/label-layout-engine";
+import { buildBobinaPreviewCss, renderBobinaRowMarkup } from "@/lib/material-label-print";
 import type { LabelMaterialSnapshot, LabelModelSnapshot } from "@/lib/material-label-types";
 
 // 96 CSS px per inch / 25.4mm per inch - the same physical-size reference
@@ -9,30 +10,36 @@ import type { LabelMaterialSnapshot, LabelModelSnapshot } from "@/lib/material-l
 // scale() transform shrinks/grows it for on-screen preview.
 const CSS_MM_TO_PX = 96 / 25.4;
 
-// Preview and real print render through the exact same function
-// (renderLabelMarkup + buildLabelContentCss, both in material-label-print.tsx)
-// instead of two hand-maintained implementations - see that module's
-// comments for why this matters (section 11: they must never drift again).
+// Preview and real print render through the same bobina geometry, row markup
+// and content CSS from material-label-print.tsx. With no explicit profile,
+// the same legacy model-sized profile used by printLabelBatch is synthesized.
 // `scope` gives each instance its own CSS namespace so multiple previews on
 // one page (or re-renders) never leak `.codes`/`.field` rules into each other.
-export function LabelCanvas({ model, material, scale = 1 }: {
-  model: LabelModelSnapshot; material: LabelMaterialSnapshot; scale?: number;
+export function LabelCanvas({ model, material, profile, scale = 1 }: {
+  model: LabelModelSnapshot;
+  material: LabelMaterialSnapshot;
+  profile?: BobinaPrintProfile | null;
+  scale?: number;
 }) {
   const rawId = useId();
   const scope = `#label-preview-${rawId.replace(/[^a-zA-Z0-9-]/g, "")}`;
-  const markup = renderLabelMarkup(model, material);
-  const css = buildLabelContentCss(model, scope);
+  const effectiveProfile = profile ?? legacyProfileFromModel(model);
+  const geometry = computeSheetGeometry(effectiveProfile);
+  const markup = renderBobinaRowMarkup(model, geometry, [material], effectiveProfile);
+  const css = buildBobinaPreviewCss(effectiveProfile, model, geometry, scope);
 
   return (
     <div
       id={scope.slice(1)}
       className="overflow-hidden bg-white"
-      style={{ width: `${model.largura_mm * CSS_MM_TO_PX * scale}px`, height: `${model.altura_mm * CSS_MM_TO_PX * scale}px` }}
+      style={{ width: `${geometry.rowWidthMm * CSS_MM_TO_PX * scale}px`, height: `${geometry.rowHeightMm * CSS_MM_TO_PX * scale}px` }}
       data-testid="label-canvas"
+      data-effective-width-mm={geometry.cellWidthMm}
+      data-effective-height-mm={geometry.cellHeightMm}
     >
       <style>{css}</style>
       <div
-        style={{ width: `${model.largura_mm}mm`, height: `${model.altura_mm}mm`, transform: `scale(${scale})`, transformOrigin: "top left" }}
+        style={{ width: `${geometry.rowWidthMm}mm`, height: `${geometry.rowHeightMm}mm`, transform: `scale(${scale})`, transformOrigin: "top left" }}
         dangerouslySetInnerHTML={{ __html: markup }}
       />
     </div>

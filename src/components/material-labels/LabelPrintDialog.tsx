@@ -116,7 +116,7 @@ export function LabelPrintDialog({ open, onOpenChange, companyId, companyName, m
           </div>
           {totalRows > previewRows && <p className="text-center text-[11px] text-muted-foreground">Mostrando as primeiras {previewRows} de {totalRows} linhas.</p>}
         </div>
-        {preview[0] && <div className="space-y-1"><p className="text-xs font-medium text-muted-foreground">Conteúdo da etiqueta</p><div className="w-fit bg-white shadow"><LabelCanvas model={labelModelToSnapshot(model)} material={preview[0].material} scale={0.72} /></div></div>}
+        {preview[0] && <div className="space-y-1"><p className="text-xs font-medium text-muted-foreground">Resultado físico da etiqueta</p><div className="w-fit bg-white shadow"><LabelCanvas model={labelModelToSnapshot(model)} material={preview[0].material} profile={effectiveProfile} scale={0.72} /></div></div>}
       </div>
       <p className="text-center text-xs text-muted-foreground">A prévia usa o mesmo cálculo de layout da impressão real. A escala e margens físicas finais dependem do navegador, driver e impressora.</p></div>}
     <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button disabled={!model || !items.length || total < 1 || total > 5000 || !!unprintableItems.length || mutation.isPending} onClick={() => mutation.mutate()}><Printer className="mr-2 h-4 w-4" />{mutation.isPending ? "Preparando..." : "Registrar lote e imprimir"}</Button></DialogFooter>

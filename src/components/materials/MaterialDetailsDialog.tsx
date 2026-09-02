@@ -287,6 +287,7 @@ export function MaterialDetailsDialog({
         <MaterialIdentificationCard
           material={material}
           canGenerate={canGenerateIdentification}
+          canPrint={canPrintLabels}
           onChanged={onChanged}
         />
 
@@ -306,8 +307,6 @@ export function MaterialDetailsDialog({
           canManageStock={canManageStock}
         />
         <MaterialMaintenanceSection material={material} companyId={companyId} enabled={canViewMaintenance} />
-        {canPrintLabels && <><Separator /><Button asChild size="sm" variant="outline"><Link to={`/etiquetas?material_id=${encodeURIComponent(material.id)}`}>Criar etiqueta</Link></Button></>}
-
         {(material.descricao || material.observacoes) && (
           <>
             <Separator />

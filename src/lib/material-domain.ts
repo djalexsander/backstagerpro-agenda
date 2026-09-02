@@ -47,6 +47,7 @@ export function formatBrazilianCurrency(
 export function validateMaterialForm(
   values: MaterialFormValues,
   previous?: Pick<Material, "status_operacional"> | null,
+  generateBarcode = false,
 ): MaterialFormErrors {
   const errors: MaterialFormErrors = {};
 
@@ -74,7 +75,8 @@ export function validateMaterialForm(
   if (
     (values.tipo_identificacao === "codigo_barras" ||
       values.tipo_identificacao === "ambos") &&
-    !values.codigo_barras.trim()
+    !values.codigo_barras.trim() &&
+    !generateBarcode
   ) {
     errors.codigo_barras =
       "Informe o código de barras ou gere um código antes de salvar.";

@@ -11,7 +11,7 @@ import {
   type BobinaSheetGeometry,
 } from "./label-layout-engine";
 import { expandLabelBatch, LABEL_FIELD_LABELS } from "./material-label-domain";
-import type { LabelMaterialSnapshot, LabelModelSnapshot, LabelPrintBatch } from "./material-label-types";
+import type { LabelField, LabelMaterialSnapshot, LabelModelSnapshot, LabelPrintBatch } from "./material-label-types";
 import { printHtmlBatch } from "./printer-service";
 import type { PrinterConfig } from "./printer-types";
 
@@ -21,40 +21,10 @@ function escapeHtml(value: unknown) {
   })[character]!);
 }
 
-// Single canonical intrinsic-size formula for the code SVGs, used by every
-// rendering path (preview and real print alike - section 11 of the request
-// that produced this: "preview e impressão real devem usar a MESMA função de
-// renderização"). Before this, LabelCanvas.tsx (preview) and this module
-// (real print) each hardcoded their own slightly different multipliers
-// (2.5/1.5 vs 3/1.8, barcode height 34/10 vs 42/11), so what an operator
-// previewed didn't quite match what got rasterized. The exact multiplier
-// barely matters for final on-screen/print size - buildLabelContentCss's
-// `svg { max-width/max-height }` is what actually clamps the visible result
-// - but it does need to be big enough that CODE128's bars and the QR modules
-// aren't generated at a source resolution too small to stay crisp once
-// html2canvas rasterizes at the bobina's DPI-derived scale. QR is
-// deliberately the smaller of the two budgets (Code128 is the read-priority
-// code - see buildLabelContentCss below): this only sets how crisp its
-// *source* is, the actual on-label size is capped separately by CSS.
+// QR source sizing remains independent from Code128's physical module
+// calculation below. Preview and print still use this same renderer.
 function qrIntrinsicSizePx(model: Pick<LabelModelSnapshot, "altura_mm" | "largura_mm">) {
   return Math.min(model.altura_mm * 2.2, model.largura_mm * 1.3);
-}
-
-// Code128 gets a generously scaled intrinsic height so its bars are rendered
-// at a source resolution proportional to the label itself, not a fixed 42px
-// regardless of a 30mm vs 100mm label (section "CODE 128... aumentar
-// significativamente largura e altura" / "não esticar bitmap artificialmente;
-// gerar o SVG/Code128 nas dimensões corretas"). The bar *module* width is
-// intentionally left at JsBarcode's default rather than also scaled by
-// largura_mm: CODE128's overall width is value-length-driven, and inflating
-// module width on top of that would fight the aspect-preserving CSS clamp
-// below (a wider intrinsic SVG can end up *height*-constrained instead of
-// width-constrained, working against "aumentar altura"). Width is instead
-// grown by giving the barcode's own flex box the label's full width (no
-// longer sharing it with a side-by-side fields column) - see
-// buildLabelContentCss.
-function barcodeIntrinsicHeightPx(model: Pick<LabelModelSnapshot, "altura_mm">) {
-  return Math.max(42, Math.round(model.altura_mm * 3));
 }
 
 // A barcode's human-readable value is only worth rendering when the label is
@@ -62,20 +32,113 @@ function barcodeIntrinsicHeightPx(model: Pick<LabelModelSnapshot, "altura_mm">) 
 // own max-height clamp below - shorter labels still get a correct, scannable
 // CODE128, just without the sub-millimeter text under it.
 const MIN_HEIGHT_MM_FOR_BARCODE_TEXT = 15;
+const POINT_TO_MM = 25.4 / 72;
+const CSS_PX_PER_MM = 96 / 25.4;
+const CODE128_QUIET_ZONE_MODULES = 10;
+// Aim for a 0.254mm X-dimension (2 dots at 203 DPI, 3 at 300 DPI). Legacy
+// BSP values may step down to one whole raster dot to remain complete, but
+// never to a fractional/sub-pixel module; CSS is forbidden from shrinking it.
+const CODE128_TARGET_MODULE_MM = 0.254;
+const CODE128_MIN_MODULE_DOTS = 1;
 
-function barcodeMarkup(value: string, model: Pick<LabelModelSnapshot, "altura_mm">) {
+interface BarcodePhysicalGeometry {
+  widthMm: number;
+  heightMm: number;
+  dpi: number;
+}
+
+function informationAreaHeightMm(model: LabelModelSnapshot) {
+  return model.altura_mm <= 30 ? 11 : Math.min(16, model.altura_mm * 0.4);
+}
+
+function effectiveLabelFontPt(model: LabelModelSnapshot) {
+  const priorityLineCount =
+    (model.campos.includes("nome") ? 2 : 0) +
+    (model.campos.includes("empresa") ? 1 : 0);
+  if (priorityLineCount === 0) return model.tamanho_fonte;
+
+  const maximumFontForPriorityFields =
+    informationAreaHeightMm(model) / (priorityLineCount * POINT_TO_MM * 1.08);
+  return Math.min(model.tamanho_fonte, maximumFontForPriorityFields);
+}
+
+function barcodeHumanFontSizePx(model: Pick<LabelModelSnapshot, "altura_mm">) {
+  return Math.max(13, Math.min(16, Math.round(model.altura_mm * 0.35)));
+}
+
+function code128ModuleCount(value: string, compactNumeric: boolean) {
+  const dataCodewords = compactNumeric ? value.length / 2 : value.length;
+  return (dataCodewords + 3) * 11 + 2;
+}
+
+function barcodePhysicalGeometry(
+  model: LabelModelSnapshot,
+  profile?: BobinaPrintProfile,
+  geometry?: BobinaSheetGeometry,
+): BarcodePhysicalGeometry {
+  if (!profile || !geometry) {
+    return { widthMm: model.largura_mm, heightMm: model.altura_mm, dpi: resolveDpi({ dpi: "automatico" }) };
+  }
+  const landscape = profile.orientacao === "paisagem";
+  return {
+    widthMm: landscape ? geometry.cellHeightMm : geometry.cellWidthMm,
+    heightMm: landscape ? geometry.cellWidthMm : geometry.cellHeightMm,
+    dpi: resolveDpi(profile),
+  };
+}
+
+function barcodeMarkup(value: string, model: LabelModelSnapshot, physical: BarcodePhysicalGeometry) {
+  const compactNumeric = /^\d{10}$/.test(value);
+  const format = compactNumeric ? "CODE128C" : "CODE128";
+  const moduleCount = code128ModuleCount(value, compactNumeric);
+  const totalModules = moduleCount + CODE128_QUIET_ZONE_MODULES * 2;
+  const borderMm = model.mostrar_borda ? 0.5 : 0;
+  const availableWidthMm = Math.max(1, physical.widthMm - 2 * (model.margem_interna_mm ?? 1.5) - borderMm);
+  const maximumFittingDots = Math.floor((availableWidthMm / 25.4 * physical.dpi) / totalModules);
+  const targetDots = Math.max(2, Math.round(CODE128_TARGET_MODULE_MM / 25.4 * physical.dpi));
+  const moduleDots = Math.max(CODE128_MIN_MODULE_DOTS, Math.min(targetDots, maximumFittingDots));
+  const moduleWidthPx = moduleDots * 96 / physical.dpi;
+  const quietZonePx = moduleWidthPx * CODE128_QUIET_ZONE_MODULES;
+  const showHumanText =
+    physical.heightMm >= MIN_HEIGHT_MM_FOR_BARCODE_TEXT &&
+    maximumFittingDots >= targetDots;
+  const humanFontSizePx = barcodeHumanFontSizePx({ altura_mm: physical.heightMm });
+  const informationHeightMm = informationAreaHeightMm(model);
+  const codeAreaHeightMm = Math.max(
+    6,
+    physical.heightMm - 2 * (model.margem_interna_mm ?? 1.5) - (model.espacamento_interno_mm ?? 1.5) - informationHeightMm,
+  );
+  const humanTextHeightMm = showHumanText ? humanFontSizePx / CSS_PX_PER_MM + 0.6 : 0;
+  const barHeightPx = Math.max(6, codeAreaHeightMm - humanTextHeightMm) * CSS_PX_PER_MM;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   JsBarcode(svg, value, {
-    format: "CODE128",
-    height: barcodeIntrinsicHeightPx(model),
+    format,
+    width: moduleWidthPx,
+    height: barHeightPx,
     // Lateral quiet zone only (top/bottom stay at 0) - a real quiet zone
     // baked into the generated SVG itself, not left to whatever margin the
     // surrounding layout happens to leave, and never at the cost of bar
     // height, which is the one dimension this code type is prioritized for.
-    marginTop: 0, marginBottom: 0, marginLeft: 8, marginRight: 8,
-    fontSize: 11,
-    displayValue: model.altura_mm >= MIN_HEIGHT_MM_FOR_BARCODE_TEXT,
+    marginTop: 0, marginBottom: 0, marginLeft: quietZonePx, marginRight: quietZonePx,
+    font: "Arial",
+    fontOptions: "bold",
+    fontSize: humanFontSizePx,
+    textMargin: Math.max(1, Math.round(0.6 * CSS_PX_PER_MM)),
+    displayValue: showHumanText,
   });
+  const intrinsicWidth = Number.parseFloat(svg.getAttribute("width") ?? "") || totalModules * moduleWidthPx;
+  const intrinsicHeight = Number.parseFloat(svg.getAttribute("height") ?? "") || barHeightPx;
+  svg.setAttribute("viewBox", `0 0 ${intrinsicWidth} ${intrinsicHeight}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("shape-rendering", "crispEdges");
+  svg.setAttribute("data-code128-format", format);
+  svg.setAttribute("data-module-dots", String(moduleDots));
+  svg.setAttribute("data-module-mm", (moduleDots / physical.dpi * 25.4).toFixed(3));
+  svg.setAttribute("data-quiet-zone-modules", String(CODE128_QUIET_ZONE_MODULES));
+  svg.style.width = `${(intrinsicWidth / CSS_PX_PER_MM).toFixed(3)}mm`;
+  svg.style.height = "100%";
+  svg.style.maxWidth = "none";
+  svg.style.maxHeight = "100%";
   return svg.outerHTML;
 }
 
@@ -91,7 +154,11 @@ function barcodeMarkup(value: string, model: Pick<LabelModelSnapshot, "altura_mm
 // in their own classed container (.qr-code / .barcode) so CSS can size them
 // independently (QR capped small, Code128 given the remaining/priority
 // space) - two bare sibling <svg>s couldn't be told apart by a selector.
-export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMaterialSnapshot) {
+export function renderLabelMarkup(
+  model: LabelModelSnapshot,
+  material: LabelMaterialSnapshot,
+  physical = barcodePhysicalGeometry(model),
+) {
   const wantsQr = model.tipo_identificacao !== "codigo_barras";
   const wantsBarcode = model.tipo_identificacao !== "qr_code";
   const qr = wantsQr && material.conteudo_qr_code
@@ -100,7 +167,7 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
       )}</div>`
     : "";
   const barcode = wantsBarcode && material.codigo_barras
-    ? `<div class="barcode">${barcodeMarkup(material.codigo_barras, model)}</div>` : "";
+    ? `<div class="barcode">${barcodeMarkup(material.codigo_barras, model, physical)}</div>` : "";
   // In normal operation this never happens - Etiquetas.tsx blocks adding a
   // material the selected model can't identify, and LabelPrintDialog blocks
   // the print button the same way - but neither of those is retroactive to
@@ -118,9 +185,20 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
     numero_patrimonio: material.numero_patrimonio, localizacao: material.localizacao, empresa: material.empresa };
   const fields = model.campos.map((field, index) => {
     const value = fieldValues[field];
-    return value ? `<div class="field ${index === 0 ? "primary" : ""}"><small>${escapeHtml(LABEL_FIELD_LABELS[field])}:</small> ${escapeHtml(value)}</div>` : "";
-  }).join("");
-  return `<article class="label"><div class="fields">${fields}</div><div class="codes">${qr}${barcode}${missing}</div></article>`;
+    return value ? {
+      field,
+      markup: `<div class="field field-${field} ${index === 0 ? "primary" : ""}"><small>${escapeHtml(LABEL_FIELD_LABELS[field])}:</small> ${escapeHtml(value)}</div>`,
+    } : null;
+  }).filter((entry): entry is { field: LabelField; markup: string } => entry !== null);
+  const identityFields = fields
+    .filter(({ field }) => field === "nome" || field === "empresa")
+    .map(({ markup }) => markup)
+    .join("");
+  const secondaryFields = fields
+    .filter(({ field }) => field !== "nome" && field !== "empresa")
+    .map(({ markup }) => markup)
+    .join("");
+  return `<article class="label"><div class="fields">${identityFields ? `<div class="identity-fields">${identityFields}</div>` : ""}${secondaryFields ? `<div class="secondary-fields">${secondaryFields}</div>` : ""}</div><div class="codes">${qr}${barcode}${missing}</div></article>`;
 }
 
 // Shared `.label`/`.fields`/`.codes` rules - the visual contract for one
@@ -130,22 +208,12 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
 // (rather than inlined twice) so buildLabelSheetCss, buildBobinaCss and
 // LabelCanvas.tsx's preview can never drift from each other again.
 //
-// Layout is a single column stack, always in this order (DOM order in
-// renderLabelMarkup drives it, no `order:` overrides): name/fields on top
-// (bold primary field, controlled wrapping, full label width), QR below at
-// a modest capped size, then Code128 last getting whatever height remains -
-// the "prioridade de leitura" code. This replaced an earlier row-beside-
-// column layout (fields beside a shared 42%-wide codes column, QR and
-// Code128 splitting that column ~50/50) that put the name laterally next to
-// the QR and gave both codes equal weight; every element here still gets an
-// aspect-preserving max-width/max-height cap (never `width/height: 100%`,
-// which would distort a barcode/QR that doesn't match its box's aspect
-// ratio) and `overflow: hidden` at every level, so nothing can grow past its
-// box or overlap a sibling regardless of how small the label is - a very
-// short label first loses the fields column's headroom (flex: 0 1 auto, not
-// flex: 1, so it never claims space Code128 needs) and the barcode's own
-// tiny-label behavior (see MIN_HEIGHT_MM_FOR_BARCODE_TEXT above), never the
-// barcode's bars themselves.
+// The outer grid reserves separate rows for information and codes, so flex
+// sizing inside the barcode can never compress the text. Name/company are
+// kept in the priority group (two lines and one line respectively); any
+// secondary fields use only the remaining information-row space. QR and
+// Code128 retain aspect-preserving max-width/max-height caps, and the label
+// itself fills the same explicitly sized surface in preview and print.
 //
 // `scope` namespaces every selector (e.g. "#label-preview-xyz") so this can
 // be safely injected as a plain <style> tag into the live React app's shared
@@ -156,6 +224,8 @@ export function renderLabelMarkup(model: LabelModelSnapshot, material: LabelMate
 // unchanged (bare classes, exactly as before).
 export function buildLabelContentCss(model: LabelModelSnapshot, scope = "") {
   const prefix = scope ? `${scope} ` : "";
+  const informationHeight = informationAreaHeightMm(model);
+  const effectiveFontSize = effectiveLabelFontPt(model);
   // The "QR capped small, Code128 takes the rest" split only makes sense
   // when both are actually present - a QR-only or Code128-only model must
   // still get the *entire* codes area for its one code, not be shrunk by a
@@ -165,14 +235,20 @@ export function buildLabelContentCss(model: LabelModelSnapshot, scope = "") {
     ? "flex: 0 0 auto; max-width: 60%; max-height: 34%;"
     : "flex: 1 1 auto; min-height: 0; max-width: 100%; max-height: 100%;";
   return `
-    ${prefix}.label { padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; display: flex; flex-direction: column; gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
-    ${prefix}.fields { flex: 0 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; overflow: hidden; font-size: ${model.tamanho_fonte}pt; line-height: 1.15; }
-    ${prefix}.field { overflow-wrap: anywhere; } ${prefix}.field.primary { font-weight: 700; } ${prefix}small { color: #555; font-size: .72em; }
-    ${prefix}.codes { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1mm; overflow: hidden; }
+    ${prefix}.label { box-sizing: border-box; width: 100%; height: 100%; padding: ${model.margem_interna_mm ?? 1.5}mm; overflow: hidden; display: grid; grid-template-rows: minmax(0, ${informationHeight}mm) minmax(0, 1fr); gap: ${model.espacamento_interno_mm ?? 1.5}mm; color: #000; font-family: Arial, sans-serif; ${model.mostrar_borda ? "border: .25mm solid #000;" : ""} }
+    ${prefix}.fields { min-width: 0; min-height: 0; width: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); align-content: start; overflow: visible; font-size: ${effectiveFontSize.toFixed(3)}pt; line-height: 1.08; }
+    ${prefix}.identity-fields, ${prefix}.secondary-fields { min-width: 0; }
+    ${prefix}.identity-fields { overflow: visible; }
+    ${prefix}.secondary-fields { min-height: 0; overflow: hidden; }
+    ${prefix}.field { min-width: 0; overflow-wrap: anywhere; }
+    ${prefix}.field-nome { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+    ${prefix}.field-empresa, ${prefix}.secondary-fields .field { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    ${prefix}.field.primary { font-weight: 700; } ${prefix}small { color: #555; font-size: .72em; }
+    ${prefix}.codes { min-width: 0; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1mm; overflow: hidden; }
     ${prefix}.codes .qr-code { ${qrFlex} width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; }
     ${prefix}.codes .qr-code svg { max-width: 100%; max-height: 100%; }
-    ${prefix}.codes .barcode { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; }
-    ${prefix}.codes .barcode svg { max-width: 100%; max-height: 100%; }
+    ${prefix}.codes .barcode { flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    ${prefix}.codes .barcode svg { display: block; flex: 0 0 auto; max-width: none; max-height: 100%; }
     ${prefix}.codes-missing { font-size: .6em; font-weight: 700; text-align: center; border: .25mm dashed #666; padding: 1mm; }
   `;
 }
@@ -184,8 +260,8 @@ export function buildLabelSheetCss(model: LabelModelSnapshot) {
   return `<style>
     @page { size: ${model.largura_mm}mm ${model.altura_mm}mm; margin: 0; }
     * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: white; }
-    .label { width: ${model.largura_mm}mm; height: ${model.altura_mm}mm; page-break-after: always; }
     ${buildLabelContentCss(model)}
+    .label { width: ${model.largura_mm}mm; height: ${model.altura_mm}mm; page-break-after: always; }
     @media screen { body { background: #ddd; } .label { margin: 8px auto; background: white; box-shadow: 0 1px 6px #777; } }
   </style>`;
 }
@@ -214,16 +290,37 @@ export function buildLabelPrintHtml(request: LabelPrintBatch): string {
 // rotated 90deg back into the unrotated cell - a standard CSS technique, no
 // Rust/GDI changes needed since rotation already happened in the bitmap
 // html2canvas captures.
-function buildBobinaCss(profile: Pick<BobinaPrintProfile, "orientacao">, model: LabelModelSnapshot, geometry: BobinaSheetGeometry) {
+function buildBobinaGeometryCss(
+  profile: Pick<BobinaPrintProfile, "orientacao">,
+  geometry: BobinaSheetGeometry,
+  scope = "",
+) {
+  const prefix = scope ? `${scope} ` : "";
   const labelBox = profile.orientacao === "paisagem"
     ? `position: absolute; left: 50%; top: 50%; width: ${geometry.cellHeightMm}mm; height: ${geometry.cellWidthMm}mm; transform: translate(-50%, -50%) rotate(90deg);`
     : `width: 100%; height: 100%;`;
+  return `
+    ${prefix}.row { position: relative; width: ${geometry.rowWidthMm}mm; height: ${geometry.rowHeightMm}mm; background: white; }
+    ${prefix}.cell { position: absolute; width: ${geometry.cellWidthMm}mm; height: ${geometry.cellHeightMm}mm; overflow: hidden; }
+    ${prefix}.cell .label { ${labelBox} }
+  `;
+}
+
+export function buildBobinaPreviewCss(
+  profile: BobinaPrintProfile,
+  model: LabelModelSnapshot,
+  geometry: BobinaSheetGeometry,
+  scope: string,
+) {
+  return `${buildBobinaGeometryCss(profile, geometry, scope)}${buildLabelContentCss(model, scope)}`;
+}
+
+function buildBobinaCss(profile: BobinaPrintProfile, model: LabelModelSnapshot, geometry: BobinaSheetGeometry) {
   return `<style>
     @page { size: ${geometry.rowWidthMm}mm ${geometry.rowHeightMm}mm; margin: 0; }
     * { box-sizing: border-box; } html, body { margin: 0; padding: 0; background: white; }
-    .row { position: relative; width: ${geometry.rowWidthMm}mm; height: ${geometry.rowHeightMm}mm; background: white; page-break-after: always; }
-    .cell { position: absolute; width: ${geometry.cellWidthMm}mm; height: ${geometry.cellHeightMm}mm; overflow: hidden; }
-    .cell .label { ${labelBox} }
+    ${buildBobinaGeometryCss(profile, geometry)}
+    .row { page-break-after: always; }
     ${buildLabelContentCss(model)}
     @media screen { body { background: #ddd; } .row { margin: 8px auto; box-shadow: 0 1px 6px #777; } }
   </style>`;
@@ -233,10 +330,16 @@ function buildBobinaCss(profile: Pick<BobinaPrintProfile, "orientacao">, model: 
 // A null cell (last, partial row - e.g. an odd quantity in a 2-column
 // bobina) renders empty but keeps its slot, so every row - including the
 // last - shares the exact same physical geometry/calibration.
-function buildBobinaRowHtml(model: LabelModelSnapshot, geometry: BobinaSheetGeometry, rowItems: (LabelMaterialSnapshot | null)[]) {
+export function renderBobinaRowMarkup(
+  model: LabelModelSnapshot,
+  geometry: BobinaSheetGeometry,
+  rowItems: (LabelMaterialSnapshot | null)[],
+  profile?: BobinaPrintProfile,
+) {
+  const physical = barcodePhysicalGeometry(model, profile, geometry);
   const cells = geometry.cellPositions.map((position, index) => {
     const material = rowItems[index];
-    const content = material ? renderLabelMarkup(model, material) : "";
+    const content = material ? renderLabelMarkup(model, material, physical) : "";
     return `<div class="cell" style="left:${position.xMm}mm;top:${position.yMm}mm;">${content}</div>`;
   }).join("");
   return `<div class="row">${cells}</div>`;
@@ -254,7 +357,7 @@ export function buildBobinaPrintHtml(
   const geometry = computeSheetGeometry(profile);
   const rows = chunkIntoRows(items, geometry.columns);
   const css = buildBobinaCss(profile, model, geometry);
-  const body = rows.map((row) => buildBobinaRowHtml(model, geometry, row)).join("");
+  const body = rows.map((row) => renderBobinaRowMarkup(model, geometry, row, profile)).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(documentTitle)}</title>${css}</head><body>${body}</body></html>`;
 }
 
@@ -270,6 +373,7 @@ function rowKey(row: (LabelMaterialSnapshot | null)[]): string {
 // bobina printing N copies of one item collapse to exactly one job with
 // quantity=N, matching the pre-bobina pipeline's behavior/tests exactly.
 function buildBobinaRowJobs(
+  profile: BobinaPrintProfile,
   model: LabelModelSnapshot,
   geometry: BobinaSheetGeometry,
   rows: (LabelMaterialSnapshot | null)[][],
@@ -283,7 +387,7 @@ function buildBobinaRowJobs(
       previous.quantity += 1;
       continue;
     }
-    jobs.push({ key, html: `${css}${buildBobinaRowHtml(model, geometry, row)}`, quantity: 1, widthMm: geometry.rowWidthMm, heightMm: geometry.rowHeightMm });
+    jobs.push({ key, html: `${css}${renderBobinaRowMarkup(model, geometry, row, profile)}`, quantity: 1, widthMm: geometry.rowWidthMm, heightMm: geometry.rowHeightMm });
   }
   return jobs;
 }
@@ -314,7 +418,7 @@ export async function printLabelBatch(
     purpose: "etiqueta",
     documentName: `Etiquetas - lote ${batch.id}`,
     configuredPrinter,
-    jobs: buildBobinaRowJobs(model, geometry, rows, css).map(({ key: _key, ...job }) => ({ ...job, rasterScale })),
+    jobs: buildBobinaRowJobs(effectiveProfile, model, geometry, rows, css).map(({ key: _key, ...job }) => ({ ...job, rasterScale })),
     webHtml: buildBobinaPrintHtml(effectiveProfile, model, flatItems, `Etiquetas - lote ${batch.id}`),
     messages: { failed: "Não foi possível enviar a etiqueta para a impressora." },
   });
@@ -338,7 +442,7 @@ function buildTestCellSnapshot(column: number, geometry: BobinaSheetGeometry): L
 
 /**
  * "Imprimir teste de etiqueta" (section 11): exercises the EXACT same
- * pipeline as a real print (buildBobinaCss/buildBobinaRowHtml/printHtmlBatch)
+ * pipeline as a real print (buildBobinaCss/renderBobinaRowMarkup/printHtmlBatch)
  * instead of a separate simplified test-page builder, so what's validated
  * physically - borders, width, height, columns, gap, margins, alignment,
  * offset, text, barcode, QR Code - is what real batches will also produce.
@@ -353,7 +457,7 @@ export async function printBobinaTestPage(
   const testModel: LabelModelSnapshot = { ...TEST_LABEL_MODEL_BASE, largura_mm: geometry.cellWidthMm, altura_mm: geometry.cellHeightMm };
   const items = Array.from({ length: geometry.columns }, (_, index) => buildTestCellSnapshot(index + 1, geometry));
   const css = buildBobinaCss(profile, testModel, geometry);
-  const rowHtml = buildBobinaRowHtml(testModel, geometry, items);
+  const rowHtml = renderBobinaRowMarkup(testModel, geometry, items, profile);
   const rasterScale = dpiToRasterScale(resolveDpi(profile));
 
   await printHtmlBatch({

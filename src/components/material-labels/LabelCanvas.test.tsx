@@ -14,6 +14,7 @@ vi.mock("jsbarcode", () => ({
 
 import { LabelCanvas } from "./LabelCanvas";
 import { renderLabelMarkup } from "@/lib/material-label-print";
+import type { BobinaPrintProfile } from "@/lib/label-layout-engine";
 import type { LabelMaterialSnapshot, LabelModelSnapshot } from "@/lib/material-label-types";
 
 const baseModel: LabelModelSnapshot = {
@@ -28,11 +29,75 @@ const material: LabelMaterialSnapshot = {
   empresa: "Empresa X", identificador_unico: "uuid-1", conteudo_qr_code: "QR-1", codigo_barras: "789000123",
 };
 
+function profile(overrides: Partial<BobinaPrintProfile> = {}): BobinaPrintProfile {
+  return {
+    largura_etiqueta_mm: 50,
+    altura_etiqueta_mm: 30,
+    colunas: 1,
+    espacamento_horizontal_mm: 0,
+    espacamento_vertical_mm: 0,
+    margem_esquerda_mm: 0,
+    margem_direita_mm: 0,
+    margem_superior_mm: 0,
+    margem_inferior_mm: 0,
+    largura_midia_mm: null,
+    offset_horizontal_mm: 0,
+    offset_vertical_mm: 0,
+    dpi: "automatico",
+    dpi_personalizado: null,
+    orientacao: "retrato",
+    ...overrides,
+  };
+}
+
 function article(container: HTMLElement) {
   return container.querySelector("article.label")!;
 }
 
 describe("LabelCanvas", () => {
+  it("uses the 50x30 profile as the effective physical size when model and profile match", () => {
+    const matchingModel: LabelModelSnapshot = { ...baseModel, largura_mm: 50, altura_mm: 30 };
+    const { getByTestId } = render(
+      <LabelCanvas model={matchingModel} material={material} profile={profile()} />,
+    );
+    const canvas = getByTestId("label-canvas");
+
+    expect(canvas).toHaveAttribute("data-effective-width-mm", "50");
+    expect(canvas).toHaveAttribute("data-effective-height-mm", "30");
+    expect(canvas.querySelector(".cell")).toHaveStyle({ left: "0mm", top: "0mm" });
+  });
+
+  it("uses profile dimensions instead of model dimensions when they differ", () => {
+    const { getByTestId } = render(
+      <LabelCanvas model={baseModel} material={material} profile={profile({ largura_etiqueta_mm: 45, altura_etiqueta_mm: 25 })} />,
+    );
+    const canvas = getByTestId("label-canvas");
+    const style = canvas.querySelector("style")!.textContent!;
+
+    expect(canvas).toHaveAttribute("data-effective-width-mm", "45");
+    expect(canvas).toHaveAttribute("data-effective-height-mm", "25");
+    expect(style).toContain(".cell { position: absolute; width: 45mm; height: 25mm");
+  });
+
+  it("applies profile margins and offsets through the same row geometry used by printing", () => {
+    const physicalProfile = profile({
+      margem_esquerda_mm: 2,
+      margem_direita_mm: 3,
+      margem_superior_mm: 4,
+      margem_inferior_mm: 5,
+      offset_horizontal_mm: 1.5,
+      offset_vertical_mm: -0.5,
+    });
+    const { getByTestId } = render(
+      <LabelCanvas model={baseModel} material={material} profile={physicalProfile} />,
+    );
+    const canvas = getByTestId("label-canvas");
+    const style = canvas.querySelector("style")!.textContent!;
+
+    expect(style).toContain(".row { position: relative; width: 55mm; height: 39mm");
+    expect(canvas.querySelector(".cell")).toHaveStyle({ left: "3.5mm", top: "3.5mm" });
+  });
+
   it("renders through the exact same function used for real printing (renderLabelMarkup)", () => {
     const model: LabelModelSnapshot = { ...baseModel, tipo_identificacao: "ambos" };
     const { container } = render(<LabelCanvas model={model} material={material} />);
@@ -82,6 +147,31 @@ describe("LabelCanvas", () => {
     expect(el.querySelector("text")?.textContent).toBe(material.codigo_barras);
     const codes = el.querySelector(".codes") as HTMLElement;
     expect(codes.children).toHaveLength(2);
+  });
+
+  it.each([
+    [50, 30, "11mm"],
+    [60, 40, "16mm"],
+  ])("uses the shared reserved layout for a %sx%s preview", (width, height, informationHeight) => {
+    const model: LabelModelSnapshot = {
+      ...baseModel,
+      largura_mm: width,
+      altura_mm: height,
+      tipo_identificacao: "codigo_barras",
+      campos: ["nome", "empresa"],
+    };
+    const longMaterial: LabelMaterialSnapshot = {
+      ...material,
+      nome: "LINE ARRAY NEO 210 COM NOME LONGO PARA DUAS LINHAS",
+      empresa: "EMPRESA COM NOME EXTENSO",
+    };
+    const { container } = render(<LabelCanvas model={model} material={longMaterial} />);
+    const style = container.querySelector("style")!.textContent!;
+
+    expect(article(container).querySelector(".field-nome")?.textContent).toContain(longMaterial.nome);
+    expect(article(container).querySelector(".field-empresa")?.textContent).toContain(longMaterial.empresa);
+    expect(style).toContain("width: 100%; height: 100%");
+    expect(style).toContain(`grid-template-rows: minmax(0, ${informationHeight}) minmax(0, 1fr)`);
   });
 
   it("material without codigo_barras under a Code 128 model shows a clear, safe marker instead of inventing a value", () => {

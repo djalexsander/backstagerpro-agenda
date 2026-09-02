@@ -95,6 +95,19 @@ describe("material domain rules", () => {
     ).toMatch(/informe o código de barras/i);
   });
 
+  it("accepts an empty barcode when server-side generation was requested", () => {
+    expect(
+      validateMaterialForm(
+        form({
+          codigo_barras: "",
+          tipo_identificacao: "codigo_barras",
+        }),
+        null,
+        true,
+      ),
+    ).toEqual({});
+  });
+
   it("reports required fields without mutating the form", () => {
     const values = { ...EMPTY_MATERIAL_FORM };
     const errors = validateMaterialForm(values);

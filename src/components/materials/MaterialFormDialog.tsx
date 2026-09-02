@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
 import {
   Check,
   Copy,
@@ -10,7 +11,16 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +53,7 @@ import {
   type MaterialWithRelations,
 } from "@/lib/material-types";
 import {
-  generateMaterialBarcodeValue,
+  buildMaterialQrContent,
   normalizeMaterialBarcode,
 } from "@/lib/material-identification";
 import {
@@ -51,8 +61,13 @@ import {
   validateMaterialForm,
   type MaterialFormErrors,
 } from "@/lib/material-domain";
-import { saveMaterial } from "@/lib/material-service";
+import {
+  generateMaterialBarcode,
+  generateMaterialQrCode,
+  saveMaterial,
+} from "@/lib/material-service";
 import { MaterialIdentificationPendingError } from "@/lib/material-errors";
+import { MaterialBarcodePreview } from "./MaterialBarcodePreview";
 import {
   removeMaterialPhoto,
   setMainMaterialPhoto,
@@ -100,7 +115,12 @@ export function MaterialFormDialog({
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
   const [busyPhotoId, setBusyPhotoId] = useState<string | null>(null);
   const [generateQrOnSave, setGenerateQrOnSave] = useState(true);
+  const [persistedMaterialId, setPersistedMaterialId] = useState<string | null>(null);
+  const [technicalIdentifier, setTechnicalIdentifier] = useState<string | null>(null);
+  const [qrContent, setQrContent] = useState<string | null>(null);
   const [barcodeCopied, setBarcodeCopied] = useState(false);
+  const [qrCopied, setQrCopied] = useState(false);
+  const [confirmAutomaticBarcodeOpen, setConfirmAutomaticBarcodeOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -110,7 +130,12 @@ export function MaterialFormDialog({
     setGenerateQrOnSave(
       !material && (material?.tipo_identificacao ?? "qr_code") !== "codigo_barras",
     );
+    setPersistedMaterialId(material?.id ?? null);
+    setTechnicalIdentifier(material?.identificador_unico ?? null);
+    setQrContent(material?.conteudo_qr_code ?? null);
     setBarcodeCopied(false);
+    setQrCopied(false);
+    setConfirmAutomaticBarcodeOpen(false);
   }, [open, material]);
 
   const setField = <K extends keyof MaterialFormValues>(
@@ -123,25 +148,36 @@ export function MaterialFormDialog({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const validation = validateMaterialForm(values, material);
+      const validation = validateMaterialForm(
+        values,
+        material,
+        false,
+      );
       if (Object.keys(validation).length > 0) {
         setErrors(validation);
         throw new Error("Revise os campos destacados.");
       }
 
-      const materialId = await saveMaterial({
+      const currentMaterialId = material?.id ?? persistedMaterialId ?? undefined;
+      let savedMaterial = await saveMaterial({
         empresaId,
         values,
-        id: material?.id,
-        generateQrCode: !material && generateQrOnSave,
+        id: currentMaterialId,
+        generateQrCode: !currentMaterialId && generateQrOnSave,
+        generateBarcode: false,
       });
+
+      if (currentMaterialId && generateQrOnSave && !qrContent) {
+        const generatedQrContent = await generateMaterialQrCode(savedMaterial.id);
+        savedMaterial = { ...savedMaterial, conteudo_qr_code: generatedQrContent };
+      }
 
       const photoErrors: string[] = [];
       for (const [index, file] of pendingPhotos.entries()) {
         try {
           await uploadMaterialPhoto({
             empresaId,
-            materialId: materialId.id,
+            materialId: savedMaterial.id,
             file,
             main: !material?.fotos.length && index === 0,
           });
@@ -152,7 +188,7 @@ export function MaterialFormDialog({
         }
       }
 
-      return { materialId: materialId.id, photoErrors };
+      return { materialId: savedMaterial.id, photoErrors };
     },
     onSuccess: async ({ materialId, photoErrors }) => {
       await onSaved(materialId);
@@ -182,10 +218,94 @@ export function MaterialFormDialog({
     },
   });
 
-  const generateBarcode = () => {
-    setField("codigo_barras", generateMaterialBarcodeValue());
-    setBarcodeCopied(false);
-  };
+  const identificationMutation = useMutation({
+    mutationFn: async (kind: "barcode" | "qr") => {
+      const currentMaterialId = material?.id ?? persistedMaterialId;
+      if (currentMaterialId) {
+        const generatedValue = kind === "barcode"
+          ? await generateMaterialBarcode(currentMaterialId)
+          : await generateMaterialQrCode(currentMaterialId);
+        return {
+          kind,
+          materialId: currentMaterialId,
+          barcode: kind === "barcode" ? generatedValue : values.codigo_barras.trim() || null,
+          qr: kind === "qr" ? generatedValue : qrContent,
+          identifier: technicalIdentifier,
+          createdDraft: false,
+        };
+      }
+
+      const willHaveBarcode = kind === "barcode" || Boolean(values.codigo_barras.trim());
+      const willHaveQr = kind === "qr";
+      const generationValues: MaterialFormValues = {
+        ...values,
+        codigo_barras: kind === "barcode" ? "" : values.codigo_barras,
+        tipo_identificacao: willHaveBarcode && willHaveQr
+          ? "ambos"
+          : willHaveBarcode
+            ? "codigo_barras"
+            : "qr_code",
+      };
+      const validation = validateMaterialForm(generationValues, null, kind === "barcode");
+      if (Object.keys(validation).length > 0) {
+        setErrors(validation);
+        throw new Error("Preencha os campos obrigatórios antes de gerar a identificação.");
+      }
+
+      const created = await saveMaterial({
+        empresaId,
+        values: generationValues,
+        generateQrCode: kind === "qr",
+        generateBarcode: kind === "barcode",
+      });
+      return {
+        kind,
+        materialId: created.id,
+        barcode: created.codigo_barras,
+        qr: created.conteudo_qr_code,
+        identifier: created.identificador_unico,
+        createdDraft: true,
+      };
+    },
+    onSuccess: (result) => {
+      setPersistedMaterialId(result.materialId);
+      setTechnicalIdentifier(result.identifier);
+      setQrContent(result.qr);
+      setValues((current) => {
+        const barcode = result.barcode ?? current.codigo_barras;
+        const hasQr = Boolean(result.qr);
+        const hasBarcode = Boolean(barcode.trim());
+        return {
+          ...current,
+          codigo_barras: barcode,
+          tipo_identificacao: hasQr && hasBarcode
+            ? "ambos"
+            : hasBarcode
+              ? "codigo_barras"
+              : "qr_code",
+        };
+      });
+      if (result.kind === "qr") setGenerateQrOnSave(true);
+      setBarcodeCopied(false);
+      setQrCopied(false);
+      toast({
+        title: result.kind === "qr" ? "QR Code gerado" : "Código de barras gerado",
+        description: result.createdDraft
+          ? "O material foi salvo para reservar sua identificação. Continue a edição e conclua em Salvar material."
+          : undefined,
+      });
+    },
+    onError: (error: Error) => {
+      if (error instanceof MaterialIdentificationPendingError) {
+        setPersistedMaterialId(error.materialId);
+      }
+      toast({
+        title: "Não foi possível gerar a identificação",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const copyBarcode = async () => {
     if (!values.codigo_barras.trim()) return;
@@ -199,6 +319,42 @@ export function MaterialFormDialog({
         variant: "destructive",
       });
     }
+  };
+
+  const requestAutomaticBarcode = () => {
+    if (values.codigo_barras.trim()) {
+      setConfirmAutomaticBarcodeOpen(true);
+      return;
+    }
+    identificationMutation.mutate("barcode");
+  };
+
+  const requestQrCode = () => {
+    if (qrContent && technicalIdentifier) {
+      setQrContent(buildMaterialQrContent(technicalIdentifier));
+      toast({ title: "Visualização do QR Code reconstruída" });
+      return;
+    }
+    identificationMutation.mutate("qr");
+  };
+
+  const copyQrContent = async () => {
+    if (!qrContent) return;
+    try {
+      await navigator.clipboard.writeText(qrContent);
+      setQrCopied(true);
+      window.setTimeout(() => setQrCopied(false), 1500);
+    } catch {
+      toast({ title: "Não foi possível copiar o conteúdo do QR Code", variant: "destructive" });
+    }
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (nextOpen || material || !persistedMaterialId) {
+      onOpenChange(nextOpen);
+      return;
+    }
+    void onSaved(persistedMaterialId).finally(() => onOpenChange(false));
   };
 
   const handleSetMain = async (photo: MaterialPhoto) => {
@@ -252,7 +408,7 @@ export function MaterialFormDialog({
     !!material && material.status_operacional !== values.status_operacional;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-h-[94vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -326,63 +482,7 @@ export function MaterialFormDialog({
                 }
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="material-barcode">
-                Código de barras
-                {(values.tipo_identificacao === "codigo_barras" ||
-                  values.tipo_identificacao === "ambos") &&
-                  " *"}
-              </Label>
-              <Input
-                id="material-barcode"
-                value={values.codigo_barras}
-                onChange={(event) =>
-                  setField("codigo_barras", event.target.value)
-                }
-                onBlur={() =>
-                  setField(
-                    "codigo_barras",
-                    normalizeMaterialBarcode(values.codigo_barras) ?? "",
-                  )
-                }
-                disabled={!canGenerateIdentification}
-                placeholder="Compatível com Code 128"
-                maxLength={80}
-              />
-              <FieldError message={errors.codigo_barras} />
-              <p className="text-xs text-muted-foreground">
-                Informe manualmente ou gere um valor aleatório compatível com
-                Code 128.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={generateBarcode}
-                  disabled={!canGenerateIdentification}
-                >
-                  <ScanBarcode className="mr-2 h-4 w-4" />
-                  {values.codigo_barras
-                    ? "Gerar outro código"
-                    : "Gerar código de barras"}
-                </Button>
-                {!!values.codigo_barras.trim() && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={copyBarcode}
-                  >
-                    {barcodeCopied ? (
-                      <Check className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Copy className="mr-2 h-4 w-4" />
-                    )}
-                    {barcodeCopied ? "Copiado" : "Copiar"}
-                  </Button>
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Tipo de identificação</Label>
               <Select
                 value={values.tipo_identificacao}
@@ -411,67 +511,167 @@ export function MaterialFormDialog({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                O QR Code usa apenas o identificador técnico imutável.
+                Escolha quais identificações deseja usar neste material.
               </p>
             </div>
-            <div className="space-y-3 rounded-lg border p-4 sm:col-span-2">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="generate-material-qr"
-                  checked={
-                    material
-                      ? !!material.conteudo_qr_code
-                      : generateQrOnSave
-                  }
-                  disabled={
-                    !!material ||
-                    !canGenerateIdentification ||
-                    values.tipo_identificacao === "qr_code"
-                  }
-                  onCheckedChange={(checked) => {
-                    if (material) return;
-                    const shouldGenerate = checked === true;
-                    setGenerateQrOnSave(shouldGenerate);
-                    if (
-                      shouldGenerate &&
-                      values.tipo_identificacao === "codigo_barras"
-                    ) {
-                      setField("tipo_identificacao", "ambos");
-                    } else if (
-                      !shouldGenerate &&
-                      values.tipo_identificacao === "ambos"
-                    ) {
-                      setField("tipo_identificacao", "codigo_barras");
-                    }
-                  }}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="generate-material-qr">
-                    Gerar QR Code ao salvar
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {material
-                      ? material.conteudo_qr_code
-                        ? "O QR Code existente é imutável e não será recriado na edição."
-                        : "A edição de campos comuns não cria um novo QR Code."
-                      : generateQrOnSave
-                        ? "O material será criado e o QR Code ficará disponível nesta mesma ação."
-                        : "Este cadastro usará somente o código de barras."}
-                  </p>
-                </div>
-              </div>
-              {!material && generateQrOnSave && (
-                <div className="flex items-center gap-3 rounded-md bg-muted p-3">
-                  <QrCode className="h-8 w-8 shrink-0 text-primary" />
-                  <div>
-                    <p className="text-sm font-medium">
-                      QR Code preparado no cadastro
-                    </p>
-                    <code className="text-xs text-muted-foreground">
-                      BACKSTAGE-PRO:MATERIAL:&lt;UUID técnico imutável&gt;
-                    </code>
+            <div
+              className={`grid min-w-0 gap-4 sm:col-span-2 ${
+                values.tipo_identificacao === "ambos" ? "lg:grid-cols-2" : ""
+              }`}
+              data-testid="material-identification-cards"
+            >
+              {values.tipo_identificacao !== "qr_code" && (
+                <section
+                  className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-lg border bg-card p-4 shadow-sm"
+                  data-testid="material-barcode-card"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold">Código de barras</h3>
+                      <p className="text-xs text-muted-foreground">Identificação rápida para leitura no scanner.</p>
+                    </div>
+                    {!material?.codigo_barras && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={requestAutomaticBarcode}
+                        disabled={!canGenerateIdentification || identificationMutation.isPending}
+                      >
+                        {identificationMutation.isPending && identificationMutation.variables === "barcode" ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ScanBarcode className="mr-2 h-4 w-4" />
+                        )}
+                        {identificationMutation.isPending && identificationMutation.variables === "barcode"
+                          ? "Gerando..."
+                          : "Gerar código automático"}
+                      </Button>
+                    )}
                   </div>
-                </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="material-barcode">Código de barras</Label>
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                      <Input
+                        id="material-barcode"
+                        className="min-w-0"
+                        value={values.codigo_barras}
+                        onChange={(event) => setField("codigo_barras", event.target.value)}
+                        onBlur={() =>
+                          setField(
+                            "codigo_barras",
+                            normalizeMaterialBarcode(values.codigo_barras) ?? "",
+                          )
+                        }
+                        disabled={!canGenerateIdentification}
+                        placeholder="Ainda não gerado"
+                        maxLength={80}
+                      />
+                      {values.codigo_barras.trim() && (
+                        <Button type="button" variant="ghost" size="sm" onClick={copyBarcode}>
+                          {barcodeCopied ? (
+                            <Check className="mr-2 h-4 w-4" />
+                          ) : (
+                            <Copy className="mr-2 h-4 w-4" />
+                          )}
+                          {barcodeCopied ? "Copiado" : "Copiar"}
+                        </Button>
+                      )}
+                    </div>
+                    <FieldError message={errors.codigo_barras} />
+                  </div>
+
+                  {identificationMutation.isError && identificationMutation.variables === "barcode" && (
+                    <p className="text-sm text-destructive" role="alert">
+                      Não foi possível gerar o código. Tente novamente.
+                    </p>
+                  )}
+                  {values.codigo_barras.trim() ? (
+                    <div
+                      className="flex min-h-28 min-w-0 items-center justify-center overflow-hidden rounded-md border bg-white p-2"
+                      data-testid="material-barcode-preview"
+                    >
+                      <MaterialBarcodePreview value={values.codigo_barras.trim()} />
+                    </div>
+                  ) : (
+                    <div className="flex min-h-28 items-center justify-center rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                      O código e sua prévia aparecerão aqui.
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {values.tipo_identificacao !== "codigo_barras" && (
+                <section
+                  className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-lg border bg-card p-4 shadow-sm"
+                  data-testid="material-qr-card"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold">QR Code</h3>
+                      <p className="text-xs text-muted-foreground">Identificação técnica única do material.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={requestQrCode}
+                      disabled={!canGenerateIdentification || identificationMutation.isPending}
+                    >
+                      {identificationMutation.isPending && identificationMutation.variables === "qr" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <QrCode className="mr-2 h-4 w-4" />
+                      )}
+                      {identificationMutation.isPending && identificationMutation.variables === "qr"
+                        ? "Gerando..."
+                        : "Gerar QR Code"}
+                    </Button>
+                  </div>
+
+                  {identificationMutation.isError && identificationMutation.variables === "qr" && (
+                    <p className="text-sm text-destructive" role="alert">
+                      Não foi possível gerar o QR Code. Tente novamente.
+                    </p>
+                  )}
+                  {qrContent ? (
+                    <div
+                      className="flex min-w-0 flex-1 flex-col items-center gap-3 rounded-md border bg-white p-3 text-foreground"
+                      data-testid="material-qr-preview"
+                    >
+                      <QRCodeSVG
+                        value={qrContent}
+                        size={120}
+                        level="M"
+                        title={`QR Code de ${values.nome || "material"}`}
+                      />
+                      <div className="w-full min-w-0 space-y-2 text-xs">
+                        <Label>Conteúdo</Label>
+                        <code className="block break-all rounded bg-muted p-2 text-muted-foreground">
+                          {qrContent}
+                        </code>
+                        {technicalIdentifier && (
+                          <p className="break-all text-muted-foreground">
+                            Identificador imutável: {technicalIdentifier}
+                          </p>
+                        )}
+                        <Button type="button" variant="ghost" size="sm" onClick={copyQrContent}>
+                          {qrCopied ? (
+                            <Check className="mr-2 h-4 w-4" />
+                          ) : (
+                            <Copy className="mr-2 h-4 w-4" />
+                          )}
+                          {qrCopied ? "Copiado" : "Copiar conteúdo do QR"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-44 items-center justify-center rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                      O QR Code e seu conteúdo aparecerão aqui.
+                    </div>
+                  )}
+                </section>
               )}
             </div>
 
@@ -737,11 +937,11 @@ export function MaterialFormDialog({
               type="button"
               variant="outline"
               disabled={saveMutation.isPending}
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleDialogOpenChange(false)}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saveMutation.isPending}>
+            <Button type="submit" disabled={saveMutation.isPending || identificationMutation.isPending}>
               {saveMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
@@ -750,6 +950,33 @@ export function MaterialFormDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <AlertDialog
+        open={confirmAutomaticBarcodeOpen}
+        onOpenChange={(open) =>
+          !identificationMutation.isPending && setConfirmAutomaticBarcodeOpen(open)
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir o código digitado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O valor manual ainda não persistido será substituído por um novo
+              código automático de 10 dígitos gerado pelo servidor.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={identificationMutation.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={identificationMutation.isPending}
+              onClick={() => identificationMutation.mutate("barcode")}
+            >
+              Confirmar e gerar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

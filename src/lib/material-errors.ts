@@ -30,9 +30,13 @@ export class MaterialIdentificationPendingError extends Error {
   readonly materialId: string;
   readonly originalError: unknown;
 
-  constructor(materialId: string, originalError: unknown) {
+  constructor(
+    materialId: string,
+    originalError: unknown,
+    identification = "QR Code",
+  ) {
     super(
-      "O material foi cadastrado, mas o QR Code não pôde ser gerado. A identificação ficou pendente e pode ser concluída nos detalhes.",
+      `O material foi salvo, mas o ${identification} não pôde ser gerado. A identificação ficou pendente e pode ser concluída nos detalhes.`,
     );
     this.name = "MaterialIdentificationPendingError";
     this.materialId = materialId;

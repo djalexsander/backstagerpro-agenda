@@ -5446,6 +5446,10 @@ export type Database = {
         Args: { _material_id: string }
         Returns: string
       }
+      replace_material_barcode: {
+        Args: { _material_id: string }
+        Returns: string
+      }
       get_canonical_empresa_perfil: {
         Args: { _user_id: string }
         Returns: string
