@@ -396,7 +396,7 @@ describe("ScannerOperationForm - CHECK-IN", () => {
     expect(vi.mocked(searchCustodyMaterials)).not.toHaveBeenCalled();
   });
 
-  it("23. bloqueia quando o destino escolhido é a mesma localização de onde o material saiu", async () => {
+  it("23. permite devolver na mesma localização de onde o material saiu (custódia aberta volta para a origem)", async () => {
     const { onConfirm } = renderForm({
       pendingRead: checkinRead({ localizacao_origem_id: "l-bar", localizacao_origem_nome: "Barracão" }),
     });
@@ -404,10 +404,47 @@ describe("ScannerOperationForm - CHECK-IN", () => {
     await pickOption("Localização de destino", /Barracão/);
     fireEvent.click(screen.getByRole("button", { name: "Confirmar Check-in" }));
 
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "checkin",
+        originLocationId: "l-bar",
+        destinationLocationId: "l-bar",
+      }),
+    );
     expect(
-      await screen.findByText("Origem e destino não podem ser a mesma localização."),
-    ).toBeInTheDocument();
-    expect(onConfirm).not.toHaveBeenCalled();
+      screen.queryByText("Origem e destino não podem ser a mesma localização."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("24. permite devolver uma custódia de Locação na mesma localização de saída", async () => {
+    const { onConfirm } = renderForm({
+      pendingRead: checkinRead({
+        custodia_id: "cust-loc",
+        finalidade: "locacao",
+        referencia_tipo: "locacao_item",
+        referencia_id: "item-1",
+        localizacao_origem_id: "l-bar",
+        localizacao_origem_nome: "Barracão",
+        locacao: {
+          locacao_id: "loc-1",
+          locacao_numero: "LOC-2026-000123",
+          cliente_id: "cli-1",
+          cliente_nome: "Empresa X",
+        },
+      }),
+    });
+
+    await pickOption("Localização de destino", /Barracão/);
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar Check-in" }));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      operation: "checkin",
+      custodyId: "cust-loc",
+      originLocationId: "l-bar",
+      destinationLocationId: "l-bar",
+      returnCondition: "bom",
+      rental: { rentalId: "loc-1", rentalItemId: "item-1" },
+    });
   });
 
   it("bloqueia o check-in de um material sem custódia aberta", () => {

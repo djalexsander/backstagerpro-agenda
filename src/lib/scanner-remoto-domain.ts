@@ -223,20 +223,6 @@ export function resolveRentalItemForMaterial(
   return itens.find((item) => item.material.id === materialId)?.id ?? null;
 }
 
-/**
- * Origem = destino sem sentido: só bloqueia um check-in cuja localização de
- * destino escolhida é a MESMA de onde o material saiu (movimentação no-op).
- * Check-out não tem destino, então nunca bloqueia aqui. Backend inalterado -
- * validação puramente client-side.
- */
-export function scannerOriginDestinationInvalid(context: ScannerOperationContext): boolean {
-  if (context.operation !== "checkin") return false;
-  return (
-    context.originLocationId != null &&
-    context.originLocationId === context.destinationLocationId
-  );
-}
-
 export interface ScannerReadDispatch {
   /** Vai no _custodia_id do RPC (revalidado lá). Só para check-in. */
   custodiaId?: string;

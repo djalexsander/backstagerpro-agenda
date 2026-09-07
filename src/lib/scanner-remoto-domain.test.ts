@@ -9,9 +9,7 @@ import {
   OPERABLE_RENTAL_STATUSES,
   pickTraceabilityMatch,
   resolveRentalItemForMaterial,
-  scannerOriginDestinationInvalid,
   traceabilityMatchesScan,
-  type ScannerCheckinContext,
   type ScannerCheckoutContext,
 } from "./scanner-remoto-domain";
 import type { CustodyBalanceOption } from "./checkin-checkout-types";
@@ -293,46 +291,6 @@ describe("resolveRentalItemForMaterial", () => {
   it("returns null when the scanned material is not in the rental (blocks confirmation)", () => {
     expect(resolveRentalItemForMaterial(itens, "mat-outro")).toBeNull();
     expect(resolveRentalItemForMaterial([], "mat-1")).toBeNull();
-  });
-});
-
-describe("scannerOriginDestinationInvalid", () => {
-  const checkin = (overrides: Partial<ScannerCheckinContext> = {}): ScannerCheckinContext => ({
-    operation: "checkin",
-    custodyId: "c1",
-    originLocationId: "loc1",
-    destinationLocationId: "loc2",
-    returnCondition: "bom",
-    rental: null,
-    ...overrides,
-  });
-
-  it("blocks a check-in whose destination equals the custody origin (no-op move)", () => {
-    expect(scannerOriginDestinationInvalid(checkin({ destinationLocationId: "loc1" }))).toBe(true);
-  });
-
-  it("allows a check-in that actually changes location", () => {
-    expect(scannerOriginDestinationInvalid(checkin())).toBe(false);
-  });
-
-  it("never blocks when the custody has no known origin", () => {
-    expect(
-      scannerOriginDestinationInvalid(checkin({ originLocationId: null, destinationLocationId: "loc2" })),
-    ).toBe(false);
-  });
-
-  it("never blocks a check-out (no destination in play)", () => {
-    const checkout: ScannerCheckoutContext = {
-      operation: "checkout",
-      originLocationId: "loc1",
-      responsibleType: "usuario",
-      responsibleId: "u1",
-      condition: "bom",
-      purpose: "uso_interno",
-      event: null,
-      rental: null,
-    };
-    expect(scannerOriginDestinationInvalid(checkout)).toBe(false);
   });
 });
 

@@ -24,7 +24,6 @@ import {
   describePendingReadContext,
   isOperableRentalStatus,
   resolveRentalItemForMaterial,
-  scannerOriginDestinationInvalid,
   type ScannerCheckinContext,
   type ScannerCheckoutContext,
   type ScannerOperationContext,
@@ -120,6 +119,11 @@ function ScannerCheckinForm({
       setError("Selecione a localização de destino.");
       return;
     }
+    // Check-in de custódia aberta é devolução: o material pode (e no caso comum
+    // deve) voltar para a MESMA localização de onde saiu - inclusive quando a
+    // custódia é de Locação. Sem trava de origem == destino aqui; a validação
+    // de origem <> destino que continua útil é a de transferência interna de
+    // estoque (validateStockMovement), não a devolução.
     const context: ScannerCheckinContext = {
       operation: "checkin",
       custodyId: custody.custodia_id,
@@ -131,10 +135,6 @@ function ScannerCheckinForm({
           ? { rentalId: custody.locacao.locacao_id, rentalItemId: custody.referencia_id }
           : null,
     };
-    if (scannerOriginDestinationInvalid(context)) {
-      setError("Origem e destino não podem ser a mesma localização.");
-      return;
-    }
     setError("");
     onConfirm(context);
   };
