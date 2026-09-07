@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -845,13 +846,11 @@ export function MaterialFormDialog({
             <SectionTitle>Aquisição</SectionTitle>
             <div className="space-y-2">
               <Label htmlFor="material-purchase-date">Data de aquisição</Label>
-              <Input
+              <DatePicker
                 id="material-purchase-date"
-                type="date"
                 value={values.data_aquisicao}
-                onChange={(event) =>
-                  setField("data_aquisicao", event.target.value)
-                }
+                onChange={(value) => setField("data_aquisicao", value)}
+                clearable
               />
             </div>
             <div className="space-y-2">

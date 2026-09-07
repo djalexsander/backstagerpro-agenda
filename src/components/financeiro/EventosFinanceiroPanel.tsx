@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -470,10 +471,9 @@ export function EventosFinanceiroPanel({
                         {!cacheDetail.recebimentoEvento && (
                           <div className="space-y-1">
                             <Label className="text-xs">Data do Recebimento</Label>
-                            <Input
-                              type="date"
+                            <DatePicker
                               value={cacheDetail.dataRecebimento}
-                              onChange={(e) => setCacheDetail(p => ({ ...p, dataRecebimento: e.target.value }))}
+                              onChange={(value) => setCacheDetail(p => ({ ...p, dataRecebimento: value }))}
                               className="h-8 text-sm"
                             />
                           </div>
@@ -562,13 +562,12 @@ export function EventosFinanceiroPanel({
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-xs">Vencimento</Label>
-                                <Input
-                                  type="date"
+                                <DatePicker
                                   value={parcela.vencimento}
-                                  onChange={(e) => {
+                                  onChange={(value) => {
                                     setCacheDetail(p => ({
                                       ...p,
-                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, vencimento: e.target.value } : pp),
+                                      parcelas: p.parcelas.map((pp, pi) => pi === i ? { ...pp, vencimento: value } : pp),
                                     }));
                                   }}
                                   className="h-7 text-xs"

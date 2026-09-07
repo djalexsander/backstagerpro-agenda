@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -295,11 +295,11 @@ export default function Financeiro() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Data Início</Label>
-                  <Input type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                  <DatePicker value={exportStart} onChange={setExportStart} clearable placeholder="De" />
                 </div>
                 <div className="space-y-2">
                   <Label>Data Fim</Label>
-                  <Input type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                  <DatePicker value={exportEnd} onChange={setExportEnd} clearable placeholder="Até" />
                 </div>
               </div>
             )}

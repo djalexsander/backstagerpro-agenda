@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -380,11 +381,11 @@ export default function Backups() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Data Inicial</Label>
-              <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+              <DatePicker value={periodStart} onChange={setPeriodStart} clearable placeholder="De" />
             </div>
             <div className="space-y-2">
               <Label>Data Final</Label>
-              <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+              <DatePicker value={periodEnd} onChange={setPeriodEnd} clearable placeholder="Até" />
             </div>
           </div>
           <DialogFooter>

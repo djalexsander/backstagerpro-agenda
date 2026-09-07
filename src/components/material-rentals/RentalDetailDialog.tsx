@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -526,7 +527,12 @@ export function RentalDetailDialog({
             {paymentMode === "avista" && (
               <div className="space-y-2">
                 <Label htmlFor="payment-due-date">Vencimento *</Label>
-                <Input id="payment-due-date" type="date" value={paymentDueDate} onChange={(event) => setPaymentDueDate(event.target.value)} />
+                <DatePicker
+                  id="payment-due-date"
+                  value={paymentDueDate}
+                  onChange={setPaymentDueDate}
+                  placeholder="Selecionar vencimento"
+                />
               </div>
             )}
             {paymentMode === "parcelado" && (
@@ -546,10 +552,9 @@ export function RentalDetailDialog({
                           setInstallments((previous) => previous.map((item, itemIndex) => (itemIndex === index ? { ...item, valor: value } : item)));
                         }}
                       />
-                      <Input
-                        type="date" value={installment.vencimento}
-                        onChange={(event) => {
-                          const value = event.target.value;
+                      <DatePicker
+                        value={installment.vencimento}
+                        onChange={(value) => {
                           setInstallments((previous) => previous.map((item, itemIndex) => (itemIndex === index ? { ...item, vencimento: value } : item)));
                         }}
                       />

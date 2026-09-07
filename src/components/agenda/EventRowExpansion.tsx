@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -115,7 +116,7 @@ export function EventRowExpansion({ eventId, numDays, empresaId }: EventRowExpan
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Data</label>
-                <Input type="date" className="h-8 text-xs" value={day.date} onChange={(e) => updateDay(idx, "date", e.target.value)} disabled={!isAdmin} />
+                <DatePicker className="h-8 text-xs" value={day.date} onChange={(value) => updateDay(idx, "date", value)} disabled={!isAdmin} clearable />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground flex items-center gap-1"><Music className="h-3 w-3" /> Artista</label>

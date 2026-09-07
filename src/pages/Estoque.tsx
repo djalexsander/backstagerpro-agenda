@@ -17,6 +17,7 @@ import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -631,25 +632,27 @@ export default function Estoque() {
                   }))
                 }
               />
-              <Input
-                type="date"
+              <DatePicker
                 value={historyFilters.dateFrom ?? ""}
-                onChange={(event) =>
+                onChange={(value) =>
                   setHistoryFilters((current) => ({
                     ...current,
-                    dateFrom: event.target.value || undefined,
+                    dateFrom: value || undefined,
                   }))
                 }
+                clearable
+                placeholder="De"
               />
-              <Input
-                type="date"
+              <DatePicker
                 value={historyFilters.dateTo ?? ""}
-                onChange={(event) =>
+                onChange={(value) =>
                   setHistoryFilters((current) => ({
                     ...current,
-                    dateTo: event.target.value || undefined,
+                    dateTo: value || undefined,
                   }))
                 }
+                clearable
+                placeholder="Até"
               />
             </CardContent>
           </Card>

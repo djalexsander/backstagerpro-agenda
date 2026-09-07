@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
@@ -261,11 +262,11 @@ export default function Agenda() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Data Início</Label>
-                    <Input type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+                    <DatePicker value={exportStart} onChange={setExportStart} clearable placeholder="De" />
                   </div>
                   <div className="space-y-2">
                     <Label>Data Fim</Label>
-                    <Input type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+                    <DatePicker value={exportEnd} onChange={setExportEnd} clearable placeholder="Até" />
                   </div>
                 </div>
               )}

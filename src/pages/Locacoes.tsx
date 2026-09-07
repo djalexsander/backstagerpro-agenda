@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,8 +66,8 @@ export default function Locacoes() {
         <Select value={filters.status} onValueChange={(value) => setFilters((current) => ({ ...current, status: value as RentalStatus | "todos" }))}><SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos os status</SelectItem>{Object.entries(RENTAL_STATUS_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>
         <Select value={filters.customerId || "todos"} onValueChange={(value) => setFilters((current) => ({ ...current, customerId: value === "todos" ? "" : value }))}><SelectTrigger><SelectValue placeholder="Cliente" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos os clientes</SelectItem>{rentalsState.customers.map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.nome_fantasia || customer.nome}</SelectItem>)}</SelectContent></Select>
         <Input value={filters.responsible} onChange={(event) => setFilters((current) => ({ ...current, responsible: event.target.value }))} placeholder="Responsável" />
-        <Input type="date" value={filters.dateFrom} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} />
-        <Input type="date" value={filters.dateTo} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} />
+        <DatePicker value={filters.dateFrom} onChange={(value) => setFilters((current) => ({ ...current, dateFrom: value }))} clearable placeholder="De" />
+        <DatePicker value={filters.dateTo} onChange={(value) => setFilters((current) => ({ ...current, dateTo: value }))} clearable placeholder="Até" />
         <label className="flex items-center gap-2 rounded-md border px-3"><Checkbox checked={filters.overdueOnly} onCheckedChange={(checked) => setFilters((current) => ({ ...current, overdueOnly: checked === true }))} />Somente atrasadas</label>
         <Button variant="ghost" onClick={() => setFilters(initialFilters)}>Limpar filtros</Button>
       </div>

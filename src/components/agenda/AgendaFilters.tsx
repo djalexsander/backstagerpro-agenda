@@ -1,3 +1,4 @@
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
@@ -53,9 +54,9 @@ export function AgendaFilters({
       <div className="flex flex-col sm:flex-row gap-3 items-end">
         <div className="flex gap-2 items-center">
           <span className="text-xs text-muted-foreground whitespace-nowrap">Período:</span>
-          <Input type="date" className="w-36 h-9 text-xs" value={periodStart} onChange={(e) => onPeriodStartChange(e.target.value)} />
+          <DatePicker className="w-36 h-9 text-xs" value={periodStart} onChange={onPeriodStartChange} clearable placeholder="De" />
           <span className="text-xs text-muted-foreground">até</span>
-          <Input type="date" className="w-36 h-9 text-xs" value={periodEnd} onChange={(e) => onPeriodEndChange(e.target.value)} />
+          <DatePicker className="w-36 h-9 text-xs" value={periodEnd} onChange={onPeriodEndChange} clearable placeholder="Até" />
         </div>
         {(periodStart || periodEnd) && (
           <button className="text-xs text-primary hover:underline" onClick={() => { onPeriodStartChange(""); onPeriodEndChange(""); }}>
