@@ -576,8 +576,8 @@ export default function EventForm() {
           <Card>
             <CardHeader><CardTitle className="text-base">Logística & Observações</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0 space-y-2">
                   <Label>Saída Logística</Label>
                   <DateTimePicker
                     value={form.logistics_departure}
@@ -586,7 +586,7 @@ export default function EventForm() {
                     placeholder="Data e hora"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label>Horário de Montagem</Label>
                   <Input value={form.setup_time} onChange={set("setup_time")} placeholder="Ex.: 14:00" />
                 </div>

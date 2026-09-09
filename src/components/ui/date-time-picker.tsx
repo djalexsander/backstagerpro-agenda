@@ -56,8 +56,11 @@ export function DateTimePicker({
   };
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <div className="flex-1">
+    // Empilhado no mobile (data em cima, hora embaixo, ambos 100%); volta a ficar
+    // lado a lado a partir de `sm`. `min-w-0` impede o gatilho de data de forçar
+    // overflow quando os dois dividem a linha.
+    <div className={cn("flex flex-col gap-2 sm:flex-row sm:items-center", className)}>
+      <div className="min-w-0 flex-1">
         <DatePicker
           id={id}
           value={datePart}
@@ -66,24 +69,26 @@ export function DateTimePicker({
           placeholder={placeholder}
         />
       </div>
-      <Input
-        type="time"
-        aria-label="Hora"
-        className="w-32"
-        value={timePart}
-        onChange={(event) => emit(datePart, event.target.value)}
-        disabled={disabled}
-      />
-      {showClear && (
-        <button
-          type="button"
-          aria-label="Limpar data e hora"
-          onClick={() => onChange("")}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      )}
+      <div className="flex items-center gap-2">
+        <Input
+          type="time"
+          aria-label="Hora"
+          className="w-full sm:w-32"
+          value={timePart}
+          onChange={(event) => emit(datePart, event.target.value)}
+          disabled={disabled}
+        />
+        {showClear && (
+          <button
+            type="button"
+            aria-label="Limpar data e hora"
+            onClick={() => onChange("")}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
