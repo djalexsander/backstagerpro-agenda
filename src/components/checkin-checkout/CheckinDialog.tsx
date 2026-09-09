@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -166,7 +167,7 @@ export function CheckinDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="checkin-effective-at">Data/hora do retorno</Label>
-            <Input id="checkin-effective-at" type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
+            <DateTimePicker id="checkin-effective-at" value={effectiveAt} onChange={setEffectiveAt} clearable />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Ocorrência</Label>

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -578,7 +579,12 @@ export default function EventForm() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Saída Logística</Label>
-                  <Input type="datetime-local" value={form.logistics_departure} onChange={set("logistics_departure")} />
+                  <DateTimePicker
+                    value={form.logistics_departure}
+                    onChange={(value) => setForm((prev) => ({ ...prev, logistics_departure: value }))}
+                    clearable
+                    placeholder="Data e hora"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Horário de Montagem</Label>

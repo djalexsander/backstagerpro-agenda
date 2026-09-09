@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -357,11 +358,7 @@ export function StockMovementDialog({
           )}
           <div className="space-y-2">
             <Label>Data efetiva</Label>
-            <Input
-              type="datetime-local"
-              value={effectiveAt}
-              onChange={(event) => setEffectiveAt(event.target.value)}
-            />
+            <DateTimePicker value={effectiveAt} onChange={setEffectiveAt} clearable />
           </div>
         </div>
         <DialogFooter>

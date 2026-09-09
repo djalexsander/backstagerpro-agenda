@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -78,7 +79,7 @@ export function CustodyWriteOffDialog({ open, onOpenChange, companyId, operation
           <div className="space-y-1"><Label>Classificação *</Label><Select value={classification} onValueChange={(value) => setClassification(value as CustodyWriteOffClassification)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label>Quantidade * (pendente: {operation?.quantidade_pendente ?? 0})</Label><Input type="number" min={1} max={operation?.quantidade_pendente ?? 1} disabled={operation?.tipo_controle === "individual"} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div>
           <div className="space-y-1"><Label>Motivo *</Label><Textarea value={justification} onChange={(event) => setJustification(event.target.value)} /></div>
-          <div className="space-y-1"><Label>Data/hora efetiva *</Label><Input type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} /></div>
+          <div className="space-y-1"><Label>Data/hora efetiva *</Label><DateTimePicker value={effectiveAt} onChange={setEffectiveAt} /></div>
           <div className="space-y-1"><Label>Observação</Label><Textarea value={note} onChange={(event) => setNote(event.target.value)} /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Voltar</Button><Button variant="destructive" disabled={mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar baixa</Button></DialogFooter>

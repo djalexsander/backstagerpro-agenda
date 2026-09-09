@@ -3,6 +3,7 @@ import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -155,8 +156,8 @@ export function NewRentalDialog({
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2"><Label>Retirada prevista</Label><Input type="datetime-local" value={withdrawalAt} onChange={(event) => setWithdrawalAt(event.target.value)} /></div>
-            <div className="space-y-2"><Label>Devolução prevista</Label><Input type="datetime-local" value={returnAt} onChange={(event) => setReturnAt(event.target.value)} /></div>
+            <div className="space-y-2"><Label>Retirada prevista</Label><DateTimePicker value={withdrawalAt} onChange={setWithdrawalAt} /></div>
+            <div className="space-y-2"><Label>Devolução prevista</Label><DateTimePicker value={returnAt} onChange={setReturnAt} /></div>
           </div>
           <div className="space-y-2">
             <Label>Responsável interno</Label>

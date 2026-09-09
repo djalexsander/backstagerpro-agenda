@@ -108,21 +108,27 @@ describe("CheckinDialog effective date/time", () => {
 
     renderDialog();
 
-    // Expected value computed via the same helper the component itself
-    // uses (toDatetimeLocalValue), instead of a clock string hardcoded for
-    // one specific timezone - holds under any timezone Vitest runs in.
-    expect(screen.getByLabelText(/Data\/hora do retorno/i)).toHaveValue(
-      toDatetimeLocalValue(now),
+    // Expected value computed via the same helper the component itself uses
+    // (toDatetimeLocalValue), instead of a clock string hardcoded for one
+    // timezone - holds under any timezone Vitest runs in. O DateTimePicker
+    // mostra a data no gatilho (DD/MM/AAAA, rotulado via htmlFor) e a hora no
+    // campo "Hora" (HH:mm).
+    const [expectedDate, expectedTime] = toDatetimeLocalValue(now).split("T");
+    expect(screen.getByLabelText("Data/hora do retorno")).toHaveTextContent(
+      expectedDate.split("-").reverse().join("/"),
     );
+    expect(screen.getByLabelText("Hora")).toHaveValue(expectedTime);
   });
 
   it("keeps the field editable for a retroactive/corrected entry", () => {
     vi.setSystemTime(new Date("2026-08-06T15:00:00.000Z"));
     renderDialog();
 
-    const field = screen.getByLabelText(/Data\/hora do retorno/i);
-    fireEvent.change(field, { target: { value: "2026-08-05T09:30" } });
+    const time = screen.getByLabelText("Hora");
+    fireEvent.change(time, { target: { value: "09:30" } });
 
-    expect(field).toHaveValue("2026-08-05T09:30");
+    expect(time).toHaveValue("09:30");
+    // a data continua editável (gatilho habilitado abre o calendário)
+    expect(screen.getByLabelText("Data/hora do retorno")).toBeEnabled();
   });
 });

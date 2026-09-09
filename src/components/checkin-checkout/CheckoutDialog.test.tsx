@@ -87,6 +87,22 @@ describe("CheckoutDialog effective date/time", () => {
     vi.restoreAllMocks();
   });
 
+  // Dois DateTimePicker no diálogo (retirada + previsão de retorno), então o
+  // campo "Hora" existe duas vezes - em ordem de DOM: [0] retirada, [1] previsão.
+  const withdrawalTime = () => screen.getAllByLabelText("Hora")[0];
+  const expectedReturnTime = () => screen.getAllByLabelText("Hora")[1];
+
+  // O DateTimePicker mostra a data no gatilho (DD/MM/AAAA, rotulado via
+  // htmlFor) e a hora no campo "Hora" (HH:mm). O esperado sai do mesmo helper
+  // que o componente usa (toDatetimeLocalValue), sem fixar timezone.
+  function expectEffectiveDateTime(moment: Date) {
+    const [date, time] = toDatetimeLocalValue(moment).split("T");
+    expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveTextContent(
+      date.split("-").reverse().join("/"),
+    );
+    expect(withdrawalTime()).toHaveValue(time);
+  }
+
   it("fills the current local date/time when the dialog opens", () => {
     vi.useFakeTimers();
     const now = new Date("2026-08-06T15:00:00.000Z");
@@ -94,31 +110,28 @@ describe("CheckoutDialog effective date/time", () => {
 
     renderDialog();
 
-    // Expected value computed via the same helper the component itself
-    // uses (toDatetimeLocalValue), instead of a clock string hardcoded for
-    // one specific timezone - this holds regardless of which timezone
-    // Vitest actually runs under (UTC-3 locally, UTC on GitHub Actions
-    // runners, or anything else), with no timezone pinned or assumed here.
-    expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveValue(
-      toDatetimeLocalValue(now),
-    );
+    expectEffectiveDateTime(now);
   });
 
   it("does not prefill the expected-return field (that one is a future estimate, not 'now')", () => {
     vi.setSystemTime(new Date("2026-08-06T15:00:00.000Z"));
     renderDialog();
 
-    expect(screen.getByLabelText(/Previsão de retorno/i)).toHaveValue("");
+    // vazio: data no placeholder, hora em branco
+    expect(screen.getByLabelText(/Previsão de retorno/i)).toHaveTextContent("Selecionar data");
+    expect(expectedReturnTime()).toHaveValue("");
   });
 
   it("keeps the field editable for a retroactive/corrected entry", () => {
     vi.setSystemTime(new Date("2026-08-06T15:00:00.000Z"));
     renderDialog();
 
-    const field = screen.getByLabelText(/Data\/hora da retirada/i);
-    fireEvent.change(field, { target: { value: "2026-08-05T09:30" } });
+    const time = withdrawalTime();
+    fireEvent.change(time, { target: { value: "09:30" } });
 
-    expect(field).toHaveValue("2026-08-05T09:30");
+    expect(time).toHaveValue("09:30");
+    // a data continua editável (gatilho habilitado abre o calendário)
+    expect(screen.getByLabelText(/Data\/hora da retirada/i)).toBeEnabled();
   });
 
   it("captures a new 'now' each time the same dialog instance is closed and reopened", () => {
@@ -126,9 +139,7 @@ describe("CheckoutDialog effective date/time", () => {
     const firstMoment = new Date("2026-08-06T15:00:00.000Z");
     vi.setSystemTime(firstMoment);
     const { rerenderOpen } = renderDialog();
-    expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveValue(
-      toDatetimeLocalValue(firstMoment),
-    );
+    expectEffectiveDateTime(firstMoment);
 
     // Close it (component stays mounted, as it does on the real pages -
     // Dialog visibility is controlled by the `open` prop, not by unmounting).
@@ -143,8 +154,6 @@ describe("CheckoutDialog effective date/time", () => {
     // Same helper, evaluated against the *new* "now" - this fails exactly
     // as before if the component ever stops recapturing "now" on reopen,
     // while staying correct under any timezone the test runs in.
-    expect(screen.getByLabelText(/Data\/hora da retirada/i)).toHaveValue(
-      toDatetimeLocalValue(secondMoment),
-    );
+    expectEffectiveDateTime(secondMoment);
   });
 });

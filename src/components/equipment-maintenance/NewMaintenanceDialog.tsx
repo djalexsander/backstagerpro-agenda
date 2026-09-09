@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Loader2, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -84,7 +85,7 @@ export function NewMaintenanceDialog({ open, onOpenChange, companyId, responsibl
         <div><Label>Prioridade *</Label><Select value={priority} onValueChange={(value) => setPriority(value as MaintenancePriority)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(MAINTENANCE_PRIORITY_LABELS).map(([value,label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
         {material?.tipo_controle === "quantidade" && <div><Label>Quantidade afetada *</Label><Input type="number" min={1} max={material.quantidade} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div>}
         <div><Label>Responsável/técnico</Label><Select value={responsible || "sem_responsavel"} onValueChange={(value) => setResponsible(value === "sem_responsavel" ? "" : value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="sem_responsavel">A definir</SelectItem>{responsibles.map((item) => <SelectItem key={`${item.tipo}:${item.id}`} value={`${item.tipo}:${item.id}`}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Previsão de conclusão</Label><Input type="datetime-local" value={expected} onChange={(event) => setExpected(event.target.value)} /></div>
+        <div><Label>Previsão de conclusão</Label><DateTimePicker value={expected} onChange={setExpected} clearable /></div>
         <div><Label>Execução</Label><Select value={execution} onValueChange={(value) => setExecution(value as MaintenanceExecution)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="interna">Interna</SelectItem><SelectItem value="externa">Fornecedor externo</SelectItem></SelectContent></Select></div>
         {execution === "externa" && <div><Label>Fornecedor externo *</Label><Input value={supplier} onChange={(event) => setSupplier(event.target.value)} /></div>}
         {type === "preventiva" && <div><Label>Intervalo preventivo (dias)</Label><Input type="number" min={1} max={3650} value={interval} onChange={(event) => setInterval(event.target.value)} /></div>}

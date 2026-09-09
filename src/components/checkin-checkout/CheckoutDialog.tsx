@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -272,11 +273,11 @@ export function CheckoutDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="checkout-effective-at">Data/hora da retirada</Label>
-            <Input id="checkout-effective-at" type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
+            <DateTimePicker id="checkout-effective-at" value={effectiveAt} onChange={setEffectiveAt} clearable />
           </div>
           <div className="space-y-2">
             <Label htmlFor="checkout-expected-return">Previsão de retorno</Label>
-            <Input id="checkout-expected-return" type="datetime-local" value={expectedReturn} onChange={(event) => setExpectedReturn(event.target.value)} />
+            <DateTimePicker id="checkout-expected-return" value={expectedReturn} onChange={setExpectedReturn} clearable />
             {errors.expectedReturn && <p className="text-xs text-destructive">{errors.expectedReturn}</p>}
           </div>
           <div className="space-y-2 sm:col-span-2">

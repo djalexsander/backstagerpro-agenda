@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { reverseStockMovement } from "@/lib/stock-service";
@@ -101,11 +101,7 @@ export function StockReversalDialog({
         </div>
         <div className="space-y-2">
           <Label>Data efetiva</Label>
-          <Input
-            type="datetime-local"
-            value={effectiveAt}
-            onChange={(event) => setEffectiveAt(event.target.value)}
-          />
+          <DateTimePicker value={effectiveAt} onChange={setEffectiveAt} clearable />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
