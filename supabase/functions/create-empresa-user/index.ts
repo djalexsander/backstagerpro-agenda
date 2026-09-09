@@ -7,6 +7,7 @@ import {
   assertCanonicalCompanyAssignment,
   normalizeCompanyRole,
 } from "../_shared/company-tenancy.ts";
+import { describeCompanyRoleRpcError } from "../_shared/company-user-role.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -99,13 +100,24 @@ Deno.serve(async (req) => {
 
     assertCanonicalCompanyAssignment(profile?.empresa_id, empresa_id);
 
-    const { error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .upsert(
-        { user_id: authUser.id, role: targetRole },
-        { onConflict: "user_id,role" },
+    // Transactional single-canonical-role write (P0-7). Replaces a bare upsert
+    // that left a previous role in place when an existing user was re-linked
+    // with a different one. The RPC reconciles user_roles to exactly one row
+    // and rejects master targets / non-company roles server-side.
+    const { error: roleError } = await supabaseAdmin.rpc(
+      "service_set_company_user_role",
+      {
+        _actor_id: caller.id,
+        _target_user_id: authUser.id,
+        _empresa_id: empresa_id,
+        _role: targetRole,
+      },
+    );
+    if (roleError) {
+      throw new Error(
+        describeCompanyRoleRpcError(roleError.code, roleError.message).message,
       );
-    if (roleError) throw roleError;
+    }
 
     const profileValues = {
       full_name: displayName,

@@ -10,6 +10,10 @@ import {
   deriveCompanyForCompanyAdmin,
   validateCompanyManagedRole,
 } from "../_shared/company-tenancy.ts";
+import {
+  describeCompanyRoleRpcError,
+  reconcileCanonicalRole,
+} from "../_shared/company-user-role.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -143,17 +147,29 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", authUser.id);
     if (targetRolesError) throw targetRolesError;
-    assertCompanyManagedTargetIsNotMaster(
-      targetRoles?.map((item) => item.role) ?? [],
-    );
+    const previousRoles = targetRoles?.map((item) => item.role as string) ?? [];
+    assertCompanyManagedTargetIsNotMaster(previousRoles);
 
-    const { error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .upsert(
-        { user_id: authUser.id, role: targetRole },
-        { onConflict: "user_id,role" },
+    // Transactional single-canonical-role write. A bare upsert only inserted the
+    // new (user_id, role) pair and left any previous role in place (P0-7), so a
+    // re-invited member could keep an old privilege. This RPC inserts the target
+    // role and deletes every other row for the user in one transaction,
+    // re-checking the actor and rejecting master targets server-side.
+    const { error: roleError } = await supabaseAdmin.rpc(
+      "service_set_company_user_role",
+      {
+        _actor_id: caller.id,
+        _target_user_id: authUser.id,
+        _empresa_id: targetEmpresaId,
+        _role: targetRole,
+      },
+    );
+    if (roleError) {
+      throw new Error(
+        describeCompanyRoleRpcError(roleError.code, roleError.message).message,
       );
-    if (roleError) throw new Error("Erro ao definir papel: " + roleError.message);
+    }
+    const roleReconciliation = reconcileCanonicalRole(previousRoles, targetRole);
 
     const profileValues = {
       full_name: displayName,
@@ -215,6 +231,12 @@ Deno.serve(async (req) => {
       user_id: caller.id,
       user_name: caller.email,
       empresa_id: targetEmpresaId,
+      dados: {
+        target_email: normalizedEmail,
+        role: targetRole,
+        previous_roles: previousRoles,
+        removed_roles: roleReconciliation.removed,
+      },
     });
 
     return new Response(
