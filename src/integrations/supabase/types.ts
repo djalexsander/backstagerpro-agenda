@@ -4932,6 +4932,10 @@ export type Database = {
         Args: { _actor_id: string; _plan_id?: string; _selection_type: string }
         Returns: Json
       }
+      clear_material_barcode: {
+        Args: { _material_id: string }
+        Returns: undefined
+      }
       company_has_active_module: {
         Args: { _empresa_id: string; _feature_key: string }
         Returns: boolean

@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Link } from "react-router-dom";
-import { Check, Copy, Loader2, Printer, QrCode, ScanBarcode } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Loader2,
+  Printer,
+  QrCode,
+  ScanBarcode,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +31,7 @@ import {
   type MaterialWithRelations,
 } from "@/lib/material-types";
 import {
+  clearMaterialBarcode,
   generateMaterialBarcode,
   generateMaterialQrCode,
   replaceMaterialBarcode,
@@ -30,7 +39,7 @@ import {
 import { MaterialBarcodePreview } from "./MaterialBarcodePreview";
 
 type IdentificationKind = "qr" | "barcode";
-type BusyAction = IdentificationKind | "replace-barcode";
+type BusyAction = IdentificationKind | "replace-barcode" | "clear-barcode";
 
 export function MaterialIdentificationCard({
   material,
@@ -49,6 +58,7 @@ export function MaterialIdentificationCard({
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [copiedKind, setCopiedKind] = useState<IdentificationKind | null>(null);
   const [replaceDialogOpen, setReplaceDialogOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   useEffect(() => {
     setQrContent(material.conteudo_qr_code);
@@ -120,6 +130,26 @@ export function MaterialIdentificationCard({
     } catch (error) {
       toast({
         title: "Não foi possível substituir o código de barras",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const clearBarcode = async () => {
+    setBusyAction("clear-barcode");
+    try {
+      await clearMaterialBarcode(material.id);
+      setBarcode(null);
+      setCopiedKind((current) => (current === "barcode" ? null : current));
+      setClearDialogOpen(false);
+      await onChanged();
+      toast({ title: "Código de barras excluído" });
+    } catch (error) {
+      toast({
+        title: "Não foi possível excluir o código de barras",
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -310,6 +340,17 @@ export function MaterialIdentificationCard({
                     Substituir código de barras
                   </Button>
                 )}
+                {canGenerate && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setClearDialogOpen(true)}
+                    disabled={busyAction !== null}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir código de barras
+                  </Button>
+                )}
               </>
             ) : (
               canGenerate && (
@@ -372,6 +413,41 @@ export function MaterialIdentificationCard({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Confirmar substituição
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={clearDialogOpen}
+        onOpenChange={(open) =>
+          busyAction !== "clear-barcode" && setClearDialogOpen(open)
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir código de barras?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O código de barras atual será removido apenas deste material. O QR
+              Code e o identificador técnico não são alterados. Você poderá gerar
+              um novo código automático depois.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busyAction === "clear-barcode"}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={busyAction === "clear-barcode"}
+              onClick={(event) => {
+                event.preventDefault();
+                void clearBarcode();
+              }}
+            >
+              {busyAction === "clear-barcode" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Confirmar exclusão
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

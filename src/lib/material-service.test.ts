@@ -43,7 +43,11 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { replaceMaterialBarcode, saveMaterial } from "./material-service";
+import {
+  clearMaterialBarcode,
+  replaceMaterialBarcode,
+  saveMaterial,
+} from "./material-service";
 
 const empresaId = "31000000-0000-4000-8000-000000000001";
 const materialId = "33000000-0000-4000-8000-000000000001";
@@ -172,6 +176,28 @@ describe("material save identification flow", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("replace_material_barcode", {
       _material_id: materialId,
     });
+  });
+
+  it("removes only the barcode through the dedicated server RPC", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(clearMaterialBarcode(materialId)).resolves.toBeUndefined();
+    expect(mocks.rpc).toHaveBeenCalledWith("clear_material_barcode", {
+      _material_id: materialId,
+    });
+  });
+
+  it("surfaces a translated error when the barcode removal fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "O material não possui código de barras para excluir." },
+    });
+
+    await expect(clearMaterialBarcode(materialId)).rejects.toThrow(
+      /código de barras/i,
+    );
+    consoleError.mockRestore();
   });
 
   it("returns the database UUID and canonical QR content on creation", async () => {

@@ -2,10 +2,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { generateBarcodeMock, generateQrMock, replaceBarcodeMock, toastMock } = vi.hoisted(() => ({
+const {
+  generateBarcodeMock,
+  generateQrMock,
+  replaceBarcodeMock,
+  clearBarcodeMock,
+  toastMock,
+} = vi.hoisted(() => ({
   generateBarcodeMock: vi.fn(),
   generateQrMock: vi.fn(),
   replaceBarcodeMock: vi.fn(),
+  clearBarcodeMock: vi.fn(),
   toastMock: vi.fn(),
 }));
 
@@ -23,6 +30,7 @@ vi.mock("@/lib/material-service", () => ({
   generateMaterialBarcode: generateBarcodeMock,
   generateMaterialQrCode: generateQrMock,
   replaceMaterialBarcode: replaceBarcodeMock,
+  clearMaterialBarcode: clearBarcodeMock,
 }));
 
 import { MaterialIdentificationCard } from "./MaterialIdentificationCard";
@@ -117,6 +125,7 @@ describe("MaterialIdentificationCard", () => {
     generateBarcodeMock.mockReset();
     generateQrMock.mockReset();
     replaceBarcodeMock.mockReset();
+    clearBarcodeMock.mockReset();
     toastMock.mockReset();
   });
 
@@ -214,6 +223,7 @@ describe("MaterialIdentificationCard", () => {
     expect(screen.getAllByText(current.codigo_barras!)).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Gerar código de barras" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Substituir código de barras" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Excluir código de barras" })).toBeVisible();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Copiar código de barras" }),
@@ -295,6 +305,92 @@ describe("MaterialIdentificationCard", () => {
     expect(onChanged).not.toHaveBeenCalled();
   });
 
+  it("does not offer barcode removal until the operator confirms", async () => {
+    const current = materialFixture();
+    const { onChanged } = renderCard(current);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Excluir código de barras" }),
+    );
+    expect(screen.getByRole("alertdialog")).toBeVisible();
+    expect(
+      screen.getByText(/O QR Code e o identificador técnico não são alterados/i),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByLabelText(`Código de barras ${current.codigo_barras}`),
+    ).toBeVisible();
+    expect(clearBarcodeMock).not.toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("removes only the barcode server-side and reveals the generate action again", async () => {
+    clearBarcodeMock.mockResolvedValue(undefined);
+    const current = materialFixture();
+    const { onChanged } = renderCard(current);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Excluir código de barras" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirmar exclusão" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Gerar código de barras" }),
+      ).toBeVisible(),
+    );
+    expect(clearBarcodeMock).toHaveBeenCalledWith(materialId);
+    expect(replaceBarcodeMock).not.toHaveBeenCalled();
+    expect(generateBarcodeMock).not.toHaveBeenCalled();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    // QR Code and the immutable identifier stay on screen untouched.
+    expect(screen.getByText(qrContent)).toBeVisible();
+    expect(screen.getByText(identifier)).toBeVisible();
+    expect(screen.getByTitle("QR Code de LINE ARRAY NEO 210")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(`Código de barras ${current.codigo_barras}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Excluir código de barras" }),
+    ).not.toBeInTheDocument();
+    expect(toastMock).toHaveBeenCalledWith({ title: "Código de barras excluído" });
+  });
+
+  it("keeps the barcode when server-side removal fails", async () => {
+    clearBarcodeMock.mockRejectedValue(new Error("removal failed"));
+    const current = materialFixture();
+    const { onChanged } = renderCard(current);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Excluir código de barras" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirmar exclusão" }),
+    );
+
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Não foi possível excluir o código de barras",
+          variant: "destructive",
+        }),
+      ),
+    );
+    expect(
+      screen.getByLabelText(`Código de barras ${current.codigo_barras}`),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Gerar código de barras" }),
+    ).not.toBeInTheDocument();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
   it("generates a missing numeric barcode only through the server and previews it", async () => {
     generateBarcodeMock.mockResolvedValue("0000000018");
     const current = materialFixture({
@@ -327,6 +423,9 @@ describe("MaterialIdentificationCard", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Substituir código de barras" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Excluir código de barras" }),
     ).not.toBeInTheDocument();
   });
 

@@ -318,3 +318,19 @@ export async function replaceMaterialBarcode(
   }
   return data;
 }
+
+// Removes only the barcode. The server keeps the QR content and the immutable
+// identificador_unico untouched; a new code is issued afterwards through the
+// existing generateMaterialBarcode flow.
+export async function clearMaterialBarcode(materialId: string): Promise<void> {
+  const { error } = await supabase.rpc("clear_material_barcode", {
+    _material_id: materialId,
+  });
+  if (error) {
+    throwPersistenceError(
+      error,
+      "Falha inesperada ao excluir código de barras",
+      "Não foi possível excluir o código de barras. Tente novamente.",
+    );
+  }
+}
