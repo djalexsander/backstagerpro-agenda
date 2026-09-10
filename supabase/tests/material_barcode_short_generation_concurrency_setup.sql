@@ -10,11 +10,16 @@ INSERT INTO auth.users (instance_id,id,aud,role,email,encrypted_password,email_c
 VALUES ('00000000-0000-0000-0000-000000000000','67300000-0000-4000-8000-000000000001','authenticated','authenticated','short-barcode-concurrency@example.test','',now(),'{}','{"full_name":"Short Barcode Concurrency"}',now(),now());
 
 UPDATE public.user_roles SET role='admin_empresa' WHERE user_id='67300000-0000-4000-8000-000000000001';
-UPDATE public.profiles SET empresa_id='67200000-0000-4000-8000-000000000001' WHERE user_id='67300000-0000-4000-8000-000000000001';
+UPDATE public.profiles SET empresa_id='67200000-0000-4000-8000-000000000001', ativado=true, activated_at=now() WHERE user_id='67300000-0000-4000-8000-000000000001';
 
-INSERT INTO public.empresa_modules (empresa_id,module_id,status,activated_at,granted_by_admin,origem)
-SELECT '67200000-0000-4000-8000-000000000001',id,'active',now(),true,'manual_admin'
-FROM public.module_catalog WHERE feature_key='gestao_materiais';
+-- provision_company_module_entitlements already seeded an inactive row per
+-- catalog module; activate the one this test needs.
+UPDATE public.empresa_modules AS company_module
+SET status='active', activated_at=now(), granted_by_admin=true, origem='manual_admin'
+FROM public.module_catalog AS catalog
+WHERE catalog.id = company_module.module_id
+  AND catalog.feature_key='gestao_materiais'
+  AND company_module.empresa_id='67200000-0000-4000-8000-000000000001';
 
 INSERT INTO public.categorias_materiais (id,empresa_id,nome)
 VALUES ('67400000-0000-4000-8000-000000000001','67200000-0000-4000-8000-000000000001','Concurrency');

@@ -145,8 +145,8 @@ SELECT lives_ok(
 
 SELECT matches(
   (SELECT codigo_barras FROM public.materiais WHERE id = '86000000-0000-4000-8000-000000000001'),
-  '^[0-9]{10}$',
-  'replacement writes a fresh 10-digit server-side code'
+  '^200[0-9]{10}$',
+  'replacement writes a fresh 13-digit "200" EAN-13 server-side code'
 );
 SELECT isnt(
   (SELECT codigo_barras FROM public.materiais WHERE id = '86000000-0000-4000-8000-000000000001'),
@@ -197,8 +197,8 @@ SELECT lives_ok(
 
 SELECT matches(
   (SELECT codigo_barras FROM public.materiais WHERE id = '86000000-0000-4000-8000-000000000002'),
-  '^[0-9]{10}$',
-  'the barcode-only material also gets a fresh 10-digit code'
+  '^200[0-9]{10}$',
+  'the barcode-only material also gets a fresh 13-digit "200" EAN-13 code'
 );
 SELECT isnt(
   (SELECT codigo_barras FROM public.materiais WHERE id = '86000000-0000-4000-8000-000000000002'),

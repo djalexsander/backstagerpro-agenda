@@ -32,6 +32,29 @@ export function normalizeMaterialBarcode(value: string): string | null {
   return normalized || null;
 }
 
+// GS1 mod-10 check digit for the 12-digit EAN-13 payload, mirroring Gestão
+// Pro's calcularDvEan13 (its src/lib/barcode.ts): counting from the left,
+// odd positions weigh 1 and even positions weigh 3; the digit is whatever
+// raises the weighted sum to the next multiple of ten. This only validates a
+// value the server produced - the barcode is still issued exclusively by the
+// generate_material_barcode RPC, never on the client.
+export function ean13CheckDigit(payload12: string): number {
+  if (!/^\d{12}$/.test(payload12)) {
+    throw new Error("O payload do EAN-13 precisa ter 12 dígitos.");
+  }
+  let sum = 0;
+  for (let i = 0; i < 12; i += 1) {
+    const digit = Number(payload12[i]);
+    sum += i % 2 === 0 ? digit : digit * 3;
+  }
+  return (10 - (sum % 10)) % 10;
+}
+
+export function isValidEan13(value: string): boolean {
+  if (!/^\d{13}$/.test(value)) return false;
+  return ean13CheckDigit(value.slice(0, 12)) === Number(value[12]);
+}
+
 export function validateMaterialBarcode(value: string): string | null {
   const normalized = normalizeMaterialBarcode(value);
   if (!normalized) return null;

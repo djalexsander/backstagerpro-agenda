@@ -3,7 +3,9 @@ import * as materialIdentification from "@/lib/material-identification";
 import {
   MATERIAL_QR_PREFIX,
   buildMaterialQrContent,
+  ean13CheckDigit,
   isMaterialQrContentForIdentifier,
+  isValidEan13,
   normalizeMaterialBarcode,
   validateMaterialBarcode,
 } from "@/lib/material-identification";
@@ -62,5 +64,22 @@ describe("material identification", () => {
     expect(materialIdentification).not.toHaveProperty(
       "generateMaterialBarcodeValue",
     );
+  });
+
+  it("computes the EAN-13 check digit like Gestão Pro's calcularDvEan13", () => {
+    // Real retail EAN-13s: the 13th digit must fall out of the first twelve.
+    expect(ean13CheckDigit("400638133393")).toBe(1); // 4006381333931
+    expect(ean13CheckDigit("789100005512")).toBe(0); // 7891000055120
+    // "200" internal range, first company sequence -> 2000000000015.
+    expect(ean13CheckDigit("200000000001")).toBe(5);
+    expect(() => ean13CheckDigit("20000000001")).toThrow(/12 díg/i);
+  });
+
+  it("validates a full EAN-13 only when its check digit matches", () => {
+    expect(isValidEan13("2000000000015")).toBe(true);
+    expect(isValidEan13("4006381333931")).toBe(true);
+    expect(isValidEan13("2000000000012")).toBe(false); // wrong check digit
+    expect(isValidEan13("0000000018")).toBe(false); // legacy 10-digit code
+    expect(isValidEan13("MANUAL-ABC-123")).toBe(false);
   });
 });

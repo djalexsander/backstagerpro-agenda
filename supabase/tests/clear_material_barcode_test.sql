@@ -163,11 +163,12 @@ SELECT is(
   'the identification stays active while the QR remains'
 );
 
--- The existing generator issues a fresh code with the current format.
+-- The existing generator issues a fresh code with the current format
+-- (13-digit "200" EAN-13 since 20260910100000).
 SELECT matches(
   public.generate_material_barcode('76000000-0000-4000-8000-000000000001'),
-  '^[0-9]{10}$',
-  'the unchanged generator issues a fresh numeric barcode afterwards'
+  '^200[0-9]{10}$',
+  'the unchanged generator issues a fresh EAN-13 barcode afterwards'
 );
 SELECT is(
   (SELECT tipo_identificacao::text FROM public.materiais WHERE id = '76000000-0000-4000-8000-000000000001'),

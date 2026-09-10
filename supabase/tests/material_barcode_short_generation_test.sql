@@ -1,3 +1,8 @@
+-- End-to-end coverage of the per-company barcode counter and both RPCs.
+-- Since 20260910100000 the generated value is a 13-digit EAN-13 ("200" +
+-- 9-digit company sequence + GS1 check digit); the counter, idempotence,
+-- per-company isolation, exhaustion and permission behaviour are unchanged.
+-- Focused format/check-digit assertions live in material_barcode_ean13_test.sql.
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
@@ -62,30 +67,29 @@ SET empresa_id = CASE user_id
   WHEN '63000000-0000-4000-8000-000000000001'::uuid
     THEN '62000000-0000-4000-8000-000000000001'::uuid
   ELSE '62000000-0000-4000-8000-000000000002'::uuid
-END
+END,
+    ativado = true,
+    activated_at = now()
 WHERE user_id IN (
   '63000000-0000-4000-8000-000000000001',
   '63000000-0000-4000-8000-000000000002'
 );
 
-INSERT INTO public.empresa_modules (
-  id, empresa_id, module_id, status, activated_at, granted_by_admin, origem
-)
-SELECT
-  fixture.id,
-  fixture.empresa_id,
-  catalog.id,
-  'active',
-  now(),
-  true,
-  'manual_admin'
-FROM (
-  VALUES
-    ('64000000-0000-4000-8000-000000000001'::uuid, '62000000-0000-4000-8000-000000000001'::uuid),
-    ('64000000-0000-4000-8000-000000000002'::uuid, '62000000-0000-4000-8000-000000000002'::uuid)
-) AS fixture(id, empresa_id)
-CROSS JOIN public.module_catalog AS catalog
-WHERE catalog.feature_key = 'gestao_materiais';
+-- provision_company_module_entitlements already seeded an inactive row for
+-- every catalog module when each company was inserted; activate the one this
+-- suite needs.
+UPDATE public.empresa_modules AS company_module
+SET status = 'active',
+    activated_at = now(),
+    granted_by_admin = true,
+    origem = 'manual_admin'
+FROM public.module_catalog AS catalog
+WHERE catalog.id = company_module.module_id
+  AND catalog.feature_key = 'gestao_materiais'
+  AND company_module.empresa_id IN (
+    '62000000-0000-4000-8000-000000000001',
+    '62000000-0000-4000-8000-000000000002'
+  );
 
 INSERT INTO public.categorias_materiais (id, empresa_id, nome) VALUES
   (
@@ -130,15 +134,15 @@ FROM (
 SELECT set_config('request.jwt.claim.sub', '63000000-0000-4000-8000-000000000001', true);
 SET LOCAL ROLE authenticated;
 
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000001'), '0000000018', 'first sequence starts at one and has the correct Luhn digit');
-SELECT is(length((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000001')), 10, 'automatic barcode has exactly ten characters');
-SELECT matches((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000001'), '^[0-9]{10}$', 'automatic barcode is numeric only');
-SELECT is((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000001'), '0000000018', 'generated barcode is persisted');
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000002'), '0000000026', 'company sequence increments');
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000003'), '0000000034', 'third Luhn example is correct');
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000004'), '0000000042', 'fourth Luhn example is correct');
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000005'), '0000000059', 'fifth Luhn example is correct');
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000001'), '0000000018', 'repeated request returns the existing barcode');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000001'), '2000000000015', 'first sequence is "200" + 000000001 + a valid EAN-13 check digit');
+SELECT is(length((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000001')), 13, 'automatic barcode has exactly thirteen characters');
+SELECT matches((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000001'), '^200[0-9]{10}$', 'automatic barcode is a 13-digit "200" EAN-13');
+SELECT is((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000001'), '2000000000015', 'generated barcode is persisted');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000002'), '2000000000022', 'company sequence increments');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000003'), '2000000000039', 'third EAN-13 check digit is correct');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000004'), '2000000000046', 'fourth EAN-13 check digit is correct');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000005'), '2000000000053', 'fifth EAN-13 check digit is correct');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000001'), '2000000000015', 'repeated request returns the existing barcode');
 SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000006'), 'BSP-A968A4040E074A928FBF', 'legacy BSP barcode is returned unchanged');
 SELECT is((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000006'), 'BSP-A968A4040E074A928FBF', 'legacy BSP barcode remains persisted unchanged');
 SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000007'), 'MANUAL-ABC-123', 'manual barcode is returned unchanged');
@@ -154,8 +158,8 @@ SELECT identificador_unico, conteudo_qr_code
 FROM public.materiais
 WHERE id = '66000000-0000-4000-8000-000000000006';
 
-SELECT is(public.replace_material_barcode('66000000-0000-4000-8000-000000000006'), '0000000067', 'legacy BSP barcode is replaced only through the explicit RPC');
-SELECT is((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000006'), '0000000067', 'replacement barcode is persisted');
+SELECT is(public.replace_material_barcode('66000000-0000-4000-8000-000000000006'), '2000000000060', 'legacy BSP barcode is replaced only through the explicit RPC');
+SELECT is((SELECT codigo_barras FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000006'), '2000000000060', 'replacement barcode is persisted');
 SELECT is(
   (SELECT identificador_unico FROM public.materiais WHERE id = '66000000-0000-4000-8000-000000000006'),
   (SELECT identificador_unico FROM replacement_identity_snapshot),
@@ -171,7 +175,7 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '63000000-0000-4000-8000-000000000002', true);
 SET LOCAL ROLE authenticated;
 
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000010'), '0000000018', 'a second company starts an independent sequence at one');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000010'), '2000000000015', 'a second company starts an independent sequence at one');
 
 RESET ROLE;
 SELECT is((SELECT ultima_sequencia FROM public.material_barcode_counters WHERE empresa_id = '62000000-0000-4000-8000-000000000001'), 6, 'company A counter includes the explicit replacement');
@@ -184,7 +188,7 @@ WHERE empresa_id = '62000000-0000-4000-8000-000000000001';
 SELECT set_config('request.jwt.claim.sub', '63000000-0000-4000-8000-000000000001', true);
 SET LOCAL ROLE authenticated;
 
-SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000008'), '9999999999', 'last valid sequence receives the correct Luhn digit');
+SELECT is(public.generate_material_barcode('66000000-0000-4000-8000-000000000008'), '2009999999997', 'last valid sequence receives the correct EAN-13 check digit');
 SELECT throws_ok(
   $test$SELECT public.generate_material_barcode('66000000-0000-4000-8000-000000000009')$test$,
   'P0001',

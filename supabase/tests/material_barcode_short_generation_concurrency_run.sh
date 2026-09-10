@@ -38,7 +38,7 @@ BEGIN
     '67500000-0000-4000-8000-000000000002'
   );
 
-  IF v_codes <> ARRAY['0000000018','0000000026']::text[] OR v_counter <> 2 THEN
+  IF v_codes <> ARRAY['2000000000015','2000000000022']::text[] OR v_counter <> 2 THEN
     RAISE EXCEPTION 'Concurrent generation produced invalid codes: %', v_codes;
   END IF;
 
