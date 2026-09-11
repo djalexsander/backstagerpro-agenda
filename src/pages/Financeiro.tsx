@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, Clock, DollarSign, FileDown, ImageIcon, TrendingDown, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { computeConsolidatedFinancialResult, exportFinancialTotalPDF } from "@/lib/pdf-export";
+import { getCachePago } from "@/lib/event-financials";
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
 import { EventosFinanceiroPanel } from "@/components/financeiro/EventosFinanceiroPanel";
 import { LocacoesReceivablesPanel } from "@/components/financeiro/LocacoesReceivablesPanel";
@@ -25,17 +26,6 @@ import { fetchAllReceivableEntries, fetchMaintenanceForFinancialReport, fetchRen
 import { useState } from "react";
 
 type ExtraCost = { name: string; value: number };
-type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
-type CacheDetail = {
-  valorTotal: number;
-  entrada: number;
-  entradaPaga: boolean;
-  parcelado: boolean;
-  parcelas: CacheParcela[];
-  recebimentoEvento: boolean;
-  dataRecebimento: string;
-  recebimentoPago: boolean;
-};
 
 function parseExtraCosts(raw: any): ExtraCost[] {
   if (!raw) return [];
@@ -45,23 +35,6 @@ function parseExtraCosts(raw: any): ExtraCost[] {
 
 function sumExtraCosts(extras: ExtraCost[]): number {
   return extras.reduce((s, e) => s + (e.value || 0), 0);
-}
-
-// Mirrors FinanceCards/EventosFinanceiroPanel's own copy of the same
-// calculation - cache_detail lives on the financials row and this is the
-// one place that turns it into "quanto já entrou" (same pattern already
-// duplicated across this module rather than a shared utils import).
-function getCachePago(f: any): number {
-  const detail = (f as any).cache_detail as CacheDetail | null;
-  if (!detail) return f.cache || 0;
-  let paid = 0;
-  if (detail.entrada > 0 && detail.entradaPaga) paid += detail.entrada;
-  if (detail.parcelado) {
-    paid += (detail.parcelas || []).filter((p) => p.pago).reduce((s, p) => s + p.valor, 0);
-  } else if (detail.recebimentoPago) {
-    paid += detail.valorTotal - (detail.entrada || 0);
-  }
-  return paid;
 }
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });

@@ -6,6 +6,9 @@ import type { Tables } from "@/integrations/supabase/types";
 import { addBrandingHeader, type PdfBranding } from "./pdf-branding";
 import { smartSavePDF, smartSavePNG, type SmartPDFNameOptions } from "./pdf-save";
 import type { FinancialLedgerStatus, MaintenanceExpenseEntry, ReceivableEntry, RentalsFinancialSummary } from "./financial-ledger-types";
+import { getCachePago, getCachePendente, parseCacheDetail } from "./event-financials";
+
+export { getCachePago, getCachePendente };
 
 type Event = Tables<"events">;
 type EventDay = Tables<"event_days">;
@@ -16,17 +19,6 @@ export type FinancialExportRow = Tables<"financials"> & {
 };
 
 type ExtraCost = { name: string; value: number };
-type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
-type CacheDetail = {
-  valorTotal: number;
-  entrada: number;
-  entradaPaga: boolean;
-  parcelado: boolean;
-  parcelas: CacheParcela[];
-  recebimentoEvento: boolean;
-  dataRecebimento: string;
-  recebimentoPago: boolean;
-};
 type EmployeeExpense = {
   employeeId: string;
   name: string;
@@ -107,52 +99,6 @@ export function parseEmployeeExpenses(raw: unknown): EmployeeExpense[] {
 
 export function sumEmployeeExpenses(emps: EmployeeExpense[]): number {
   return emps.reduce((s, e) => s + (e.cache || 0) + (e.food || 0), 0);
-}
-
-function parseCacheDetail(raw: unknown): CacheDetail | null {
-  const record = asRecord(parseJsonValue(raw));
-  if (!record) return null;
-
-  const parcelas = Array.isArray(record.parcelas)
-    ? record.parcelas.flatMap((item) => {
-        const parcela = asRecord(item);
-        if (!parcela) return [];
-        return [{
-          numero: asNumber(parcela.numero),
-          valor: asNumber(parcela.valor),
-          vencimento: asString(parcela.vencimento),
-          pago: parcela.pago === true,
-        }];
-      })
-    : [];
-
-  return {
-    valorTotal: asNumber(record.valorTotal),
-    entrada: asNumber(record.entrada),
-    entradaPaga: record.entradaPaga === true,
-    parcelado: record.parcelado === true,
-    parcelas,
-    recebimentoEvento: record.recebimentoEvento === true,
-    dataRecebimento: asString(record.dataRecebimento),
-    recebimentoPago: record.recebimentoPago === true,
-  };
-}
-
-export function getCachePago(financial: FinancialExportRow): number {
-  const detail = parseCacheDetail(financial.cache_detail);
-  if (!detail) return financial.cache || 0;
-  let paid = 0;
-  if (detail.entrada > 0 && detail.entradaPaga) paid += detail.entrada;
-  if (detail.parcelado) {
-    paid += (detail.parcelas || []).filter((p: CacheParcela) => p.pago).reduce((s: number, p: CacheParcela) => s + p.valor, 0);
-  } else {
-    if (detail.recebimentoPago) paid += (detail.valorTotal - (detail.entrada || 0));
-  }
-  return paid;
-}
-
-export function getCachePendente(financial: FinancialExportRow): number {
-  return (financial.cache || 0) - getCachePago(financial);
 }
 
 export const fmtBRL = (n: number | null | undefined) =>

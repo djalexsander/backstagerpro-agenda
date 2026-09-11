@@ -17,6 +17,7 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getFinancialLedgerPermissions } from "@/lib/financial-ledger-permissions";
 import { getRentalsFinancialSummary } from "@/lib/financial-ledger-service";
+import { getCachePago } from "@/lib/event-financials";
 
 const statusColors: Record<string, string> = {
   confirmado: "bg-accent text-accent-foreground",
@@ -131,19 +132,6 @@ export default function Dashboard() {
     if (!raw) return 0;
     const arr = Array.isArray(raw) ? raw : [];
     return arr.reduce((s: number, e: any) => s + (e.cache || 0) + (e.food || 0), 0);
-  };
-
-  const getCachePago = (f: any): number => {
-    const detail = f.cache_detail as any;
-    if (!detail) return f.cache || 0;
-    let pago = 0;
-    if (detail.entrada > 0 && detail.entradaPaga) pago += detail.entrada;
-    if (detail.parcelado) {
-      (detail.parcelas || []).forEach((p: any) => { if (p.pago) pago += p.valor; });
-    } else if (detail.recebimentoPago) {
-      pago += detail.valorTotal - (detail.entrada || 0);
-    }
-    return pago;
   };
 
   const totalCache = financials.reduce((s, f) => s + (f.cache || 0), 0);

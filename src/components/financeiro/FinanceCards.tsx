@@ -2,18 +2,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { ChevronDown, DollarSign, CheckCircle2, Clock, TrendingDown, TrendingUp } from "lucide-react";
+import type { CacheDetail } from "@/lib/event-financials";
 
-type CacheParcela = { numero: number; valor: number; vencimento: string; pago: boolean };
-type CacheDetail = {
-  valorTotal: number;
-  entrada: number;
-  entradaPaga: boolean;
-  parcelado: boolean;
-  parcelas: CacheParcela[];
-  recebimentoEvento: boolean;
-  dataRecebimento: string;
-  recebimentoPago: boolean;
-};
 type ExtraCost = { name: string; value: number };
 type EmployeeExpense = { employeeId: string; name: string; funcao: string; cache: number; food: number };
 
