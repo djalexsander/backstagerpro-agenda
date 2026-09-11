@@ -68,6 +68,46 @@ describe("material module permissions", () => {
     expect(permissions.gerarIdentificadores).toBe(false);
   });
 
+  it("unlocks criar with an explicit create grant, and editar/inativar/gerenciarCategorias with edit", () => {
+    const createOnly = getMaterialPermissions({
+      role: "usuario", moduleEnabled: true,
+      granular: { canCreate: true, canEdit: false, canDelete: false },
+    });
+    expect(createOnly.criar).toBe(true);
+    expect(createOnly.editar).toBe(false);
+    expect(createOnly.inativar).toBe(false);
+    expect(createOnly.gerenciarCategorias).toBe(false);
+
+    const editOnly = getMaterialPermissions({
+      role: "usuario", moduleEnabled: true,
+      granular: { canCreate: false, canEdit: true, canDelete: false },
+    });
+    expect(editOnly.criar).toBe(false);
+    expect(editOnly.editar).toBe(true);
+    expect(editOnly.inativar).toBe(true);
+    expect(editOnly.gerenciarCategorias).toBe(true);
+    expect(editOnly.gerenciarFotos).toBe(true);
+    expect(editOnly.alterarStatus).toBe(true);
+  });
+
+  it("never grants gerarIdentificadores to a usuario, even with every write action granted", () => {
+    const permissions = getMaterialPermissions({
+      role: "usuario", moduleEnabled: true,
+      granular: { canCreate: true, canEdit: true, canDelete: true },
+    });
+    expect(permissions.gerarIdentificadores).toBe(false);
+  });
+
+  it("still blocks a granted usuario when the company is read-only", () => {
+    const permissions = getMaterialPermissions({
+      role: "usuario", moduleEnabled: true, companyReadOnly: true,
+      granular: { canCreate: true, canEdit: true, canDelete: true },
+    });
+    expect(permissions.visualizar).toBe(true);
+    expect(permissions.criar).toBe(false);
+    expect(permissions.editar).toBe(false);
+  });
+
   it("preserves global master access independently of company entitlement", () => {
     expect(
       getMaterialPermissions({

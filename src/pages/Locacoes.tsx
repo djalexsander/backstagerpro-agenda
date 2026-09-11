@@ -19,6 +19,7 @@ import { MODULE_KEYS } from "@/constants/module-keys";
 import { listCustodyResponsibles } from "@/lib/checkin-checkout-service";
 import { RENTAL_STATUS_LABELS } from "@/lib/material-rental-domain";
 import { getRentalPermissions } from "@/lib/material-rental-permissions";
+import { useModulePermission } from "@/hooks/useModulePermission";
 import type { RentalFilters, RentalStatus } from "@/lib/material-rental-types";
 import { listStockLocations } from "@/lib/stock-service";
 
@@ -30,7 +31,24 @@ export default function Locacoes() {
   const { role, empresaId: companyId, empresaReadOnly: readOnly, isMasterAdmin } = useAuth();
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.LOCACAO_MATERIAIS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS) && hasModule(MODULE_KEYS.CONTROLE_ESTOQUE) && hasModule(MODULE_KEYS.CHECKIN_CHECKOUT);
-  const permissions = getRentalPermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
+  const { permission: rentalGrant } = useModulePermission({
+    companyId,
+    featureKey: MODULE_KEYS.LOCACAO_MATERIAIS,
+    role,
+  });
+  const permissions = getRentalPermissions({
+    role,
+    moduleEnabled,
+    companyReadOnly: readOnly,
+    companySelected: Boolean(companyId),
+    granular: rentalGrant
+      ? {
+          canCreate: rentalGrant.canCreate,
+          canEdit: rentalGrant.canEdit,
+          canDelete: rentalGrant.canDelete,
+        }
+      : null,
+  });
   const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(initialFilters);

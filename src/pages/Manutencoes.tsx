@@ -18,6 +18,7 @@ import { MODULE_KEYS } from "@/constants/module-keys";
 import { listCustodyResponsibles } from "@/lib/checkin-checkout-service";
 import { MAINTENANCE_PRIORITY_LABELS, MAINTENANCE_STATUS_LABELS, MAINTENANCE_TYPE_LABELS } from "@/lib/equipment-maintenance-domain";
 import { getMaintenancePermissions } from "@/lib/equipment-maintenance-permissions";
+import { useModulePermission } from "@/hooks/useModulePermission";
 import type { MaintenanceFilters, MaintenancePriority, MaintenanceStatus, MaintenanceType } from "@/lib/equipment-maintenance-types";
 import { buildA4DocumentHtml } from "@/lib/a4-document-print";
 import { printHtmlDocument } from "@/lib/printer-service";
@@ -33,7 +34,24 @@ export default function Manutencoes() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS);
-  const permissions = getMaintenancePermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
+  const { permission: maintenanceGrant } = useModulePermission({
+    companyId,
+    featureKey: MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS,
+    role,
+  });
+  const permissions = getMaintenancePermissions({
+    role,
+    moduleEnabled,
+    companyReadOnly: readOnly,
+    companySelected: Boolean(companyId),
+    granular: maintenanceGrant
+      ? {
+          canCreate: maintenanceGrant.canCreate,
+          canEdit: maintenanceGrant.canEdit,
+          canDelete: maintenanceGrant.canDelete,
+        }
+      : null,
+  });
   const [page, setPage] = useState(1); const [filters, setFilters] = useState<MaintenanceFilters>(() => ({ ...initialFilters, materialId: searchParams.get("material") ?? "" }));
   const [newOpen, setNewOpen] = useState(searchParams.get("nova") === "1"); const [detailId, setDetailId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);

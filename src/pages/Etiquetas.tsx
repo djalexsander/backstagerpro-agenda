@@ -16,6 +16,7 @@ import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { useToast } from "@/hooks/use-toast";
 import { addLabelBatchMaterial, canPrintMaterialWithModel, labelBatchTotal, labelHistoryPagination, LABEL_IDENTIFICATION_LABELS, labelReadinessMessage, removeLabelBatchMaterial, updateLabelBatchQuantity } from "@/lib/material-label-domain";
 import { getMaterialLabelPermissions } from "@/lib/material-label-permissions";
+import { useModulePermission } from "@/hooks/useModulePermission";
 import { archiveLabelModel, getLabelIndicators, listLabelModels, listLabelPrintHistory, resolveLabelMaterialById, searchLabelMaterials } from "@/lib/material-label-service";
 import type { LabelBatchSelection, LabelModel, LabelPrintBatch } from "@/lib/material-label-types";
 import { useSearchParams } from "react-router-dom";
@@ -29,7 +30,24 @@ export default function Etiquetas() {
   const companyName = empresaNome ?? "Empresa";
   const { hasModule, isLoading: loadingModules } = useCompanyModules(companyId);
   const moduleEnabled = hasModule(MODULE_KEYS.ETIQUETAS_MATERIAIS) && hasModule(MODULE_KEYS.GESTAO_MATERIAIS);
-  const permissions = getMaterialLabelPermissions({ role, moduleEnabled, companyReadOnly: readOnly, companySelected: Boolean(companyId) });
+  const { permission: labelsGrant } = useModulePermission({
+    companyId,
+    featureKey: MODULE_KEYS.ETIQUETAS_MATERIAIS,
+    role,
+  });
+  const permissions = getMaterialLabelPermissions({
+    role,
+    moduleEnabled,
+    companyReadOnly: readOnly,
+    companySelected: Boolean(companyId),
+    granular: labelsGrant
+      ? {
+          canCreate: labelsGrant.canCreate,
+          canEdit: labelsGrant.canEdit,
+          canDelete: labelsGrant.canDelete,
+        }
+      : null,
+  });
   const [search, setSearch] = useState("");
   const [selectedModelId, setSelectedModelId] = useState(""); const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<LabelModel | null>(null); const [batchItems, setBatchItems] = useState<LabelBatchSelection[]>([]);

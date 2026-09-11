@@ -100,11 +100,28 @@ export default function Materiais() {
     isMasterAdmin,
   } = useAuth();
   const { hasModule } = useCompanyModules(empresaId);
+  const { permission: materialGrant } = useModulePermission({
+    companyId: empresaId,
+    featureKey: MODULE_KEYS.GESTAO_MATERIAIS,
+    role,
+  });
   const permissions = getMaterialPermissions({
     role,
     moduleEnabled:
       isMasterAdmin || hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
     companyReadOnly: empresaReadOnly,
+    granular: materialGrant
+      ? {
+          canCreate: materialGrant.canCreate,
+          canEdit: materialGrant.canEdit,
+          canDelete: materialGrant.canDelete,
+        }
+      : null,
+  });
+  const { permission: stockGrant } = useModulePermission({
+    companyId: empresaId,
+    featureKey: MODULE_KEYS.CONTROLE_ESTOQUE,
+    role,
   });
   const stockPermissions = getStockPermissions({
     role,
@@ -113,6 +130,13 @@ export default function Materiais() {
       hasModule(MODULE_KEYS.CONTROLE_ESTOQUE),
     companyReadOnly: empresaReadOnly,
     companySelected: !!empresaId,
+    granular: stockGrant
+      ? {
+          canCreate: stockGrant.canCreate,
+          canEdit: stockGrant.canEdit,
+          canDelete: stockGrant.canDelete,
+        }
+      : null,
   });
   const { permission: rfidGrant } = useModulePermission({
     companyId: empresaId,
@@ -305,7 +329,7 @@ export default function Materiais() {
       >
         <Eye className="h-4 w-4" />
       </Button>
-      {canManage && (
+      {permissions.editar && (
         <>
           <Button
             variant="ghost"

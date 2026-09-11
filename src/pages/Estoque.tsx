@@ -53,6 +53,7 @@ import type {
 import { useCompanyModules } from "@/hooks/useCompanyModules";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getStockPermissions } from "@/lib/stock-permissions";
+import { useModulePermission } from "@/hooks/useModulePermission";
 
 const PAGE_SIZE = 10;
 
@@ -114,6 +115,11 @@ export default function Estoque() {
   const requestedTab =
     searchParams.get("tab") === "historico" ? "historico" : "saldos";
   const { hasModule, isLoading: loadingModules } = useCompanyModules(empresaId);
+  const { permission: stockGrant } = useModulePermission({
+    companyId: empresaId,
+    featureKey: MODULE_KEYS.CONTROLE_ESTOQUE,
+    role,
+  });
   const permissions = getStockPermissions({
     role,
     moduleEnabled:
@@ -121,8 +127,14 @@ export default function Estoque() {
       hasModule(MODULE_KEYS.GESTAO_MATERIAIS),
     companyReadOnly: empresaReadOnly,
     companySelected: !!empresaId,
+    granular: stockGrant
+      ? {
+          canCreate: stockGrant.canCreate,
+          canEdit: stockGrant.canEdit,
+          canDelete: stockGrant.canDelete,
+        }
+      : null,
   });
-  const canWrite = permissions.movimentar;
   const [page, setPage] = useState(1);
   const [historyPageNumber, setHistoryPageNumber] = useState(1);
   const [filters, setFilters] = useState<StockFilters>({
@@ -432,49 +444,55 @@ export default function Estoque() {
                           : "—"}
                       </TableCell>
                       <TableCell>
-                        {canWrite && (
+                        {(permissions.movimentar || permissions.ajustar) && (
                           <div className="flex justify-end gap-1">
-                            {material.quantidade === 0 && (
+                            {permissions.movimentar && (
+                              <>
+                                {material.quantidade === 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openOperation(material, "saldo_inicial")}
+                                  >
+                                    Inicial
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  title="Entrada"
+                                  onClick={() => openOperation(material, "entrada")}
+                                >
+                                  <ArrowDownToLine className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  title="Saída"
+                                  onClick={() => openOperation(material, "saida")}
+                                >
+                                  <PackageX className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  title="Transferência"
+                                  onClick={() => openOperation(material, "transferencia")}
+                                >
+                                  <ArrowLeftRight className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {permissions.ajustar && (
                               <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openOperation(material, "saldo_inicial")}
+                                size="icon"
+                                variant="ghost"
+                                title="Ajuste físico"
+                                onClick={() => openOperation(material, "ajuste")}
                               >
-                                Inicial
+                                <Settings2 className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Entrada"
-                              onClick={() => openOperation(material, "entrada")}
-                            >
-                              <ArrowDownToLine className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Saída"
-                              onClick={() => openOperation(material, "saida")}
-                            >
-                              <PackageX className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Transferência"
-                              onClick={() => openOperation(material, "transferencia")}
-                            >
-                              <ArrowLeftRight className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Ajuste físico"
-                              onClick={() => openOperation(material, "ajuste")}
-                            >
-                              <Settings2 className="h-4 w-4" />
-                            </Button>
                           </div>
                         )}
                       </TableCell>
@@ -504,7 +522,7 @@ export default function Estoque() {
                       .map((item) => `${item.localizacao?.nome}: ${item.quantidade}`)
                       .join(" · ") || "Sem localização com saldo"}
                   </p>
-                  {canWrite && (
+                  {permissions.movimentar && (
                     <Button
                       size="sm"
                       onClick={() =>
@@ -708,7 +726,7 @@ export default function Estoque() {
                       </p>
                     </TableCell>
                     <TableCell>
-                      {canWrite && movement.tipo_movimentacao !== "estorno" && (
+                      {permissions.estornar && movement.tipo_movimentacao !== "estorno" && (
                         <Button
                           size="icon"
                           variant="ghost"
@@ -754,7 +772,7 @@ export default function Estoque() {
         onOpenChange={setLocationsOpen}
         companyId={empresaId}
         locations={locations}
-        canWrite={canWrite}
+        canWrite={permissions.gerenciarLocalizacoes}
         onChanged={invalidateLocations}
       />
       <StockReversalDialog
