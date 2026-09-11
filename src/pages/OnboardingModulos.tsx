@@ -19,6 +19,8 @@ import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
 import type { ModuleCatalogRow } from "@/types/subscription";
 import { MODULE_CATEGORIES, getCategoryLabel, getBadgeInfo } from "@/constants/module-categories";
+import { getSelfServiceAvailableModules } from "@/lib/self-service-module-availability";
+import { expandModuleSelectionWithDependencies } from "@/lib/company-module-entitlements";
 
 export default function OnboardingModulos() {
   const { empresaId, refreshProfile } = useAuth();
@@ -49,12 +51,65 @@ export default function OnboardingModulos() {
       if (!empresaId) return [];
       const { data, error } = await supabase
         .from("empresa_modules")
-        .select("module_id, status")
+        .select("empresa_id, module_id, status")
         .eq("empresa_id", empresaId);
       if (error) throw error;
       return data;
     },
     enabled: !!empresaId,
+  });
+
+  const { data: moduleRequests = [] } = useQuery({
+    queryKey: ["module-requests-onboarding", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("module_requests")
+        .select("empresa_id, module_id, status")
+        .eq("empresa_id", empresaId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: batchRequests = [] } = useQuery({
+    queryKey: ["module-batch-requests-onboarding", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("module_batch_requests")
+        .select("empresa_id, status, module_batch_request_items(module_id)")
+        .eq("empresa_id", empresaId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: modulePayments = [] } = useQuery({
+    queryKey: ["module-payments-onboarding", empresaId],
+    queryFn: async () => {
+      if (!empresaId) return [];
+      const { data, error } = await supabase
+        .from("module_payments")
+        .select("empresa_id, module_id, status")
+        .eq("empresa_id", empresaId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+  });
+
+  const { data: moduleDependencies = [] } = useQuery({
+    queryKey: ["module-dependencies"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("module_dependencies")
+        .select("module_id, required_module_id");
+      if (error) throw error;
+      return data;
+    },
   });
 
   const { data: empresa } = useQuery({
@@ -72,14 +127,22 @@ export default function OnboardingModulos() {
     enabled: !!empresaId,
   });
 
-  const existingModuleIds = useMemo(
-    () => new Set(existingModules.filter((m) => m.status !== "cancelled" && m.status !== "rejected").map((m) => m.module_id)),
-    [existingModules]
-  );
+  // A provisioned empresa_modules row is only a placeholder. The canonical
+  // entitlement states (active/pending) and in-flight commercial records are
+  // what make a catalog module unavailable for another purchase — same rule
+  // PlanoAssinatura.tsx uses post-onboarding.
+  const availableModules = useMemo(() => getSelfServiceAvailableModules({
+    companyId: empresaId,
+    catalog,
+    companyModules: existingModules,
+    moduleRequests,
+    batchRequests,
+    modulePayments,
+  }), [empresaId, catalog, existingModules, moduleRequests, batchRequests, modulePayments]);
 
-  const availableModules = useMemo(
-    () => catalog.filter((c) => !existingModuleIds.has(c.id)),
-    [catalog, existingModuleIds]
+  const activeModuleIds = useMemo(
+    () => existingModules.filter((m) => m.status === "active").map((m) => m.module_id),
+    [existingModules],
   );
 
   // Group modules by category
@@ -112,7 +175,11 @@ export default function OnboardingModulos() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
+      return expandModuleSelectionWithDependencies({
+        selectedModuleIds: next,
+        moduleDependencies,
+        activeModuleIds,
+      });
     });
   };
 
