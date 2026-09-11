@@ -3,14 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ModuleGate } from "@/components/ModuleGate";
 
 const access = vi.hoisted(() => ({
-  enabled: false,
+  enabledKeys: new Set<string>(),
   loading: false,
   master: false,
+  set enabled(value: boolean) {
+    if (value) this.enabledKeys.add("gestao_materiais");
+    else this.enabledKeys.delete("gestao_materiais");
+  },
 }));
 
 vi.mock("@/hooks/useCompanyModules", () => ({
   useCompanyModules: () => ({
-    hasModule: () => access.enabled,
+    hasModule: (featureKey: string) => access.enabledKeys.has(featureKey),
     isLoading: access.loading,
   }),
 }));
@@ -23,7 +27,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 describe("ModuleGate", () => {
   beforeEach(() => {
-    access.enabled = false;
+    access.enabledKeys.clear();
     access.loading = false;
     access.master = false;
   });
@@ -74,5 +78,31 @@ describe("ModuleGate", () => {
     );
 
     expect(screen.getByText("materiais")).toBeInTheDocument();
+  });
+
+  it("renders when ANY of a list of feature keys is active (public.funcionarios' own OR)", () => {
+    access.enabledKeys.add("painel_operacional");
+    render(
+      <ModuleGate featureKey={["financeiro_avancado", "checklist_tecnico", "painel_operacional"]}>
+        <span>funcionarios</span>
+      </ModuleGate>,
+    );
+
+    expect(screen.getByText("funcionarios")).toBeInTheDocument();
+  });
+
+  it("blocks when NONE of a list of feature keys is active", () => {
+    render(
+      <ModuleGate
+        featureKey={["financeiro_avancado", "checklist_tecnico", "painel_operacional"]}
+        mode="custom"
+        fallback={<span>acesso bloqueado</span>}
+      >
+        <span>funcionarios</span>
+      </ModuleGate>,
+    );
+
+    expect(screen.getByText("acesso bloqueado")).toBeInTheDocument();
+    expect(screen.queryByText("funcionarios")).not.toBeInTheDocument();
   });
 });

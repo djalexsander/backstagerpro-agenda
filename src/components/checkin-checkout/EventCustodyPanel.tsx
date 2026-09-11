@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ClipboardCheck, Loader2, PackageCheck, PackageOpen, ScanLine } from "lucide-react";
@@ -16,13 +16,21 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckinDialog } from "@/components/checkin-checkout/CheckinDialog";
-import { listCustodyOperationsByReference } from "@/lib/checkin-checkout-service";
+import { getEventCustodyTotals, listEventCustodyMaterials } from "@/lib/checkin-checkout-service";
 import {
   findPendingMaterialByCode,
-  summarizeEventCustody,
   type EventCustodyMaterialSummary,
 } from "@/lib/event-custody-domain";
 import type { StockLocation } from "@/lib/stock-types";
+
+const PAGE_SIZE = 10;
+// Distinct materials per event is bounded by the venue's real equipment
+// roster (unlike raw custody rows, which grow with every partial
+// return/correction) - one capped, unpaginated fetch is enough to resolve a
+// barcode/QR scan regardless of which display page/filter is active, same
+// reasoning identifierQuery already relied on before this panel had display
+// pagination.
+const SCAN_PAGE_SIZE = 100;
 
 function MaterialRow({
   item,
@@ -47,16 +55,38 @@ function MaterialRow({
   );
 }
 
-// Primeira etapa da conferência de retorno por evento: mostra o que foi
-// retirado/devolvido/pendente para o evento selecionado, e permite dar
-// check-in direto de um material pendente, seja pelo botão "Fazer check-in"
-// ou digitando/lendo o código do material (leitor USB/QR que emula teclado -
-// ver findPendingMaterialByCode). Os dois caminhos resolvem para a mesma
-// custódia (a mais antiga pendente) e abrem o mesmo CheckinDialog. Reaproveita
-// o CheckinDialog e a RPC de check-in já existentes por inteiro (mesma
-// validação de quantidade/pendente que a aba "Operações em aberto" já usa) -
-// nenhuma lógica de check-in nova foi criada aqui. Câmera, Scanner Remoto e
-// RFID/EPC por evento continuam fora de escopo.
+function MaterialListPagination({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (pages <= 1) return null;
+  return (
+    <div className="flex items-center justify-end gap-2 pt-2 text-sm">
+      <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Anterior</Button>
+      <span>{page} de {pages}</span>
+      <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => onPageChange(page + 1)}>Próxima</Button>
+    </div>
+  );
+}
+
+// Conferência de retorno por evento: mostra o que foi retirado/devolvido/
+// pendente para o evento selecionado (paginado e filtrado no servidor via
+// listar_custodias_evento_por_material/obter_totais_custodia_evento - ver
+// checkin-checkout-service.ts), e permite dar check-in direto de um material
+// pendente, seja pelo botão "Fazer check-in" ou digitando/lendo o código do
+// material (leitor USB/QR que emula teclado - ver findPendingMaterialByCode).
+// Os dois caminhos resolvem para a mesma custódia (a mais antiga pendente) e
+// abrem o mesmo CheckinDialog. Reaproveita o CheckinDialog e a RPC de
+// check-in já existentes por inteiro (mesma validação de quantidade/pendente
+// que a aba "Operações em aberto" já usa) - nenhuma lógica de check-in nova
+// foi criada aqui. Câmera, Scanner Remoto e RFID/EPC por evento continuam
+// fora de escopo.
 export function EventCustodyPanel({
   companyId,
   canCheckin,
@@ -67,12 +97,21 @@ export function EventCustodyPanel({
   locations: StockLocation[];
 }) {
   const [eventId, setEventId] = useState("");
+  const [search, setSearch] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [pendingPage, setPendingPage] = useState(1);
+  const [returnedPage, setReturnedPage] = useState(1);
   const [checkinOperation, setCheckinOperation] = useState<
     EventCustodyMaterialSummary["custodiasAbertas"][number] | null
   >(null);
   const [scanValue, setScanValue] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setPendingPage(1);
+    setReturnedPage(1);
+  }, [eventId, search, locationId]);
 
   const eventsQuery = useQuery({
     queryKey: ["checkin-checkout-events", companyId],
@@ -89,19 +128,57 @@ export function EventCustodyPanel({
   });
   const events = eventsQuery.data ?? [];
 
-  const custodyQuery = useQuery({
-    queryKey: ["event-custody-operations", companyId, eventId],
-    queryFn: () => listCustodyOperationsByReference(companyId, "evento", eventId),
+  const trimmedSearch = search.trim() || undefined;
+  const activeLocationId = locationId || undefined;
+
+  const totalsQuery = useQuery({
+    queryKey: ["event-custody", companyId, eventId, "totals", trimmedSearch, activeLocationId],
+    queryFn: () => getEventCustodyTotals(companyId, eventId, { search: trimmedSearch, locationId: activeLocationId }),
     enabled: Boolean(companyId) && Boolean(eventId),
   });
 
-  const summary = custodyQuery.data ? summarizeEventCustody(custodyQuery.data) : null;
-  const pendingMaterialIds = summary ? summary.materiaisPendentes.map((item) => item.materialId) : [];
+  const pendingQuery = useQuery({
+    queryKey: ["event-custody", companyId, eventId, "materials", "pendente", pendingPage, trimmedSearch, activeLocationId],
+    queryFn: () =>
+      listEventCustodyMaterials(companyId, eventId, {
+        pendente: true,
+        page: pendingPage,
+        pageSize: PAGE_SIZE,
+        search: trimmedSearch,
+        locationId: activeLocationId,
+      }),
+    enabled: Boolean(companyId) && Boolean(eventId),
+  });
 
-  // identificador_unico não é exposto por listar_custodias_materiais (só o
-  // fallback material_identificador, que pode ser patrimônio/série/código de
-  // barras) - por isso é resolvido aqui, direto contra materiais, só para os
-  // materiais pendentes deste evento. Ver findPendingMaterialByCode.
+  const returnedQuery = useQuery({
+    queryKey: ["event-custody", companyId, eventId, "materials", "devolvido", returnedPage, trimmedSearch, activeLocationId],
+    queryFn: () =>
+      listEventCustodyMaterials(companyId, eventId, {
+        pendente: false,
+        page: returnedPage,
+        pageSize: PAGE_SIZE,
+        search: trimmedSearch,
+        locationId: activeLocationId,
+      }),
+    enabled: Boolean(companyId) && Boolean(eventId),
+  });
+
+  // Full (capped) pending set for the barcode/QR scan - deliberately NOT
+  // filtered by search/locationId and NOT tied to pendingPage, so scanning
+  // still resolves a material that the current display filter/page happens
+  // to be hiding.
+  const scanPendingQuery = useQuery({
+    queryKey: ["event-custody", companyId, eventId, "materials-scan"],
+    queryFn: () => listEventCustodyMaterials(companyId, eventId, { pendente: true, page: 1, pageSize: SCAN_PAGE_SIZE }),
+    enabled: Boolean(companyId) && Boolean(eventId) && canCheckin,
+  });
+  const scanPendingMaterials = scanPendingQuery.data?.items ?? [];
+  const pendingMaterialIds = scanPendingMaterials.map((item) => item.materialId);
+
+  // identificador_unico não é exposto por listar_custodias_evento_por_material
+  // (só o fallback material_identificador, que pode ser patrimônio/série/
+  // código de barras) - por isso é resolvido aqui, direto contra materiais,
+  // só para os materiais pendentes deste evento. Ver findPendingMaterialByCode.
   const identifierQuery = useQuery({
     queryKey: ["event-custody-material-identifiers", companyId, pendingMaterialIds],
     queryFn: async () => {
@@ -120,13 +197,12 @@ export function EventCustodyPanel({
   );
 
   const refreshAfterCheckin = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["event-custody-operations", companyId, eventId] });
+    await queryClient.invalidateQueries({ queryKey: ["event-custody", companyId, eventId] });
   };
 
   const handleScanSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!summary) return;
-    const match = findPendingMaterialByCode(summary.materiaisPendentes, scanValue, identificadorUnicoPorMaterial);
+    const match = findPendingMaterialByCode(scanPendingMaterials, scanValue, identificadorUnicoPorMaterial);
     if (!match || match.custodiasAbertas.length === 0) {
       setScanError("Nenhum material pendente encontrado para este código.");
       return;
@@ -139,20 +215,46 @@ export function EventCustodyPanel({
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="space-y-2 p-4">
-          <Label>Evento</Label>
-          <Select value={eventId} onValueChange={setEventId}>
-            <SelectTrigger className="max-w-sm">
-              <SelectValue placeholder={eventsQuery.isLoading ? "Carregando eventos..." : "Selecione um evento"} />
-            </SelectTrigger>
-            <SelectContent>
-              {events.map((event) => (
-                <SelectItem key={event.id} value={event.id}>
-                  {event.name} · {format(parseISO(event.date), "dd/MM/yyyy")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <CardContent className="space-y-3 p-4">
+          <div className="space-y-2">
+            <Label>Evento</Label>
+            <Select value={eventId} onValueChange={setEventId}>
+              <SelectTrigger className="max-w-sm">
+                <SelectValue placeholder={eventsQuery.isLoading ? "Carregando eventos..." : "Selecione um evento"} />
+              </SelectTrigger>
+              <SelectContent>
+                {events.map((event) => (
+                  <SelectItem key={event.id} value={event.id}>
+                    {event.name} · {format(parseISO(event.date), "dd/MM/yyyy")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {eventId && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Buscar material</Label>
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Nome ou código do material"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Localização de saída</Label>
+                <Select value={locationId || "todas"} onValueChange={(value) => setLocationId(value === "todas" ? "" : value)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas</SelectItem>
+                    {locations.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.codigo} · {item.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">
             Mostra as custódias registradas com finalidade Evento vinculadas ao evento selecionado.
           </p>
@@ -165,17 +267,17 @@ export function EventCustodyPanel({
         </p>
       )}
 
-      {eventId && custodyQuery.isLoading && (
+      {eventId && totalsQuery.isLoading && (
         <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
       )}
 
-      {eventId && custodyQuery.error && (
+      {eventId && totalsQuery.error && (
         <p className="text-sm text-destructive">
-          {custodyQuery.error instanceof Error ? custodyQuery.error.message : "Não foi possível carregar as custódias do evento."}
+          {totalsQuery.error instanceof Error ? totalsQuery.error.message : "Não foi possível carregar as custódias do evento."}
         </p>
       )}
 
-      {eventId && summary && (
+      {eventId && totalsQuery.data && (
         <>
           {canCheckin && (
             <Card>
@@ -206,9 +308,9 @@ export function EventCustodyPanel({
           )}
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total retirado</p><p className="text-2xl font-bold">{summary.totalRetirado}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total devolvido</p><p className="text-2xl font-bold">{summary.totalDevolvido}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total pendente</p><p className="text-2xl font-bold">{summary.totalPendente}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total retirado</p><p className="text-2xl font-bold">{totalsQuery.data.totalRetirado}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total devolvido</p><p className="text-2xl font-bold">{totalsQuery.data.totalDevolvido}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total pendente</p><p className="text-2xl font-bold">{totalsQuery.data.totalPendente}</p></CardContent></Card>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -216,14 +318,18 @@ export function EventCustodyPanel({
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <PackageOpen className="h-4 w-4" /> Materiais pendentes
-                  <Badge variant="secondary">{summary.materiaisPendentes.length}</Badge>
+                  <Badge variant="secondary">{pendingQuery.data?.total ?? 0}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {summary.materiaisPendentes.length === 0 ? (
+                {pendingQuery.isLoading ? (
+                  <div className="flex justify-center p-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                ) : pendingQuery.error ? (
+                  <p className="p-4 text-center text-sm text-destructive">Não foi possível carregar os materiais pendentes.</p>
+                ) : !pendingQuery.data?.items.length ? (
                   <p className="p-4 text-center text-sm text-muted-foreground">Nenhum material pendente.</p>
                 ) : (
-                  summary.materiaisPendentes.map((item) => (
+                  pendingQuery.data.items.map((item) => (
                     <MaterialRow
                       key={item.materialId}
                       item={item}
@@ -242,6 +348,7 @@ export function EventCustodyPanel({
                     />
                   ))
                 )}
+                <MaterialListPagination page={pendingPage} total={pendingQuery.data?.total ?? 0} onPageChange={setPendingPage} />
               </CardContent>
             </Card>
 
@@ -249,14 +356,18 @@ export function EventCustodyPanel({
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <PackageCheck className="h-4 w-4" /> Materiais totalmente devolvidos
-                  <Badge variant="secondary">{summary.materiaisDevolvidos.length}</Badge>
+                  <Badge variant="secondary">{returnedQuery.data?.total ?? 0}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {summary.materiaisDevolvidos.length === 0 ? (
+                {returnedQuery.isLoading ? (
+                  <div className="flex justify-center p-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                ) : returnedQuery.error ? (
+                  <p className="p-4 text-center text-sm text-destructive">Não foi possível carregar os materiais devolvidos.</p>
+                ) : !returnedQuery.data?.items.length ? (
                   <p className="p-4 text-center text-sm text-muted-foreground">Nenhum material devolvido ainda.</p>
                 ) : (
-                  summary.materiaisDevolvidos.map((item) => (
+                  returnedQuery.data.items.map((item) => (
                     <MaterialRow
                       key={item.materialId}
                       item={item}
@@ -264,6 +375,7 @@ export function EventCustodyPanel({
                     />
                   ))
                 )}
+                <MaterialListPagination page={returnedPage} total={returnedQuery.data?.total ?? 0} onPageChange={setReturnedPage} />
               </CardContent>
             </Card>
           </div>

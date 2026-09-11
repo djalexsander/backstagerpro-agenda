@@ -428,7 +428,7 @@ SELECT ok(
     'public.can_read_material_photo_object(text)'::regprocedure
   ) ILIKE '%can_read_company_module%'
   AND pg_get_functiondef(
-    'public.can_manage_material_photo_object(text)'::regprocedure
+    'public.can_manage_material_photo_object(text, text)'::regprocedure
   ) ILIKE '%can_write_company_module%',
   'private Storage authorization also requires the material module'
 );

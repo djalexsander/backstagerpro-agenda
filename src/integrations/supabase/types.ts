@@ -4817,7 +4817,7 @@ export type Database = {
         Returns: boolean
       }
       can_manage_material_photo_object: {
-        Args: { _file_path: string }
+        Args: { _action: string; _file_path: string }
         Returns: boolean
       }
       can_read_company_data: { Args: { _empresa_id: string }; Returns: boolean }
@@ -5616,6 +5616,21 @@ export type Database = {
           total_count: number
         }[]
       }
+      listar_custodias_evento_por_material: {
+        Args: {
+          _busca?: string
+          _empresa_id?: string
+          _evento_id?: string
+          _localizacao_id?: string
+          _pagina?: number
+          _pendente?: boolean
+          _tamanho_pagina?: number
+        }
+        Returns: {
+          item: Json
+          total_count: number
+        }[]
+      }
       listar_custodias_materiais: {
         Args: {
           _busca?: string
@@ -6057,6 +6072,15 @@ export type Database = {
       }
       obter_sugestao_manutencao_checkin: {
         Args: { _custodia_id: string; _empresa_id?: string }
+        Returns: Json
+      }
+      obter_totais_custodia_evento: {
+        Args: {
+          _busca?: string
+          _empresa_id?: string
+          _evento_id?: string
+          _localizacao_id?: string
+        }
         Returns: Json
       }
       prepare_asaas_charge: {

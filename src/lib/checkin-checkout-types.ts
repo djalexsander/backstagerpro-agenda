@@ -88,6 +88,32 @@ export interface CustodyOperationPage {
   total: number;
 }
 
+// Raw row shape returned by listar_custodias_evento_por_material - one
+// material of one event, already grouped/summed in SQL. custodias_abertas
+// reuses the exact same per-row jsonb shape as CustodyOperationView so
+// CheckinDialog needs no changes to consume it.
+export interface EventCustodyMaterialRow {
+  material_id: string;
+  material_nome: string;
+  material_codigo: string;
+  quantidade_retirada: number;
+  quantidade_devolvida: number;
+  quantidade_pendente: number;
+  custodias_abertas: CustodyOperationView[];
+}
+
+export interface EventCustodyMaterialPage {
+  items: EventCustodyMaterialRow[];
+  total: number;
+}
+
+// Raw row shape returned by obter_totais_custodia_evento.
+export interface EventCustodyTotalsRow {
+  total_retirado: number;
+  total_devolvido: number;
+  total_pendente: number;
+}
+
 export interface CustodyEventView {
   id: string;
   tipo: "checkout" | "checkin" | "cancelamento" | "correcao";

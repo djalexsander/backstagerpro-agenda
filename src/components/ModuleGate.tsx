@@ -28,14 +28,28 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { ModuleKey } from "@/constants/module-keys";
 
 interface ModuleGateProps {
-  /** feature_key do módulo requerido */
-  featureKey: ModuleKey | string;
+  /**
+   * feature_key do módulo requerido. Aceita uma lista quando o acesso é
+   * concedido por QUALQUER UM de vários módulos (mesmo OR já usado nas RLS
+   * policies compartilhadas, ex.: public.funcionarios aceita
+   * financeiro_avancado OU checklist_tecnico OU painel_operacional).
+   */
+  featureKey: ModuleKey | string | (ModuleKey | string)[];
   /** Comportamento quando o módulo não está ativo */
   mode?: "hide" | "lock" | "custom";
   /** Fallback customizado (usado quando mode="custom") */
   fallback?: React.ReactNode;
   /** Conteúdo protegido */
   children: React.ReactNode;
+}
+
+function hasAnyModule(
+  hasModule: (featureKey: string) => boolean,
+  featureKey: ModuleKey | string | (ModuleKey | string)[],
+): boolean {
+  return Array.isArray(featureKey)
+    ? featureKey.some((key) => hasModule(key))
+    : hasModule(featureKey);
 }
 
 export function ModuleGate({
@@ -53,8 +67,8 @@ export function ModuleGate({
   // Enquanto carrega, não bloqueia (evita flash)
   if (isLoading) return null;
 
-  // Se o módulo está ativo, renderiza normalmente
-  if (hasModule(featureKey)) return <>{children}</>;
+  // Se algum dos módulos requeridos está ativo, renderiza normalmente
+  if (hasAnyModule(hasModule, featureKey)) return <>{children}</>;
 
   // Módulo inativo — aplica bloqueio
   switch (mode) {
@@ -76,7 +90,7 @@ export function ModuleGate({
  * Placeholder visual para módulos bloqueados.
  * Exibido quando mode="lock".
  */
-function ModuleLockedPlaceholder({ featureKey }: { featureKey: string }) {
+function ModuleLockedPlaceholder({ featureKey }: { featureKey: ModuleKey | string | (ModuleKey | string)[] }) {
   return (
     <Card className="border-dashed border-muted-foreground/30">
       <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -106,12 +120,12 @@ function ModuleLockedPlaceholder({ featureKey }: { featureKey: string }) {
  *   const { canAccess } = useModuleAccess("financeiro_avancado");
  *   if (canAccess) { ... }
  */
-export function useModuleAccess(featureKey: ModuleKey | string) {
+export function useModuleAccess(featureKey: ModuleKey | string | (ModuleKey | string)[]) {
   const { hasModule, isLoading } = useCompanyModules();
   const { isMasterAdmin } = useAuth();
 
   return {
-    canAccess: isMasterAdmin || hasModule(featureKey),
+    canAccess: isMasterAdmin || hasAnyModule(hasModule, featureKey),
     isLoading,
   };
 }

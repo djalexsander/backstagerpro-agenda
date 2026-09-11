@@ -17,7 +17,10 @@ import type {
   CustodyOperationView,
   CustodyResponsibleOption,
   CustodyWriteOffInput,
+  EventCustodyMaterialRow,
+  EventCustodyTotalsRow,
 } from "./checkin-checkout-types";
+import type { EventCustodyMaterialSummary } from "./event-custody-domain";
 
 // Single source of truth for "what else needs to refetch after a custody
 // row changes" - shared between this module's own callers (useCheckinCheckout's
@@ -98,38 +101,93 @@ export async function listCustodyOperations({
   };
 }
 
-// Same RPC as listCustodyOperations, filtered by referencia_tipo/referencia_id
-// instead of the free-text/date filter form - fetches every page (the RPC
-// caps _tamanho_pagina at 100 server-side) instead of driving a paginated
-// UI, same "fetch it all, aggregate client-side" shape RentalOperationsQueue
-// already uses for its queue. A page shorter than the page size is the
-// signal there's nothing left - the same "just keep paging" contract
-// listar_custodias_materiais already exposes via OFFSET/LIMIT, no new RPC
-// capability needed. REFERENCIA_PAGE_SIZE_CAP bounds the loop itself in
-// case the RPC ever misbehaves - far beyond any real event's custody count.
-const REFERENCIA_PAGE_SIZE = 100;
-const REFERENCIA_PAGE_SIZE_CAP = 1000;
+function mapEventCustodyMaterialRow(row: EventCustodyMaterialRow): EventCustodyMaterialSummary {
+  return {
+    materialId: row.material_id,
+    materialNome: row.material_nome,
+    materialCodigo: row.material_codigo,
+    quantidadeRetirada: row.quantidade_retirada,
+    quantidadeDevolvida: row.quantidade_devolvida,
+    quantidadePendente: row.quantidade_pendente,
+    custodiasAbertas: row.custodias_abertas,
+  };
+}
 
-export async function listCustodyOperationsByReference(
+export interface EventCustodyMaterialPageResult {
+  items: EventCustodyMaterialSummary[];
+  total: number;
+}
+
+// Grouped-by-material summary of one event's custodies, paginated in SQL on
+// the already-aggregated result (listar_custodias_evento_por_material) -
+// replaces the old listCustodyOperationsByReference, which fetched every
+// raw custody row for the event (looping listar_custodias_materiais up to
+// 1000 pages) just to group them client-side. pendente=true/false powers the
+// panel's two independent lists (materiais pendentes / totalmente
+// devolvidos); omitted, it returns every material regardless of balance -
+// used for the barcode/QR check-in scan, which must resolve a code
+// regardless of which display page is currently open.
+export async function listEventCustodyMaterials(
   companyId: string,
-  referenceType: string,
-  referenceId: string,
-): Promise<CustodyOperationView[]> {
-  const items: CustodyOperationView[] = [];
-  for (let page = 1; page <= REFERENCIA_PAGE_SIZE_CAP; page += 1) {
-    const { data, error } = await supabase.rpc("listar_custodias_materiais", {
-      _empresa_id: companyId,
-      _pagina: page,
-      _tamanho_pagina: REFERENCIA_PAGE_SIZE,
-      _referencia_tipo: referenceType,
-      _referencia_id: referenceId,
-    });
-    if (error) throwCustodyError(error, "list operations by reference");
-    const rows = data ?? [];
-    items.push(...rows.map((row) => row.item as unknown as CustodyOperationView));
-    if (rows.length < REFERENCIA_PAGE_SIZE) break;
-  }
-  return items;
+  eventId: string,
+  {
+    pendente,
+    page,
+    pageSize,
+    search,
+    locationId,
+  }: {
+    pendente?: boolean;
+    page: number;
+    pageSize: number;
+    search?: string;
+    locationId?: string;
+  },
+): Promise<EventCustodyMaterialPageResult> {
+  const { data, error } = await supabase.rpc("listar_custodias_evento_por_material", {
+    _empresa_id: companyId,
+    _evento_id: eventId,
+    _pendente: pendente,
+    _pagina: page,
+    _tamanho_pagina: pageSize,
+    _busca: search?.trim() || undefined,
+    _localizacao_id: locationId || undefined,
+  });
+  if (error) throwCustodyError(error, "list event custody materials");
+  const rows = data ?? [];
+  return {
+    items: rows.map((row) => mapEventCustodyMaterialRow(row.item as unknown as EventCustodyMaterialRow)),
+    total: rows[0]?.total_count ?? 0,
+  };
+}
+
+export interface EventCustodyTotals {
+  totalRetirado: number;
+  totalDevolvido: number;
+  totalPendente: number;
+}
+
+// Sums for the event's 3 stat cards, computed entirely in SQL - independent
+// of listEventCustodyMaterials' pagination, so the totals always reflect the
+// whole (filtered) event, not just the currently loaded page.
+export async function getEventCustodyTotals(
+  companyId: string,
+  eventId: string,
+  { search, locationId }: { search?: string; locationId?: string } = {},
+): Promise<EventCustodyTotals> {
+  const { data, error } = await supabase.rpc("obter_totais_custodia_evento", {
+    _empresa_id: companyId,
+    _evento_id: eventId,
+    _busca: search?.trim() || undefined,
+    _localizacao_id: locationId || undefined,
+  });
+  if (error) throwCustodyError(error, "get event custody totals");
+  const totals = (data ?? {}) as unknown as Partial<EventCustodyTotalsRow>;
+  return {
+    totalRetirado: Number(totals.total_retirado ?? 0),
+    totalDevolvido: Number(totals.total_devolvido ?? 0),
+    totalPendente: Number(totals.total_pendente ?? 0),
+  };
 }
 
 export async function getCustodyIndicators(

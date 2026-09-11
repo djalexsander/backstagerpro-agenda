@@ -98,8 +98,36 @@ const App = () => (
                   <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
                   <Route path="/configuracoes/impressoras" element={<ProtectedRoute><ConfiguracoesImpressoras /></ProtectedRoute>} />
                   <Route path="/configuracoes/empresa" element={<ProtectedRoute adminOnly><ConfiguracoesEmpresa /></ProtectedRoute>} />
-                  <Route path="/documentos" element={<ProtectedRoute adminOnly><Documentos /></ProtectedRoute>} />
-                  <Route path="/funcionarios" element={<ProtectedRoute adminOnly><Funcionarios /></ProtectedRoute>} />
+                  <Route
+                    path="/documentos"
+                    element={
+                      <ProtectedRoute adminOnly>
+                        <ModuleGate featureKey={MODULE_KEYS.DOCUMENTOS_AVANCADOS} mode="lock">
+                          <Documentos />
+                        </ModuleGate>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/funcionarios"
+                    element={
+                      <ProtectedRoute adminOnly>
+                        {/* Mesmo OR de módulos que a RLS de public.funcionarios já aplica
+                            (20260730043000_enforce_backend_entitlements.sql): financeiro_avancado
+                            OU checklist_tecnico OU painel_operacional concede acesso. */}
+                        <ModuleGate
+                          featureKey={[
+                            MODULE_KEYS.FINANCEIRO_AVANCADO,
+                            MODULE_KEYS.CHECKLIST_TECNICO,
+                            MODULE_KEYS.PAINEL_OPERACIONAL,
+                          ]}
+                          mode="lock"
+                        >
+                          <Funcionarios />
+                        </ModuleGate>
+                      </ProtectedRoute>
+                    }
+                  />
                   <Route path="/relatorios" element={<ProtectedRoute adminOnly><Relatorios /></ProtectedRoute>} />
                   <Route path="/operacao-evento" element={<ProtectedRoute adminOnly><OperacaoEvento /></ProtectedRoute>} />
                   {/* Compatibilidade: rotas antigas/favoritos continuam funcionando,

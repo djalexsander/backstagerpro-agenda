@@ -235,6 +235,8 @@ function rentalDetail(overrides: Partial<RentalDetail> = {}): RentalDetail {
       cpf_cnpj: null,
       email: null,
       telefone: null,
+      observacoes: null,
+      ativo: true,
     },
     evento: null,
     itens: [rentalItemView()],

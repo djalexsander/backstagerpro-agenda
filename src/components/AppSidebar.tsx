@@ -185,7 +185,11 @@ export function AppSidebar() {
         ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
         ...(hasModule(MODULE_KEYS.EQUIPE_PERMISSOES) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
         ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
-        ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
+        // Mesmo OR de módulos que a RLS de public.funcionarios exige
+        // (20260730043000_enforce_backend_entitlements.sql) e o ModuleGate
+        // da rota /funcionarios: financeiro_avancado, checklist_tecnico ou
+        // painel_operacional - faltava painel_operacional aqui antes.
+        ...(hasModule(MODULE_KEYS.CHECKLIST_TECNICO) || hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) || hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) ? [{ title: "Funcionários", url: "/funcionarios", icon: HardHat }] : []),
         ...(hasModule(MODULE_KEYS.RELATORIOS) ? [{ title: "Relatórios", url: "/relatorios", icon: BarChart3 }] : []),
       ];
 

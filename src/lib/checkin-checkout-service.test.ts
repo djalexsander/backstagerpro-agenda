@@ -11,7 +11,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 import {
-  listCustodyOperationsByReference,
+  getEventCustodyTotals,
+  listEventCustodyMaterials,
   registerCheckout,
   registerCustodyWriteOff,
 } from "./checkin-checkout-service";
@@ -73,70 +74,101 @@ describe("check-in/check-out mutation service", () => {
   });
 });
 
-describe("listCustodyOperationsByReference pagination", () => {
+describe("listEventCustodyMaterials", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("keeps requesting pages while a page comes back full (100 rows), and stops on the first short page", async () => {
-    const page1 = Array.from({ length: 100 }, (_, index) => ({ item: { id: `page1-${index}` } }));
-    const page2 = Array.from({ length: 37 }, (_, index) => ({ item: { id: `page2-${index}` } }));
-    mocks.rpc.mockImplementation((_name: string, args: Record<string, unknown>) => {
-      if (args._pagina === 1) return Promise.resolve({ data: page1, error: null });
-      if (args._pagina === 2) return Promise.resolve({ data: page2, error: null });
-      throw new Error(`unexpected _pagina ${args._pagina}`);
-    });
+  it("makes a single paginated request and maps snake_case rows to the camelCase summary shape", async () => {
+    const rawRow = {
+      material_id: "m1",
+      material_nome: "Mesa de Som",
+      material_codigo: "MESA-001",
+      quantidade_retirada: 3,
+      quantidade_devolvida: 1,
+      quantidade_pendente: 2,
+      custodias_abertas: [{ id: "op1" }],
+    };
+    mocks.rpc.mockResolvedValue({ data: [{ item: rawRow, total_count: 1 }], error: null });
 
-    const result = await listCustodyOperationsByReference(
+    const result = await listEventCustodyMaterials(
       "72000000-0000-4000-8000-000000000001",
-      "evento",
       "80800000-0000-4000-8000-000000000001",
+      { pendente: true, page: 2, pageSize: 10, search: " mesa ", locationId: "loc1" },
     );
 
-    // A 137-row result only comes out right if the second (partial) page's
-    // rows were appended after the first (full) page's, not lost or
-    // requested twice - this is the actual truncation bug being fixed.
-    expect(result).toHaveLength(137);
-    expect(result.map((item) => item.id)).toEqual([
-      ...page1.map((row) => row.item.id),
-      ...page2.map((row) => row.item.id),
-    ]);
-
-    expect(mocks.rpc).toHaveBeenCalledTimes(2);
-    expect(mocks.rpc.mock.calls[0][0]).toBe("listar_custodias_materiais");
-    expect(mocks.rpc.mock.calls[0][1]).toMatchObject({
-      _pagina: 1,
-      _tamanho_pagina: 100,
-      _referencia_tipo: "evento",
-      _referencia_id: "80800000-0000-4000-8000-000000000001",
-    });
-    expect(mocks.rpc.mock.calls[1][1]).toMatchObject({ _pagina: 2, _tamanho_pagina: 100 });
-  });
-
-  it("makes a single request when the first page is already short (the common case)", async () => {
-    const items = Array.from({ length: 5 }, (_, index) => ({ item: { id: `op-${index}` } }));
-    mocks.rpc.mockResolvedValue({ data: items, error: null });
-
-    const result = await listCustodyOperationsByReference(
-      "72000000-0000-4000-8000-000000000001",
-      "evento",
-      "80800000-0000-4000-8000-000000000001",
-    );
-
-    expect(result).toHaveLength(5);
     expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith("listar_custodias_evento_por_material", {
+      _empresa_id: "72000000-0000-4000-8000-000000000001",
+      _evento_id: "80800000-0000-4000-8000-000000000001",
+      _pendente: true,
+      _pagina: 2,
+      _tamanho_pagina: 10,
+      _busca: "mesa",
+      _localizacao_id: "loc1",
+    });
+    expect(result).toEqual({
+      total: 1,
+      items: [
+        {
+          materialId: "m1",
+          materialNome: "Mesa de Som",
+          materialCodigo: "MESA-001",
+          quantidadeRetirada: 3,
+          quantidadeDevolvida: 1,
+          quantidadePendente: 2,
+          custodiasAbertas: [{ id: "op1" }],
+        },
+      ],
+    });
   });
 
-  it("stops immediately on an empty first page instead of looping", async () => {
+  it("returns an empty page without throwing when no rows come back", async () => {
     mocks.rpc.mockResolvedValue({ data: [], error: null });
 
-    const result = await listCustodyOperationsByReference(
+    const result = await listEventCustodyMaterials(
       "72000000-0000-4000-8000-000000000001",
-      "evento",
+      "80800000-0000-4000-8000-000000000001",
+      { page: 1, pageSize: 10 },
+    );
+
+    expect(result).toEqual({ items: [], total: 0 });
+  });
+});
+
+describe("getEventCustodyTotals", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("maps the totals RPC's snake_case result to camelCase", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { total_retirado: 5, total_devolvido: 3, total_pendente: 2 },
+      error: null,
+    });
+
+    const result = await getEventCustodyTotals(
+      "72000000-0000-4000-8000-000000000001",
       "80800000-0000-4000-8000-000000000001",
     );
 
-    expect(result).toEqual([]);
-    expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith("obter_totais_custodia_evento", {
+      _empresa_id: "72000000-0000-4000-8000-000000000001",
+      _evento_id: "80800000-0000-4000-8000-000000000001",
+      _busca: undefined,
+      _localizacao_id: undefined,
+    });
+    expect(result).toEqual({ totalRetirado: 5, totalDevolvido: 3, totalPendente: 2 });
+  });
+
+  it("defaults to zero when the RPC returns no data", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+
+    const result = await getEventCustodyTotals(
+      "72000000-0000-4000-8000-000000000001",
+      "80800000-0000-4000-8000-000000000001",
+    );
+
+    expect(result).toEqual({ totalRetirado: 0, totalDevolvido: 0, totalPendente: 0 });
   });
 });
