@@ -64,7 +64,11 @@ WHERE user_id IN (
   '79300000-0000-4000-8000-000000000005'  -- delete-only
 );
 
-UPDATE public.profiles SET empresa_id = '79200000-0000-4000-8000-000000000001'
+-- ativado=true e obrigatorio desde 20260817210000_enforce_account_activation_gate.sql
+-- (get_user_empresa_id/has_role passam a filtrar p.ativado=true) - fixture
+-- antiga nunca setava.
+UPDATE public.profiles SET empresa_id = '79200000-0000-4000-8000-000000000001',
+  ativado = true, activated_at = now()
 WHERE user_id IN (
   '79300000-0000-4000-8000-000000000001',
   '79300000-0000-4000-8000-000000000002',
@@ -75,17 +79,24 @@ WHERE user_id IN (
 
 -- Two statements, dependencies first: 20260817230000_enforce_module_dependencies_all_flows.sql
 -- added a trigger validating a module's dependencies are already active, so
--- checkin_checkout must be inserted only after gestao_materiais/controle_estoque
+-- checkin_checkout must be activated only after gestao_materiais/controle_estoque
 -- are committed - same order material_checkin_checkout_stage_three_test.sql uses.
-INSERT INTO public.empresa_modules (empresa_id, module_id, status, activated_at, granted_by_admin, origem)
-SELECT '79200000-0000-4000-8000-000000000001', catalog.id, 'active', now(), true, 'manual_admin'
-FROM public.module_catalog AS catalog
-WHERE catalog.feature_key IN ('gestao_materiais', 'controle_estoque');
+-- UPDATE, not INSERT: the AFTER INSERT ON empresas trigger
+-- (provision_company_module_entitlements, 20260804190000) already seeds
+-- every company with an 'inactive' row per catalog module - inserting again
+-- collides with prevent_duplicate_company_module (BEFORE INSERT, 23505).
+-- UPDATE skips that trigger (INSERT-only) while
+-- enforce_company_module_dependencies (INSERT OR UPDATE OR DELETE) still
+-- validates the activation order exactly as before.
+UPDATE public.empresa_modules
+SET status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+WHERE empresa_id = '79200000-0000-4000-8000-000000000001'
+  AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key IN ('gestao_materiais', 'controle_estoque'));
 
-INSERT INTO public.empresa_modules (empresa_id, module_id, status, activated_at, granted_by_admin, origem)
-SELECT '79200000-0000-4000-8000-000000000001', catalog.id, 'active', now(), true, 'manual_admin'
-FROM public.module_catalog AS catalog
-WHERE catalog.feature_key = 'checkin_checkout';
+UPDATE public.empresa_modules
+SET status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+WHERE empresa_id = '79200000-0000-4000-8000-000000000001'
+  AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key = 'checkin_checkout');
 
 -- can_view=true e obrigatorio (CHECK constraint) para qualquer outra flag;
 -- cada usuario de teste recebe visualizar + exatamente UMA acao de escrita,
@@ -176,6 +187,12 @@ RESET ROLE;
 -- 2. ADMIN cria 3 custodias em aberto (M2/M3/M4) para os testes de
 --    edit/cancelar/baixa abaixo - tambem serve de prova de que
 --    admin_empresa continua com acesso irrestrito apos a migration.
+--    Finalidade 'uso_interno' (nao 'evento'): esta suite testa permissao
+--    granular, nao vinculo a evento - 20260821090000_checkout_event_
+--    reference.sql (posterior a esta) passou a exigir referencia_tipo/
+--    referencia_id sempre que finalidade='evento' (CI022); 'uso_interno'
+--    continua sem exigencia extra, mesma finalidade neutra que
+--    checkout_event_reference_test.sql usa para o caso de regressao.
 -- ----------------------------------------------------------------------------
 SELECT set_config('request.jwt.claim.sub', '79300000-0000-4000-8000-000000000001', true);
 SET LOCAL ROLE authenticated;
@@ -184,7 +201,7 @@ SELECT lives_ok(
   $test$SELECT public.registrar_checkout_material(
     '79500000-0000-4000-8000-000000000002', 5,
     '79600000-0000-4000-8000-000000000001', 'funcionario',
-    '79700000-0000-4000-8000-000000000001', 'evento', 'bom',
+    '79700000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
     gen_random_uuid(), NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,
@@ -194,7 +211,7 @@ SELECT lives_ok(
   $test$SELECT public.registrar_checkout_material(
     '79500000-0000-4000-8000-000000000003', 4,
     '79600000-0000-4000-8000-000000000001', 'funcionario',
-    '79700000-0000-4000-8000-000000000001', 'evento', 'bom',
+    '79700000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
     gen_random_uuid(), NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,
@@ -204,7 +221,7 @@ SELECT lives_ok(
   $test$SELECT public.registrar_checkout_material(
     '79500000-0000-4000-8000-000000000004', 6,
     '79600000-0000-4000-8000-000000000001', 'funcionario',
-    '79700000-0000-4000-8000-000000000001', 'evento', 'bom',
+    '79700000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
     gen_random_uuid(), NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,
@@ -224,7 +241,7 @@ SELECT lives_ok(
   $test$SELECT public.registrar_checkout_material(
     '79500000-0000-4000-8000-000000000001', 2,
     '79600000-0000-4000-8000-000000000001', 'funcionario',
-    '79700000-0000-4000-8000-000000000001', 'evento', 'bom',
+    '79700000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
     gen_random_uuid(), NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,
@@ -247,7 +264,7 @@ SELECT throws_ok(
 SELECT lives_ok(
   $test$SELECT public.iniciar_sessao_scanner_remoto(
     'checkout', 'bom', gen_random_uuid(), 'funcionario', '79700000-0000-4000-8000-000000000001',
-    'evento', '79600000-0000-4000-8000-000000000001', NULL, NULL, NULL, NULL, NULL,
+    'uso_interno', '79600000-0000-4000-8000-000000000001', NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,
   'usuario com can_create=true abre sessao de scanner remoto tipo checkout'
@@ -285,7 +302,7 @@ SELECT throws_ok(
   $test$SELECT public.registrar_checkout_material(
     '79500000-0000-4000-8000-000000000001', 1,
     '79600000-0000-4000-8000-000000000001', 'funcionario',
-    '79700000-0000-4000-8000-000000000001', 'evento', 'bom',
+    '79700000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
     gen_random_uuid(), NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,
@@ -313,7 +330,7 @@ SELECT throws_ok(
   $test$SELECT public.registrar_checkout_material(
     '79500000-0000-4000-8000-000000000001', 1,
     '79600000-0000-4000-8000-000000000001', 'funcionario',
-    '79700000-0000-4000-8000-000000000001', 'evento', 'bom',
+    '79700000-0000-4000-8000-000000000001', 'uso_interno', 'bom',
     gen_random_uuid(), NULL, NULL, NULL, NULL, NULL,
     '79200000-0000-4000-8000-000000000001'
   )$test$,

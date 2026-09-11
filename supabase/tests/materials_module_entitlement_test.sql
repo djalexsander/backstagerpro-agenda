@@ -52,6 +52,12 @@ SELECT is(
   'every implemented material module planned in Stage 1 is released'
 );
 
+-- Was 6 when this test was written (controle_estoque, checkin_checkout,
+-- locacao_materiais, manutencao_equipamentos, etiquetas_materiais,
+-- relatorios_materiais); rfid_materiais added its own dependency on
+-- gestao_materiais afterwards (RFID Fase 1, built by iniciativa própria per
+-- BACKSTAGE_PRO_STATUS_POS_AUDITORIA.md secao D) without this count being
+-- revisited - stale expectation, not a functional regression.
 SELECT is(
   (
     SELECT count(*)
@@ -63,7 +69,7 @@ SELECT is(
     WHERE base.feature_key = 'gestao_materiais'
       AND child.feature_key <> 'gestao_materiais'
   ),
-  6::bigint,
+  7::bigint,
   'every planned material module depends on the base module'
 );
 
@@ -144,25 +150,17 @@ SELECT ok(
   'an ordinary company has no material access by default'
 );
 
-INSERT INTO public.empresa_modules (
-  id,
-  empresa_id,
-  module_id,
-  status,
-  activated_at,
-  granted_by_admin,
-  origem
-)
-SELECT
-  '43000000-0000-4000-8000-000000000001',
-  '42000000-0000-4000-8000-000000000001',
-  id,
-  'active',
-  now(),
-  true,
-  'manual_admin'
-FROM public.module_catalog
-WHERE feature_key = 'gestao_materiais';
+-- UPDATE, not INSERT: the AFTER INSERT ON empresas trigger
+-- (provision_company_module_entitlements, 20260804190000) already seeds
+-- every company with an 'inactive' row per catalog module - inserting again
+-- collides with prevent_duplicate_company_module (BEFORE INSERT, 23505).
+-- The row's id is the pre-seeded one, not '43000000...0001' - later
+-- statements in this file that target that literal id are updated too.
+UPDATE public.empresa_modules
+SET id = '43000000-0000-4000-8000-000000000001',
+    status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+WHERE empresa_id = '42000000-0000-4000-8000-000000000001'
+  AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key = 'gestao_materiais');
 
 SELECT ok(
   public.company_has_active_module(
@@ -283,25 +281,26 @@ SELECT ok(
   'a released future module becomes available to a lifetime company'
 );
 
+-- UPDATE, not INSERT: the AFTER INSERT ON empresas trigger
+-- (provision_company_module_entitlements, 20260804190000) already seeds
+-- every company with an 'inactive' row per catalog module - inserting again
+-- collides with prevent_duplicate_company_module (BEFORE INSERT, 23505).
+-- enforce_company_module_dependencies fires on INSERT OR UPDATE OR DELETE,
+-- so the dependency check below is exercised exactly as before - but it is
+-- a DEFERRABLE INITIALLY DEFERRED constraint trigger (20260817230000, so
+-- one transaction can activate a dependency set in any order), which only
+-- fires at COMMIT unless forced - and this whole suite runs inside one
+-- BEGIN/ROLLBACK that never commits. SET CONSTRAINTS ALL IMMEDIATE forces
+-- it to run synchronously for this one statement so throws_ok can observe
+-- it; scoped to pgTAP's internal savepoint for this call, so it does not
+-- leak into later assertions.
 SELECT throws_ok(
   $test$
-    INSERT INTO public.empresa_modules (
-      empresa_id,
-      module_id,
-      status,
-      activated_at,
-      granted_by_admin,
-      origem
-    )
-    SELECT
-      '42000000-0000-4000-8000-000000000001',
-      id,
-      'active',
-      now(),
-      true,
-      'manual_admin'
-    FROM public.module_catalog
-    WHERE feature_key = 'controle_estoque'
+    SET CONSTRAINTS ALL IMMEDIATE;
+    UPDATE public.empresa_modules
+    SET status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+    WHERE empresa_id = '42000000-0000-4000-8000-000000000001'
+      AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key = 'controle_estoque')
   $test$,
   'P0001',
   'Cannot activate a module before its dependencies',
@@ -314,25 +313,11 @@ WHERE id = '43000000-0000-4000-8000-000000000001';
 
 SELECT lives_ok(
   $test$
-    INSERT INTO public.empresa_modules (
-      id,
-      empresa_id,
-      module_id,
-      status,
-      activated_at,
-      granted_by_admin,
-      origem
-    )
-    SELECT
-      '43000000-0000-4000-8000-000000000002',
-      '42000000-0000-4000-8000-000000000001',
-      id,
-      'active',
-      now(),
-      true,
-      'manual_admin'
-    FROM public.module_catalog
-    WHERE feature_key = 'controle_estoque'
+    UPDATE public.empresa_modules
+    SET id = '43000000-0000-4000-8000-000000000002',
+        status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+    WHERE empresa_id = '42000000-0000-4000-8000-000000000001'
+      AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key = 'controle_estoque')
   $test$,
   'a dependent entitlement can be activated after its base module'
 );
@@ -345,8 +330,12 @@ SELECT ok(
   'dependency-aware access recognizes the enabled child module'
 );
 
+-- Same deferred-constraint timing note as above - SET CONSTRAINTS ALL
+-- IMMEDIATE forces enforce_company_module_dependencies to run inside this
+-- one statement instead of waiting for a commit that never happens here.
 SELECT throws_ok(
   $test$
+    SET CONSTRAINTS ALL IMMEDIATE;
     UPDATE public.empresa_modules
     SET status = 'inactive'
     WHERE id = '43000000-0000-4000-8000-000000000001'

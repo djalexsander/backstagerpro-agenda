@@ -124,6 +124,9 @@ WHERE user_id IN (
   '53000000-0000-4000-8000-000000000003'
 );
 
+-- ativado=true e obrigatorio desde 20260817210000_enforce_account_activation_gate.sql
+-- (get_user_empresa_id/has_role passam a filtrar p.ativado=true) - fixture
+-- antiga (Stage 1) nunca setava.
 UPDATE public.profiles
 SET empresa_id = CASE user_id
   WHEN '53000000-0000-4000-8000-000000000001'::uuid
@@ -132,32 +135,26 @@ SET empresa_id = CASE user_id
     THEN '52000000-0000-4000-8000-000000000001'::uuid
   WHEN '53000000-0000-4000-8000-000000000003'::uuid
     THEN '52000000-0000-4000-8000-000000000002'::uuid
-END
+END,
+  ativado = true,
+  activated_at = now()
 WHERE user_id IN (
   '53000000-0000-4000-8000-000000000001',
   '53000000-0000-4000-8000-000000000002',
   '53000000-0000-4000-8000-000000000003'
 );
 
-INSERT INTO public.empresa_modules (
-  id,
-  empresa_id,
-  module_id,
-  status,
-  activated_at,
-  granted_by_admin,
-  origem
-)
-SELECT
-  '54000000-0000-4000-8000-000000000001',
-  '52000000-0000-4000-8000-000000000001',
-  id,
-  'active',
-  now(),
-  true,
-  'manual_admin'
-FROM public.module_catalog
-WHERE feature_key = 'gestao_materiais';
+-- UPDATE, not INSERT: the AFTER INSERT ON empresas trigger
+-- (provision_company_module_entitlements, 20260804190000) already seeds
+-- every company with an 'inactive' row per catalog module - inserting again
+-- collides with prevent_duplicate_company_module (BEFORE INSERT, 23505).
+-- id is pinned to the literal the rest of this file already targets
+-- (deactivate/reactivate block further down keys off this exact id).
+UPDATE public.empresa_modules
+SET id = '54000000-0000-4000-8000-000000000001',
+    status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+WHERE empresa_id = '52000000-0000-4000-8000-000000000001'
+  AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key = 'gestao_materiais');
 
 INSERT INTO public.categorias_materiais (
   id,
@@ -409,11 +406,18 @@ SELECT is(
   'generating the same QR Code again is idempotent'
 );
 
+-- localizacao is a dead/legacy column (BACKSTAGE_PRO_STATUS_POS_AUDITORIA.md
+-- P3 debt list) - a later migration revoked column-level UPDATE on it (and
+-- on id/empresa_id/identificador_unico/quantidade/created_*, all correctly
+-- immutable via GRANT, not just RLS), so it is no longer "mutable material
+-- data" and including it here only made this lives_ok fail with a generic
+-- permission-denied before ever reaching nome. Stale expectation, not a
+-- functional regression - the column-level lockdown is the intended,
+-- stronger design.
 SELECT lives_ok(
   $test$
     UPDATE public.materiais
-    SET nome = '__materials_rls_renamed__',
-        localizacao = 'DepÃ³sito B'
+    SET nome = '__materials_rls_renamed__'
     WHERE id = '56000000-0000-4000-8000-000000000001'
   $test$,
   'an enabled administrator can update mutable material data'
@@ -431,25 +435,35 @@ SELECT is(
     FROM public.materiais
     WHERE id = '56000000-0000-4000-8000-000000000001'
   ),
-  'editing name and location does not change the QR Code'
+  'editing name does not change the QR Code'
 );
 
+-- identificador_unico now has no column-level UPDATE grant for authenticated
+-- at all (defense in depth added after this test was written), so the
+-- attempt is rejected at 42501 before the P0001 immutability trigger this
+-- test originally targeted is even reached - the column is still provably
+-- immutable, just via an earlier, stronger layer.
 SELECT throws_ok(
   $test$
     UPDATE public.materiais
     SET identificador_unico = gen_random_uuid()
     WHERE id = '56000000-0000-4000-8000-000000000001'
   $test$,
-  'P0001',
+  '42501',
   NULL,
   'the technical UUID remains immutable for an authorized administrator'
 );
 
+-- Format changed from a random "BSP-"+hex Code 128 value to a sequential,
+-- per-company EAN-13 ("200" restricted-distribution prefix + 9-digit
+-- sequence + check digit) by 20260910100000_material_barcode_ean13.sql,
+-- covered in full by material_barcode_ean13_test.sql - this assertion
+-- predates that change and still expected the old shape.
 SELECT ok(
   public.generate_material_barcode(
     '56000000-0000-4000-8000-000000000002'
-  ) ~ '^BSP-[0-9A-F]{20}$',
-  'the barcode RPC generates a non-sequential Code 128-compatible value'
+  ) ~ '^200[0-9]{10}$',
+  'the barcode RPC generates a company-local EAN-13 value'
 );
 
 SELECT is(

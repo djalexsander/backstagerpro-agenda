@@ -52,22 +52,34 @@ INSERT INTO auth.users (
 UPDATE public.user_roles SET role = 'admin_empresa'
 WHERE user_id = '80300000-0000-4000-8000-000000000001';
 
-UPDATE public.profiles SET empresa_id = '80200000-0000-4000-8000-000000000001'
+-- ativado=true e obrigatorio desde 20260817210000_enforce_account_activation_gate.sql
+-- (get_user_empresa_id/has_role passam a filtrar p.ativado=true) - fixture
+-- antiga, escrita antes desse gate existir para este arquivo, nunca setava.
+UPDATE public.profiles SET empresa_id = '80200000-0000-4000-8000-000000000001',
+  ativado = true, activated_at = now()
 WHERE user_id = '80300000-0000-4000-8000-000000000001';
 
 -- Dependencias primeiro (trigger de 20260817230000_enforce_module_dependencies_all_flows.sql
 -- valida que checkin_checkout so ativa se gestao_materiais/controle_estoque
 -- ja estiverem ativos na mesma transacao) - mesma ordem de
--- checkin_checkout_granular_write_permissions_test.sql.
-INSERT INTO public.empresa_modules (empresa_id, module_id, status, activated_at, granted_by_admin, origem)
-SELECT '80200000-0000-4000-8000-000000000001', catalog.id, 'active', now(), true, 'manual_admin'
-FROM public.module_catalog AS catalog
-WHERE catalog.feature_key IN ('gestao_materiais', 'controle_estoque');
+-- checkin_checkout_granular_write_permissions_test.sql. UPDATE, nao INSERT:
+-- o trigger AFTER INSERT ON empresas (provision_company_module_entitlements,
+-- 20260804190000) ja seeda toda empresa nova com uma linha 'inactive' por
+-- modulo do catalogo - inserir de novo colide com
+-- prevent_duplicate_company_module (BEFORE INSERT, 23505). UPDATE nao
+-- aciona esse trigger (so dispara em INSERT) e o constraint trigger de
+-- dependencias (enforce_company_module_dependencies) roda em INSERT OR
+-- UPDATE OR DELETE, entao a ordem de ativacao continua sendo validada
+-- igual.
+UPDATE public.empresa_modules
+SET status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+WHERE empresa_id = '80200000-0000-4000-8000-000000000001'
+  AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key IN ('gestao_materiais', 'controle_estoque'));
 
-INSERT INTO public.empresa_modules (empresa_id, module_id, status, activated_at, granted_by_admin, origem)
-SELECT '80200000-0000-4000-8000-000000000001', catalog.id, 'active', now(), true, 'manual_admin'
-FROM public.module_catalog AS catalog
-WHERE catalog.feature_key = 'checkin_checkout';
+UPDATE public.empresa_modules
+SET status = 'active', activated_at = now(), granted_by_admin = true, origem = 'manual_admin'
+WHERE empresa_id = '80200000-0000-4000-8000-000000000001'
+  AND module_id IN (SELECT id FROM public.module_catalog WHERE feature_key = 'checkin_checkout');
 
 INSERT INTO public.categorias_materiais (id, empresa_id, nome)
 VALUES ('80400000-0000-4000-8000-000000000001', '80200000-0000-4000-8000-000000000001', '__cer_category__');
