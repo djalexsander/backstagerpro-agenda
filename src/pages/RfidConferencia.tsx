@@ -101,6 +101,14 @@ export default function RfidConferencia() {
   const enabled = Boolean(companyId && permissions.visualizar);
   const isRentalMode = sessionType === "conferencia_locacao";
 
+  // P1 fix: "Conferência de locação" cross-references locacao_materiais -
+  // without it the option led to an always-empty locação picker instead of
+  // a real workflow. hasModule/isMasterAdmin already destructured above.
+  const canConferenciaLocacao = isMasterAdmin || hasModule(MODULE_KEYS.LOCACAO_MATERIAIS);
+  const availableSessionTypes = SESSION_TYPE_OPTIONS.filter(
+    (type) => type !== "conferencia_locacao" || canConferenciaLocacao,
+  );
+
   const materialsQuery = useQuery({
     queryKey: ["rfid-lab-materials", companyId],
     queryFn: () => listMaterials(companyId!),
@@ -277,7 +285,7 @@ export default function RfidConferencia() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {SESSION_TYPE_OPTIONS.map((type) => (
+              {availableSessionTypes.map((type) => (
                 <SelectItem key={type} value={type}>
                   {RFID_READ_SESSION_TYPE_LABELS[type]}
                 </SelectItem>

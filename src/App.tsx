@@ -9,7 +9,6 @@ import { AppLayout } from "@/components/AppLayout";
 import { UpdateProvider, UpdateBanner } from "@/features/update";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineBanner } from "@/components/OfflineBanner";
-import { ModuleGate } from "@/components/ModuleGate";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import Login from "@/pages/Login";
 import PrimeiroAcesso from "@/pages/PrimeiroAcesso";
@@ -92,39 +91,49 @@ const App = () => (
                   <Route path="/evento/:id/editar" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
                   <Route path="/evento/editar/:id" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
                   <Route path="/evento/novo" element={<ProtectedRoute adminOnly><EventForm /></ProtectedRoute>} />
-                  <Route path="/financeiro" element={<ProtectedRoute adminOnly><Financeiro /></ProtectedRoute>} />
+                  <Route
+                    path="/financeiro"
+                    element={
+                      <ProtectedRoute adminOnly requiredModule={MODULE_KEYS.FINANCEIRO_AVANCADO}>
+                        <Financeiro />
+                      </ProtectedRoute>
+                    }
+                  />
                   <Route path="/usuarios" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
                   <Route path="/plano" element={<PlanoAssinatura />} />
-                  <Route path="/backups" element={<ProtectedRoute adminOnly><Backups /></ProtectedRoute>} />
+                  <Route
+                    path="/backups"
+                    element={
+                      <ProtectedRoute adminOnly requiredModule={MODULE_KEYS.RELATORIOS}>
+                        <Backups />
+                      </ProtectedRoute>
+                    }
+                  />
                   <Route path="/configuracoes/impressoras" element={<ProtectedRoute><ConfiguracoesImpressoras /></ProtectedRoute>} />
                   <Route path="/configuracoes/empresa" element={<ProtectedRoute adminOnly><ConfiguracoesEmpresa /></ProtectedRoute>} />
                   <Route
                     path="/documentos"
                     element={
-                      <ProtectedRoute adminOnly>
-                        <ModuleGate featureKey={MODULE_KEYS.DOCUMENTOS_AVANCADOS} mode="lock">
-                          <Documentos />
-                        </ModuleGate>
+                      <ProtectedRoute adminOnly requiredModule={MODULE_KEYS.DOCUMENTOS_AVANCADOS}>
+                        <Documentos />
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/funcionarios"
                     element={
-                      <ProtectedRoute adminOnly>
-                        {/* Mesmo OR de módulos que a RLS de public.funcionarios já aplica
-                            (20260730043000_enforce_backend_entitlements.sql): financeiro_avancado
-                            OU checklist_tecnico OU painel_operacional concede acesso. */}
-                        <ModuleGate
-                          featureKey={[
-                            MODULE_KEYS.FINANCEIRO_AVANCADO,
-                            MODULE_KEYS.CHECKLIST_TECNICO,
-                            MODULE_KEYS.PAINEL_OPERACIONAL,
-                          ]}
-                          mode="lock"
-                        >
-                          <Funcionarios />
-                        </ModuleGate>
+                      // Mesmo OR de módulos que a RLS de public.funcionarios já aplica
+                      // (20260730043000_enforce_backend_entitlements.sql): financeiro_avancado
+                      // OU checklist_tecnico OU painel_operacional concede acesso.
+                      <ProtectedRoute
+                        adminOnly
+                        requiredModule={[
+                          MODULE_KEYS.FINANCEIRO_AVANCADO,
+                          MODULE_KEYS.CHECKLIST_TECNICO,
+                          MODULE_KEYS.PAINEL_OPERACIONAL,
+                        ]}
+                      >
+                        <Funcionarios />
                       </ProtectedRoute>
                     }
                   />
@@ -137,111 +146,81 @@ const App = () => (
                   <Route
                     path="/materiais"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.GESTAO_MATERIAIS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.GESTAO_MATERIAIS}>
                         <Materiais />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/estoque"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.CONTROLE_ESTOQUE}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.CONTROLE_ESTOQUE}>
                         <Estoque />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/checkin-checkout"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.CHECKIN_CHECKOUT}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.CHECKIN_CHECKOUT}>
                         <CheckinCheckout />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/scanner-remoto"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.CHECKIN_CHECKOUT}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.CHECKIN_CHECKOUT}>
                         <ScannerRemoto />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/locacoes"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.LOCACAO_MATERIAIS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.LOCACAO_MATERIAIS}>
                         <Locacoes />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/clientes"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.LOCACAO_MATERIAIS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.LOCACAO_MATERIAIS}>
                         <Clientes />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/manutencoes"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.MANUTENCAO_EQUIPAMENTOS}>
                         <Manutencoes />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/etiquetas"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.ETIQUETAS_MATERIAIS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.ETIQUETAS_MATERIAIS}>
                         <Etiquetas />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/rfid"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.RFID_MATERIAIS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.RFID_MATERIAIS}>
                         <RfidConferencia />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/rastreabilidade"
                     element={
-                      <ModuleGate
-                        featureKey={MODULE_KEYS.GESTAO_MATERIAIS}
-                        mode="lock"
-                      >
+                      <ProtectedRoute requiredModule={MODULE_KEYS.GESTAO_MATERIAIS}>
                         <RastreabilidadeMateriais />
-                      </ModuleGate>
+                      </ProtectedRoute>
                     }
                   />
                   <Route path="/modulos" element={<Navigate to="/plano" replace />} />

@@ -3,7 +3,14 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useCompanyModules", () => ({
-  useCompanyModules: () => ({ hasModule: () => false }),
+  useCompanyModules: () => ({ hasModule: () => false, isLoading: false }),
+}));
+
+// P2: EventOperationalPanel passou a usar useModuleAccess (não hasModule
+// puro), que também lê isMasterAdmin de useAuth() - sem isso o teste
+// quebraria chamando useAuth() sem Provider/mock.
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ isMasterAdmin: false }),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({

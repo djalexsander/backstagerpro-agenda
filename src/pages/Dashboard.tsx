@@ -14,6 +14,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { useModuleAccess } from "@/components/ModuleGate";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getFinancialLedgerPermissions } from "@/lib/financial-ledger-permissions";
 import { getRentalsFinancialSummary } from "@/lib/financial-ledger-service";
@@ -42,6 +43,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { empresaId, role } = useAuth();
   const { hasModule } = useCompanyModules(empresaId);
+  // P1 fix: the 4 financial cards + "Financeiro Mensal" chart below, and the
+  // financials query that feeds them, all belong to financeiro_avancado -
+  // same module financials' own RLS already requires
+  // (can_read_company_module(empresa_id,'financeiro_avancado'), see
+  // 20260808100000_enforce_master_tenant_isolation.sql). useModuleAccess
+  // (not raw hasModule) so this respects the existing master_admin bypass,
+  // same as every other module gate in the app.
+  const { canAccess: hasFinanceiroAvancado } = useModuleAccess(MODULE_KEYS.FINANCEIRO_AVANCADO);
   const rentalsPermissions = getFinancialLedgerPermissions({
     role,
     moduleEnabled: hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO),
@@ -85,7 +94,7 @@ export default function Dashboard() {
       if (error) throw error;
       return data;
     },
-    enabled: !!empresaId,
+    enabled: !!empresaId && hasFinanceiroAvancado,
   });
 
   const getEventArtists = (eventId: string): string => {
@@ -226,41 +235,44 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Financial summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center"><DollarSign className="h-4 w-4 text-accent" /></div>
-              <div><p className="text-lg font-bold text-accent">{fmt(totalRecebido)}</p><p className="text-xs text-muted-foreground">Recebido</p></div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-[hsl(var(--warning))]/10 flex items-center justify-center"><Clock className="h-4 w-4 text-[hsl(var(--warning))]" /></div>
-              <div><p className="text-lg font-bold text-[hsl(var(--warning))]">{fmt(totalPendente)}</p><p className="text-xs text-muted-foreground">Pendente</p></div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center"><TrendingDown className="h-4 w-4 text-destructive" /></div>
-              <div><p className="text-lg font-bold text-destructive">{fmt(totalDespesas)}</p><p className="text-xs text-muted-foreground">Despesas</p></div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><TrendingUp className="h-4 w-4 text-primary" /></div>
-              <div><p className={`text-lg font-bold ${totalLucro >= 0 ? "text-accent" : "text-destructive"}`}>{fmt(totalLucro)}</p><p className="text-xs text-muted-foreground">Lucro líquido</p></div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Financial summary - financeiro_avancado (P1 fix: hidden, not just
+          rendered with data RLS would already block) */}
+      {hasFinanceiroAvancado && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center"><DollarSign className="h-4 w-4 text-accent" /></div>
+                <div><p className="text-lg font-bold text-accent">{fmt(totalRecebido)}</p><p className="text-xs text-muted-foreground">Recebido</p></div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-[hsl(var(--warning))]/10 flex items-center justify-center"><Clock className="h-4 w-4 text-[hsl(var(--warning))]" /></div>
+                <div><p className="text-lg font-bold text-[hsl(var(--warning))]">{fmt(totalPendente)}</p><p className="text-xs text-muted-foreground">Pendente</p></div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center"><TrendingDown className="h-4 w-4 text-destructive" /></div>
+                <div><p className="text-lg font-bold text-destructive">{fmt(totalDespesas)}</p><p className="text-xs text-muted-foreground">Despesas</p></div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center"><TrendingUp className="h-4 w-4 text-primary" /></div>
+                <div><p className={`text-lg font-bold ${totalLucro >= 0 ? "text-accent" : "text-destructive"}`}>{fmt(totalLucro)}</p><p className="text-xs text-muted-foreground">Lucro líquido</p></div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Locações - fonte separada (obter_resumo_financeiro_locacoes), nunca
           somada aos cards de evento acima para não misturar as duas origens */}
@@ -311,28 +323,30 @@ export default function Dashboard() {
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Monthly bar chart */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Financeiro Mensal</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {financials.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum dado financeiro cadastrado.</p>
-            ) : (
-              <ChartContainer config={chartConfig} className="h-[240px] w-full">
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="name" className="text-xs fill-muted-foreground" tick={{ fontSize: 12 }} />
-                  <YAxis className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <ChartTooltip content={<ChartTooltipContent formatter={(value) => fmt(Number(value))} />} />
-                  <Bar dataKey="receita" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="despesas" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
+        {/* Monthly bar chart - financeiro_avancado (P1 fix) */}
+        {hasFinanceiroAvancado && (
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Financeiro Mensal</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {financials.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum dado financeiro cadastrado.</p>
+              ) : (
+                <ChartContainer config={chartConfig} className="h-[240px] w-full">
+                  <BarChart data={monthlyData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="name" className="text-xs fill-muted-foreground" tick={{ fontSize: 12 }} />
+                    <YAxis className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(value) => fmt(Number(value))} />} />
+                    <Bar dataKey="receita" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="despesas" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Status pie chart */}
         <Card>

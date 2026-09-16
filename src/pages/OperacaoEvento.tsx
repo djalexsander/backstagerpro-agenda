@@ -21,13 +21,20 @@ export default function OperacaoEvento() {
   const { empresaId, isMasterAdmin } = useAuth();
   const { hasModule } = useCompanyModules(empresaId);
 
+  // P1 fix: each tab's own trigger must not appear without its module - the
+  // content already gated itself (useModuleAccess in PainelOperacional.tsx/
+  // ChecklistCentral.tsx), but the TabsTrigger row did not. Reuses the same
+  // hasModule/isMasterAdmin this file already had, no new hook.
+  const canPainel = isMasterAdmin || hasModule(MODULE_KEYS.PAINEL_OPERACIONAL);
+  const canChecklist = isMasterAdmin || hasModule(MODULE_KEYS.CHECKLIST_TECNICO);
+
   const requestedTab = searchParams.get("aba");
   const defaultTab: OperationalTab =
     requestedTab === "checklist"
       ? "checklist"
       : requestedTab === "painel"
         ? "painel"
-        : isMasterAdmin || hasModule(MODULE_KEYS.PAINEL_OPERACIONAL) || !hasModule(MODULE_KEYS.CHECKLIST_TECNICO)
+        : canPainel || !canChecklist
           ? "painel"
           : "checklist";
 
@@ -42,8 +49,8 @@ export default function OperacaoEvento() {
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as OperationalTab)}>
         <TabsList>
-          <TabsTrigger value="painel">Painel Operacional</TabsTrigger>
-          <TabsTrigger value="checklist">Checklist</TabsTrigger>
+          {canPainel && <TabsTrigger value="painel">Painel Operacional</TabsTrigger>}
+          {canChecklist && <TabsTrigger value="checklist">Checklist</TabsTrigger>}
         </TabsList>
         <TabsContent value="painel" className="mt-4">
           <PainelOperacional />

@@ -33,7 +33,9 @@ export default function ChecklistCentral() {
       if (error) throw error;
       return data;
     },
-    enabled: !!empresaId,
+    // P1 fix: wait for the module gate to resolve before fetching - matches
+    // canAccess below instead of firing as soon as empresaId is known.
+    enabled: !!empresaId && canAccess,
   });
 
   const { data: allChecklist = [] } = useQuery({
@@ -47,7 +49,7 @@ export default function ChecklistCentral() {
       if (error) throw error;
       return data;
     },
-    enabled: !!empresaId,
+    enabled: !!empresaId && canAccess,
   });
 
   if (!canAccess) {

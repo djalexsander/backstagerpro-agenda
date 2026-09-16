@@ -183,7 +183,11 @@ export function AppSidebar() {
       ]
     : [
         ...(hasModule(MODULE_KEYS.FINANCEIRO_AVANCADO) ? [{ title: "Financeiro", url: "/financeiro", icon: DollarSign }] : []),
-        ...(hasModule(MODULE_KEYS.EQUIPE_PERMISSOES) || isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
+        // P2 cleanup: equipe_permissoes é @deprecated (module-keys.ts) e sem
+        // efeito real aqui - este ramo só é alcançado quando isAdminEmpresa
+        // já é true (ver o ternário em torno de administracaoItems acima),
+        // então o hasModule(...) || nunca influenciou o resultado.
+        ...(isAdminEmpresa ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
         ...(hasModule(MODULE_KEYS.DOCUMENTOS_AVANCADOS) ? [{ title: "Documentos", url: "/documentos", icon: FileText }] : []),
         // Mesmo OR de módulos que a RLS de public.funcionarios exige
         // (20260730043000_enforce_backend_entitlements.sql) e o ModuleGate

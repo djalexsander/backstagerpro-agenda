@@ -3,19 +3,26 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rpcMock, authState } = vi.hoisted(() => ({
+const { rpcMock, authState, moduleState } = vi.hoisted(() => ({
   rpcMock: vi.fn(),
   authState: {
     role: "admin_empresa" as string | null,
     empresaId: "company-1" as string | null,
     isMasterAdmin: false,
   },
+  // gestao_materiais on by default - existing tests below all assume the
+  // page itself is reachable (getTraceabilityPermissions.visualizar=true).
+  // locacao_materiais is P1's own new cross-module gate on "Abrir locação".
+  moduleState: { enabledKeys: new Set<string>(["gestao_materiais", "locacao_materiais"]) },
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: rpcMock } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => authState }));
 vi.mock("@/hooks/useCompanyModules", () => ({
-  useCompanyModules: () => ({ hasModule: () => true, isLoading: false }),
+  useCompanyModules: () => ({
+    hasModule: (featureKey: string) => moduleState.enabledKeys.has(featureKey),
+    isLoading: false,
+  }),
 }));
 vi.mock("@/hooks/useModulePermission", () => ({
   useModulePermission: () => ({ permission: null, isLoading: false }),
@@ -117,6 +124,7 @@ describe("RastreabilidadeMateriais", () => {
     authState.role = "admin_empresa";
     authState.empresaId = "company-1";
     authState.isMasterAdmin = false;
+    moduleState.enabledKeys = new Set(["gestao_materiais", "locacao_materiais"]);
   });
   afterEach(() => vi.clearAllMocks());
 
@@ -268,5 +276,80 @@ describe("RastreabilidadeMateriais", () => {
 
     expect(await screen.findByText(/não tem permissão para consultar esta tela/i)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/nome, código, patrimônio/i)).not.toBeInTheDocument();
+  });
+
+  describe("P1: 'Abrir locação' hidden without locacao_materiais", () => {
+    const locadoResumo = {
+      situacao: "locado",
+      custodia_id: "cust-2",
+      custodia_status: "aberta",
+      finalidade: "locacao",
+      retirada_em: "2026-08-14T10:20:00Z",
+      previsao_retorno: null,
+      atrasado: false,
+      retirado_por: "Cliente X",
+      liberado_por: "Alex Sandro",
+      locacao: { locacao_id: "loc-1", locacao_numero: "LOC-001", cliente_nome: "Cliente X" },
+      evento: null,
+      custodias_abertas: [
+        {
+          custodia_id: "cust-2",
+          status: "aberta",
+          finalidade: "locacao",
+          referencia_tipo: "locacao",
+          referencia_id: "loc-1",
+          quantidade_retirada: 5,
+          quantidade_devolvida: 0,
+          quantidade_pendente: 5,
+          retirado_por: "Cliente X",
+          liberado_por: "Alex Sandro",
+          retirada_em: "2026-08-14T10:20:00Z",
+          previsao_retorno: null,
+          localizacao_origem_id: "loc-orig-1",
+          localizacao_origem_nome: "Depósito Central",
+          condicao_saida: "bom",
+          evento: null,
+          locacao: { locacao_id: "loc-1", locacao_numero: "LOC-001", cliente_nome: "Cliente X" },
+        },
+      ],
+      quantidade_total: 5,
+      quantidade_disponivel: 0,
+      quantidade_fora: 5,
+    };
+
+    function renderLocado() {
+      mockRpc({
+        buscar_rastreabilidade_materiais: () => [{ item: searchResult({ resumo: locadoResumo }), total_count: 1 }],
+        obter_rastreabilidade_material: (args) => detailFor(args._material_id as string, locadoResumo),
+      });
+      renderPage();
+      fireEvent.change(screen.getByPlaceholderText(/nome, código, patrimônio/i), {
+        target: { value: "MIC-012" },
+      });
+    }
+
+    it("hides the button when locacao_materiais is inactive", async () => {
+      moduleState.enabledKeys = new Set(["gestao_materiais"]);
+      renderLocado();
+
+      expect(await screen.findByText(/onde está agora/i)).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /abrir locação/i })).not.toBeInTheDocument();
+    });
+
+    it("shows the button when locacao_materiais is active", async () => {
+      renderLocado();
+
+      expect(await screen.findByText(/onde está agora/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /abrir locação loc-001/i })).toBeInTheDocument();
+    });
+
+    it("a linked master_admin sees the button even with locacao_materiais inactive (existing bypass, not a new one)", async () => {
+      authState.isMasterAdmin = true;
+      moduleState.enabledKeys = new Set(["gestao_materiais"]);
+      renderLocado();
+
+      expect(await screen.findByText(/onde está agora/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /abrir locação loc-001/i })).toBeInTheDocument();
+    });
   });
 });

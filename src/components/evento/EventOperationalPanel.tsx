@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { useModuleAccess } from "@/components/ModuleGate";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +34,10 @@ interface Props {
 }
 
 export function EventOperationalPanel({ event, eventDays, teamMembers, files }: Props) {
-  const { hasModule } = useCompanyModules();
-  const hasChecklist = hasModule(MODULE_KEYS.CHECKLIST_TECNICO);
+  // P2 fix: alinhado ao padrão oficial de acesso/bypass de master (useModuleAccess),
+  // igual ao resto do app - hasModule puro não incluía o bypass de master_admin
+  // que todo outro gate de módulo já tem.
+  const { canAccess: hasChecklist } = useModuleAccess(MODULE_KEYS.CHECKLIST_TECNICO);
 
   // Load checklist items if module is active
   const { data: checklistItems = [] } = useQuery({

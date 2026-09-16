@@ -21,6 +21,7 @@ import { MaterialPhotoImage } from "@/components/materials/MaterialPhotoImage";
 import { MaterialQrScanner } from "@/components/materials/MaterialQrScanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCompanyModules } from "@/hooks/useCompanyModules";
+import { useModuleAccess } from "@/components/ModuleGate";
 import { useModulePermission } from "@/hooks/useModulePermission";
 import { MODULE_KEYS } from "@/constants/module-keys";
 import { getTraceabilityPermissions } from "@/lib/material-traceability-permissions";
@@ -146,10 +147,23 @@ function MaterialDetail({
   const onde = buildOndeEstaAgoraSummary(resumo);
   const tone = situacaoBadgeTone(resumo.situacao);
   const activeTag = (rfid_tags ?? []).find((tag) => tag.status === "ativa") ?? null;
+  // P1 fix: "Abrir locação" cross-references locacao_materiais - without the
+  // module the link led to a page ModuleGate then blocks anyway, with no
+  // explanation here. hasModule (not the backend-provided permissoes.locacao)
+  // so this keeps the same master_admin bypass every other gate in the app
+  // already has, instead of the stricter backend-only rule.
+  const { canAccess: canOpenLocacao } = useModuleAccess(MODULE_KEYS.LOCACAO_MATERIAIS);
+  // P2 fix: faltavam estoque/rfid aqui - o disclaimer avisava sobre
+  // custodia/locacao/manutencao incompletos mas nunca sobre histórico de
+  // estoque ou RFID, embora permissoes.estoque/permissoes.rfid já venham do
+  // mesmo RPC (obter_rastreabilidade_material). Mesma ordem que o RPC
+  // retorna em 'permissoes' (estoque, custodia, locacao, manutencao, rfid).
   const missingModules = [
+    !permissoes.estoque && "Controle de Estoque",
     !permissoes.custodia && "Check-in / Check-out",
     !permissoes.locacao && "Locação de Materiais",
     !permissoes.manutencao && "Manutenção de Equipamentos",
+    !permissoes.rfid && "RFID UHF",
   ].filter((label): label is string => Boolean(label));
 
   return (
@@ -173,7 +187,7 @@ function MaterialDetail({
               <DetailField key={linha.label} label={linha.label} value={linha.value} />
             ))}
           </div>
-          {resumo.situacao === "locado" && resumo.locacao && (
+          {canOpenLocacao && resumo.situacao === "locado" && resumo.locacao && (
             <Button asChild size="sm" variant="outline">
               <Link to={`/locacoes?locacao=${resumo.locacao.locacao_id}`}>Abrir locação {resumo.locacao.locacao_numero}</Link>
             </Button>
