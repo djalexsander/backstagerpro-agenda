@@ -27,6 +27,7 @@ import {
   type ActivationFlow,
 } from "@/lib/account-activation-flow";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
+import { getAuthRedirectOrigin } from "@/lib/auth-redirect";
 
 type PageMode = "checking" | "request" | "sent" | "activate" | "success";
 
@@ -179,7 +180,12 @@ export default function PrimeiroAcesso() {
     try {
       const { data, error } = await supabase.functions.invoke(
         "request-account-activation",
-        { body: { email: email.trim().toLowerCase() } },
+        {
+          body: {
+            email: email.trim().toLowerCase(),
+            redirect_origin: getAuthRedirectOrigin(),
+          },
+        },
       );
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

@@ -1,3 +1,5 @@
+import { buildTrustedAuthRedirectUrl } from "./auth-redirect.ts";
+
 export type AccountActivationFlow = "invite" | "recovery";
 
 type AuthenticationMethodReference =
@@ -28,22 +30,16 @@ export function validateActivationPassword(password: unknown): string {
   return password;
 }
 
-export function getActivationRedirectUrl(appUrl: string | undefined): string {
-  if (!appUrl) {
-    throw new Error("APP_URL não configurada para o envio do convite");
-  }
-
-  const parsed = new URL(appUrl);
-  const isLocalhost =
-    parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  if (parsed.protocol !== "https:" && !(isLocalhost && parsed.protocol === "http:")) {
-    throw new Error("APP_URL deve usar HTTPS, exceto em localhost");
-  }
-
-  parsed.pathname = "/primeiro-acesso";
-  parsed.search = "";
-  parsed.hash = "";
-  return parsed.toString();
+export function getActivationRedirectUrl(
+  appUrl: string | undefined,
+  requestedOrigin?: unknown,
+): string {
+  return buildTrustedAuthRedirectUrl(
+    appUrl,
+    requestedOrigin,
+    "/primeiro-acesso",
+    "APP_URL não configurada para o envio do convite",
+  );
 }
 
 // Supabase Auth's AMR (Authentication Method Reference) claim records HOW the

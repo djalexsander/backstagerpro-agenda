@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,17 +13,16 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import {
   CreditCard, QrCode, Copy, ArrowUpCircle, History, CheckCircle, Package,
-  Users, Calendar, Upload, FileCheck, Send, Sparkles, Shield, Gift, Clock,
-  ShoppingCart, X,
+  Users, Calendar, Send, Sparkles, Shield, Gift, Clock,
+  ShoppingCart, X, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ModuleCatalogRow } from "@/types/subscription";
-import { generatePixPayload } from "@/lib/pix";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   getSelfServiceAvailableModules,
   getLifetimeLicensedCatalogModules,
@@ -35,12 +34,162 @@ import {
 } from "@/lib/subscription-license";
 import { expandModuleSelectionWithDependencies } from "@/lib/company-module-entitlements";
 
+type AsaasPayment = Tables<"asaas_payments">;
+type ChargeKind = "renewal" | "modules";
+
+type AsaasCharge = {
+  paymentId: string;
+  amount: number;
+  pixQrCode: string | null;
+  pixCopyPaste: string | null;
+  invoiceUrl: string | null;
+  renewalCompetence: string | null;
+  moduleIds: string[];
+};
+
+const openPaymentStatuses = new Set(["pending", "confirmed", "received", "overdue"]);
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function parseAsaasCharge(value: unknown): AsaasCharge {
+  if (!value || typeof value !== "object") throw new Error("Resposta inválida do Asaas.");
+  const data = value as Record<string, unknown>;
+  if (optionalString(data.error)) throw new Error(data.error as string);
+  const amount = Number(data.amount);
+  if (data.success !== true || !optionalString(data.payment_id) ||
+      !optionalString(data.asaas_payment_id) || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Resposta inválida do Asaas.");
+  }
+  return {
+    paymentId: data.payment_id as string,
+    amount,
+    pixQrCode: optionalString(data.pix_qr_code),
+    pixCopyPaste: optionalString(data.pix_copy_paste),
+    invoiceUrl: optionalString(data.invoice_url),
+    renewalCompetence: optionalString(data.renewal_competence),
+    moduleIds: Array.isArray(data.module_ids)
+      ? data.module_ids.filter((id): id is string => typeof id === "string")
+      : [],
+  };
+}
+
+function chargeFromPayment(payment: AsaasPayment): AsaasCharge | null {
+  if (!payment.asaas_payment_id || !Number.isFinite(Number(payment.amount)) || Number(payment.amount) <= 0) return null;
+  const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
+    ? payment.metadata as Record<string, unknown>
+    : {};
+  return {
+    paymentId: payment.id,
+    amount: Number(payment.amount),
+    pixQrCode: optionalString(payment.pix_qr_code),
+    pixCopyPaste: optionalString(payment.pix_copy_paste),
+    invoiceUrl: optionalString(payment.invoice_url),
+    renewalCompetence: optionalString(metadata.renewal_competence),
+    moduleIds: moduleIdsFromPayment(payment),
+  };
+}
+
+function moduleIdsFromPayment(payment: AsaasPayment): string[] {
+  const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
+    ? payment.metadata as Record<string, unknown>
+    : {};
+  return Array.isArray(metadata.module_ids)
+    ? metadata.module_ids.filter((id): id is string => typeof id === "string")
+    : payment.related_module_id ? [payment.related_module_id] : [];
+}
+
+function findOpenCharge(payments: AsaasPayment[], kind: ChargeKind, moduleIds: string[]): AsaasPayment | undefined {
+  const selectedKey = [...moduleIds].sort().join(",");
+  return payments.find((payment) => {
+    if (payment.payment_type !== kind || !openPaymentStatuses.has(payment.status) ||
+        payment.activation_status === "completed") return false;
+    if (kind === "renewal") return true;
+    const storedIds = moduleIdsFromPayment(payment);
+    return storedIds.length > 0 && [...storedIds].sort().join(",") === selectedKey;
+  });
+}
+
+async function edgeFunctionErrorMessage(error: unknown): Promise<string> {
+  if (error && typeof error === "object") {
+    const context = (error as { context?: { clone?: () => { json: () => Promise<unknown> }; json?: () => Promise<unknown> } }).context;
+    try {
+      const body = await (context?.clone?.() ?? context)?.json?.();
+      if (body && typeof body === "object") {
+        const message = optionalString((body as Record<string, unknown>).error);
+        if (message) return message;
+      }
+    } catch { /* Use the client message below. */ }
+    const message = optionalString((error as { message?: unknown }).message);
+    if (message) return message;
+  }
+  return "Não foi possível preparar a cobrança PIX.";
+}
+
+function AsaasPixDetails({ charge, error, payment, onCopy, onRefresh }: {
+  charge: AsaasCharge | null;
+  error: string | null;
+  payment: AsaasPayment | undefined;
+  onCopy: (payload: string | null) => void;
+  onRefresh: () => void;
+}) {
+  const pixReady = !!charge?.pixQrCode && !!charge.pixCopyPaste;
+  const qrSource = charge?.pixQrCode
+    ? charge.pixQrCode.startsWith("data:")
+      ? charge.pixQrCode
+      : `data:image/png;base64,${charge.pixQrCode}`
+    : null;
+
+  return (
+    <div className="flex flex-col items-center gap-4 py-4">
+      {error && <p role="alert" className="text-sm text-destructive text-center">{error}</p>}
+      {charge && (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Valor Asaas: <strong className="text-foreground">R$ {charge.amount.toFixed(2)}</strong>
+          </p>
+          {charge.renewalCompetence && <p className="text-sm">Competência: {charge.renewalCompetence}</p>}
+          {pixReady && (
+            <>
+              <div className="bg-white p-4 rounded-lg">
+                <img src={qrSource!} alt="QR Code PIX do Asaas" className="w-[220px] h-[220px]" />
+              </div>
+              <div className="w-full space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">PIX copia e cola:</p>
+                <div className="flex gap-2">
+                  <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{charge.pixCopyPaste}</code>
+                  <Button variant="outline" size="icon" aria-label="Copiar PIX" onClick={() => onCopy(charge.pixCopyPaste)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+          {charge.invoiceUrl && (
+            <a href={charge.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline inline-flex items-center gap-1">
+              Abrir cobrança no Asaas <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
+          <p className="text-xs text-muted-foreground text-center">
+            {payment?.activation_status === "completed"
+              ? "Pagamento confirmado pelo Asaas. A liberação foi realizada pelo servidor."
+              : "Aguardando confirmação do Asaas. A liberação será feita automaticamente pelo servidor."}
+          </p>
+          <Button variant="outline" onClick={onRefresh}>Atualizar status</Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function PlanoAssinatura() {
-  const { empresaId } = useAuth();
+  const { empresaId, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const sub = useSubscriptionSummary();
   const { catalog, activeModules, allModules, moduleDependencies } = useCompanyModules();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const chargeRequestInFlightRef = useRef(false);
+  const refreshedPaymentsRef = useRef<Set<string>>(new Set());
 
   const [showPix, setShowPix] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -49,22 +198,31 @@ export default function PlanoAssinatura() {
   const [selectedPlanoId, setSelectedPlanoId] = useState<string | null>(null);
   const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
   const [showBatchSummary, setShowBatchSummary] = useState(false);
-  const [batchObservacao, setBatchObservacao] = useState("");
   const [showModulePix, setShowModulePix] = useState(false);
-  const [submittingBatch, setSubmittingBatch] = useState(false);
+  const [preparingCharge, setPreparingCharge] = useState<ChargeKind | null>(null);
+  const [planCharge, setPlanCharge] = useState<AsaasCharge | null>(null);
+  const [moduleCharge, setModuleCharge] = useState<AsaasCharge | null>(null);
+  const [planChargeError, setPlanChargeError] = useState<string | null>(null);
+  const [moduleChargeError, setModuleChargeError] = useState<string | null>(null);
 
-  // Fetch PIX settings
-  const { data: pixSettings } = useQuery({
-    queryKey: ["pix-settings"],
+  const { data: asaasPayments = [], refetch: refetchAsaasPayments } = useQuery({
+    queryKey: ["asaas-payments", empresaId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("key, value")
-        .like("key", "pix_%");
+      if (!empresaId) return [];
+      const { data, error } = await supabase.from("asaas_payments")
+        .select("*").eq("empresa_id", empresaId).order("created_at", { ascending: false });
       if (error) throw error;
-      const map: Record<string, string> = {};
-      (data || []).forEach((r: any) => { map[r.key] = r.value || ""; });
-      return map;
+      return data as AsaasPayment[];
+    },
+    enabled: !!empresaId,
+    refetchInterval: (query) => {
+      const payments = query.state.data as AsaasPayment[] | undefined;
+      const awaitingConfirmation = [planCharge, moduleCharge].some((charge) => {
+        if (!charge) return false;
+        const payment = payments?.find((row) => row.id === charge.paymentId);
+        return !payment || (openPaymentStatuses.has(payment.status) && payment.activation_status !== "completed");
+      });
+      return showPix || showModulePix || awaitingConfirmation ? 5000 : false;
     },
   });
 
@@ -146,35 +304,10 @@ export default function PlanoAssinatura() {
     enabled: !!empresaId,
   });
 
-  // PIX payload for plan payment
-  const planPixPayload = useMemo(() => {
-    if (!pixSettings || !sub.planoBase) return null;
-    try {
-      return generatePixPayload({
-        chave: pixSettings.pix_chave || "",
-        nomeRecebedor: pixSettings.pix_nome_recebedor || "",
-        cidade: pixSettings.pix_cidade || "",
-        valor: sub.valorTotal,
-      });
-    } catch { return null; }
-  }, [pixSettings, sub.planoBase, sub.valorTotal]);
-
-  // PIX payload for module batch
+  // This is only an on-screen estimate; the RPC prices the batch again.
   const totalSelectedValue = useMemo(() => {
     return catalog.filter(c => selectedModuleIds.has(c.id)).reduce((sum, m) => sum + Number(m.valor), 0);
   }, [catalog, selectedModuleIds]);
-
-  const modulePixPayload = useMemo(() => {
-    if (!pixSettings || totalSelectedValue <= 0) return null;
-    try {
-      return generatePixPayload({
-        chave: pixSettings.pix_chave || "",
-        nomeRecebedor: pixSettings.pix_nome_recebedor || "",
-        cidade: pixSettings.pix_cidade || "",
-        valor: totalSelectedValue,
-      });
-    } catch { return null; }
-  }, [pixSettings, totalSelectedValue]);
 
   // Upgrade plan mutation
   const upgradeMutation = useMutation({
@@ -197,65 +330,130 @@ export default function PlanoAssinatura() {
     onError: () => toast.error("Erro ao solicitar upgrade."),
   });
 
-  const handlePagar = () => setShowPix(true);
+  const refreshBillingState = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["asaas-payments", empresaId] }),
+      queryClient.invalidateQueries({ queryKey: ["empresa-plano", empresaId] }),
+      queryClient.invalidateQueries({ queryKey: ["subscription-empresa", empresaId] }),
+      queryClient.invalidateQueries({ queryKey: ["subscription-plano-base"] }),
+      queryClient.invalidateQueries({ queryKey: ["empresa-modules", empresaId] }),
+      queryClient.invalidateQueries({ queryKey: ["module-batch-requests", empresaId] }),
+    ]);
+  }, [queryClient, empresaId]);
 
-  const copyPix = (payload: string | null) => {
-    if (payload) {
-      navigator.clipboard.writeText(payload);
-      toast.success("Código PIX copiado!");
+  useEffect(() => {
+    for (const charge of [planCharge, moduleCharge]) {
+      if (!charge || refreshedPaymentsRef.current.has(charge.paymentId)) continue;
+      const payment = asaasPayments.find((row) => row.id === charge.paymentId);
+      if (payment?.activation_status !== "completed") continue;
+      refreshedPaymentsRef.current.add(charge.paymentId);
+      void refreshBillingState();
+      void refreshProfile();
+      toast.success("Pagamento confirmado pelo Asaas. Assinatura atualizada.");
+    }
+  }, [asaasPayments, planCharge, moduleCharge, refreshBillingState, refreshProfile]);
+
+  const showPreparedCharge = (kind: ChargeKind, charge: AsaasCharge) => {
+    const missingPix = !charge.pixQrCode || !charge.pixCopyPaste;
+    const message = missingPix
+      ? "A cobrança existe, mas o Asaas não retornou QR Code e código copia e cola completos. Nenhum PIX alternativo foi gerado."
+      : null;
+    if (kind === "renewal") {
+      setPlanCharge(charge);
+      setPlanChargeError(message);
+      setShowPix(true);
+    } else {
+      setModuleCharge(charge);
+      setModuleChargeError(message);
+      setShowBatchSummary(false);
+      setShowModulePix(true);
     }
   };
 
-  // Upload comprovante for plan payment
-  const handleUploadPlanComprovante = async () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*,.pdf";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      if (file.size > 5 * 1024 * 1024) { toast.error("Arquivo muito grande (máx 5MB)"); return; }
-
-      try {
-        const { data: pagamento, error: pagErr } = await supabase
-          .from("pagamentos")
-          .insert({
-            empresa_id: empresaId!,
-            plano_id: empresa?.plano_id || null,
-            valor: sub.valorTotal,
-            status: "pendente",
-            metodo: "pix",
-            descricao: `Mensalidade ${sub.planoBase?.nome || ""} - ${empresa?.nome_empresa || ""}`,
-          })
-          .select("id")
-          .single();
-        if (pagErr) throw pagErr;
-
-        const ext = file.name.split(".").pop();
-        const path = `${empresaId}/${pagamento.id}-comprovante.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("comprovantes").upload(path, file, { upsert: true });
-        if (uploadErr) throw uploadErr;
-
-        await supabase.from("pagamentos").update({ comprovante_path: path } as any).eq("id", pagamento.id);
-
-        await supabase.from("notificacoes_master").insert({
-          empresa_id: empresaId!,
-          tipo: "comprovante_pagamento",
-          mensagem: `${empresa?.nome_empresa} enviou comprovante de mensalidade — R$ ${sub.valorTotal.toFixed(2)}`,
-          dados: { pagamento_id: pagamento.id },
-        });
-
-        queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
-        setShowPix(false);
-        toast.success("Comprovante enviado! Aguarde aprovação.");
-      } catch (err: any) {
-        toast.error(`Erro: ${err.message}`);
-      }
-    };
-    input.click();
+  const reopenStoredCharge = (kind: ChargeKind, payment: AsaasPayment) => {
+    const charge = chargeFromPayment(payment);
+    if (!charge) {
+      toast.error("A cobrança Asaas ainda está sendo preparada. Atualize o status em alguns instantes.");
+      return;
+    }
+    showPreparedCharge(kind, charge);
   };
 
-  const statusColor = (s: string) => s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
+  const prepareCharge = async (kind: ChargeKind) => {
+    if (chargeRequestInFlightRef.current || !empresaId) return;
+    if (kind === "renewal" && planCharge) {
+      const current = asaasPayments.find((payment) => payment.id === planCharge.paymentId);
+      if (!current || (openPaymentStatuses.has(current.status) && current.activation_status !== "completed")) {
+        showPreparedCharge(kind, planCharge);
+        return;
+      }
+    }
+    const moduleIds = kind === "modules" ? [...selectedModuleIds] : [];
+    if (kind === "modules" && moduleIds.length === 0) return;
+
+    chargeRequestInFlightRef.current = true;
+    setPreparingCharge(kind);
+    if (kind === "renewal") setPlanChargeError(null);
+    else setModuleChargeError(null);
+
+    try {
+      if (kind === "modules") {
+        const current = await refetchAsaasPayments();
+        if (current.error) throw current.error;
+        const existing = findOpenCharge(current.data ?? [], kind, moduleIds);
+        if (existing) {
+          const savedCharge = chargeFromPayment(existing);
+          if (savedCharge) {
+            showPreparedCharge(kind, savedCharge);
+            setSelectedModuleIds(new Set());
+          }
+          else throw new Error("Uma cobrança Asaas já está sendo preparada. Aguarde e atualize o status antes de tentar novamente.");
+          return;
+        }
+      }
+
+      const body = kind === "renewal"
+        ? { tipo_cobranca: "renewal" }
+        : { modulo_ids: moduleIds };
+      const { data, error } = await supabase.functions.invoke("create-asaas-charge", { body });
+      if (error) throw new Error(await edgeFunctionErrorMessage(error));
+      const charge = parseAsaasCharge(data);
+      showPreparedCharge(kind, { ...charge, moduleIds: kind === "modules" ? moduleIds : [] });
+      if (kind === "modules") setSelectedModuleIds(new Set());
+      void refreshBillingState();
+    } catch (error) {
+      // A concurrent request may have reserved the same charge before this one.
+      const message = error instanceof Error ? error.message : "Não foi possível preparar a cobrança PIX.";
+      const mayBeDuplicate = kind === "modules" || /active renewal charge already exists/i.test(message);
+      const current = mayBeDuplicate ? await refetchAsaasPayments() : null;
+      const existing = findOpenCharge(current?.data ?? [], kind, moduleIds);
+      const savedCharge = existing && chargeFromPayment(existing);
+      if (savedCharge) {
+        showPreparedCharge(kind, savedCharge);
+        if (kind === "modules") setSelectedModuleIds(new Set());
+      } else {
+        if (kind === "renewal") setPlanChargeError(message);
+        else setModuleChargeError(message);
+        toast.error(message);
+      }
+    } finally {
+      chargeRequestInFlightRef.current = false;
+      setPreparingCharge(null);
+    }
+  };
+
+  const copyPix = async (payload: string | null) => {
+    if (!payload) return;
+    try {
+      await navigator.clipboard.writeText(payload);
+      toast.success("Código PIX copiado!");
+    } catch {
+      toast.error("Não foi possível copiar o código PIX.");
+    }
+  };
+
+  const statusColor = (s: string): "default" | "secondary" | "destructive" =>
+    s === "pago" ? "default" : s === "pendente" ? "secondary" : "destructive";
 
   // A provisioned empresa_modules row is only a placeholder. The canonical
   // entitlement states (active/pending) and in-flight commercial records are
@@ -437,8 +635,8 @@ export default function PlanoAssinatura() {
             ) : (
               <>
                 {!sub.isOnTrial && (
-                  <Button onClick={handlePagar} disabled={!sub.planoBase} size="lg">
-                    <QrCode className="h-4 w-4 mr-2" /> Pagar Mensalidade — R$ {sub.valorTotal.toFixed(2)}
+                  <Button onClick={() => void prepareCharge("renewal")} disabled={!sub.planoBase || !!preparingCharge} size="lg">
+                    <QrCode className="h-4 w-4 mr-2" /> {preparingCharge === "renewal" ? "Preparando cobrança..." : "Pagar Mensalidade"}
                   </Button>
                 )}
                 <Button variant="outline" onClick={() => setShowUpgrade(true)}>
@@ -447,6 +645,7 @@ export default function PlanoAssinatura() {
               </>
             )}
           </div>
+          {planChargeError && !showPix && <p role="alert" className="text-sm text-destructive">{planChargeError}</p>}
         </CardContent>
       </Card>
 
@@ -498,7 +697,7 @@ export default function PlanoAssinatura() {
                       {mod.catalog?.nome || "Módulo"}
                     </p>
                     <div className="flex gap-1">
-                      {(mod as any).trial_granted && (
+                      {mod.trial_granted && (
                         <Badge variant="secondary" className="text-xs gap-1"><Clock className="h-3 w-3" /> Trial</Badge>
                       )}
                       {mod.granted_by_admin && Number(mod.valor_cobrado) === 0 && (
@@ -627,10 +826,10 @@ export default function PlanoAssinatura() {
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="font-bold text-lg text-primary">R$ {totalSelectedValue.toFixed(2)}</p>
-                    <Button onClick={() => { setBatchObservacao(""); setShowBatchSummary(true); }}>
-                      <Send className="h-4 w-4 mr-1" /> Solicitar módulos
+                    <Button onClick={() => setShowBatchSummary(true)} disabled={!!preparingCharge}>
+                      <Send className="h-4 w-4 mr-1" /> Comprar módulos
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setSelectedModuleIds(new Set())}>
+                    <Button variant="ghost" size="icon" onClick={() => setSelectedModuleIds(new Set())} disabled={!!preparingCharge}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -709,6 +908,23 @@ export default function PlanoAssinatura() {
           </TabsList>
 
           <TabsContent value="pagamentos">
+            {asaasPayments.filter((payment) => payment.payment_type === "renewal" || payment.payment_type === "base_plan").map((payment) => (
+              <Card key={payment.id} className="mb-2">
+                <CardContent className="flex items-center justify-between gap-3 py-3 text-sm">
+                  <div>
+                    <p className="font-medium">Cobrança Asaas — R$ {Number(payment.amount).toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                  <Badge variant={payment.activation_status === "completed" ? "default" : "secondary"}>
+                    {payment.activation_status === "completed" ? "Confirmado" : payment.status}
+                  </Badge>
+                  {payment.payment_type === "renewal" && openPaymentStatuses.has(payment.status) && payment.activation_status !== "completed" && (
+                    <Button variant="outline" size="sm" onClick={() => reopenStoredCharge("renewal", payment)}>Ver PIX</Button>
+                  )}
+                  {payment.invoice_url && <a href={payment.invoice_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">Fatura</a>}
+                </CardContent>
+              </Card>
+            ))}
             {pagamentos && pagamentos.length > 0 ? (
               <div className="rounded-md border">
                 <Table>
@@ -718,60 +934,31 @@ export default function PlanoAssinatura() {
                       <TableHead>Valor</TableHead>
                       <TableHead>Método</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Comprovante</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagamentos.map((p: any) => (
+                    {pagamentos.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell>{format(new Date(p.created_at), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
                         <TableCell>R$ {Number(p.valor).toFixed(2)}</TableCell>
                         <TableCell className="uppercase text-xs">{p.metodo}</TableCell>
-                        <TableCell><Badge variant={statusColor(p.status) as any}>{p.status}</Badge></TableCell>
-                        <TableCell>
-                          {p.comprovante_path ? (
-                            <Badge variant="outline" className="gap-1"><FileCheck className="h-3 w-3" /> Enviado</Badge>
-                          ) : p.status === "pendente" ? (
-                            <Button variant="outline" size="sm" className="text-xs" onClick={() => {
-                              const input = document.createElement("input");
-                              input.type = "file";
-                              input.accept = "image/*,.pdf";
-                              input.onchange = async (e) => {
-                                const file = (e.target as HTMLInputElement).files?.[0];
-                                if (!file) return;
-                                const path = `${empresaId}/${p.id}-${file.name}`;
-                                const { error: uploadError } = await supabase.storage.from("comprovantes").upload(path, file, { upsert: true });
-                                if (uploadError) { toast.error("Erro ao enviar comprovante"); return; }
-                                await supabase.from("pagamentos").update({ comprovante_path: path } as any).eq("id", p.id);
-                                await supabase.from("notificacoes_master").insert({
-                                  empresa_id: empresaId!,
-                                  tipo: "comprovante_pagamento",
-                                  mensagem: `${empresa?.nome_empresa} enviou comprovante - R$${Number(p.valor).toFixed(2)}`,
-                                  dados: { comprovante_path: path },
-                                } as any);
-                                queryClient.invalidateQueries({ queryKey: ["pagamentos"] });
-                                toast.success("Comprovante enviado!");
-                              };
-                              input.click();
-                            }}>
-                              <Upload className="h-3 w-3 mr-1" /> Enviar
-                            </Button>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
-                        </TableCell>
+                        <TableCell><Badge variant={statusColor(p.status)}>{p.status}</Badge></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
             ) : (
-              <p className="text-muted-foreground text-center py-6">Nenhum pagamento registrado.</p>
+              asaasPayments.some((payment) => payment.payment_type === "renewal" || payment.payment_type === "base_plan")
+                ? null
+                : <p className="text-muted-foreground text-center py-6">Nenhum pagamento registrado.</p>
             )}
           </TabsContent>
 
           <TabsContent value="solicitacoes">
             {moduleRequests.length > 0 ? (
               <div className="space-y-2">
-                {moduleRequests.map((req: any) => (
+                {moduleRequests.map((req) => (
                   <Card key={req.id}>
                     <CardContent className="flex items-center justify-between py-3">
                       <div>
@@ -789,9 +976,26 @@ export default function PlanoAssinatura() {
           </TabsContent>
 
           <TabsContent value="pgto-modulos">
+            {asaasPayments.filter((payment) => payment.payment_type === "modules").map((payment) => (
+              <Card key={payment.id} className="mb-2">
+                <CardContent className="flex items-center justify-between gap-3 py-3 text-sm">
+                  <div>
+                    <p className="font-medium">Lote Asaas — R$ {Number(payment.amount).toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(payment.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                  <Badge variant={payment.activation_status === "completed" ? "default" : "secondary"}>
+                    {payment.activation_status === "completed" ? "Confirmado" : payment.status}
+                  </Badge>
+                  {openPaymentStatuses.has(payment.status) && payment.activation_status !== "completed" && (
+                    <Button variant="outline" size="sm" onClick={() => reopenStoredCharge("modules", payment)}>Ver PIX</Button>
+                  )}
+                  {payment.invoice_url && <a href={payment.invoice_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">Fatura</a>}
+                </CardContent>
+              </Card>
+            ))}
             {modulePayments.length > 0 ? (
               <div className="space-y-2">
-                {modulePayments.map((pay: any) => (
+                {modulePayments.map((pay) => (
                   <Card key={pay.id}>
                     <CardContent className="flex items-center justify-between py-3">
                       <div>
@@ -805,52 +1009,26 @@ export default function PlanoAssinatura() {
                   </Card>
                 ))}
               </div>
-            ) : <p className="text-muted-foreground text-center py-6">Nenhum pagamento de módulo.</p>}
+            ) : asaasPayments.some((payment) => payment.payment_type === "modules")
+              ? null
+              : <p className="text-muted-foreground text-center py-6">Nenhum pagamento de módulo.</p>}
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* ─── PIX DIALOG (Manual) ─── */}
+      {/* ─── ASAAS RENEWAL PIX ─── */}
       <Dialog open={showPix} onOpenChange={setShowPix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> Pagamento via PIX</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> Renovação via Asaas</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col items-center gap-4 py-4">
-            <p className="text-sm text-muted-foreground">
-              Valor: <strong className="text-foreground">R$ {sub.valorTotal.toFixed(2)}</strong>
-            </p>
-            {planPixPayload && (
-              <>
-                <div className="bg-white p-4 rounded-lg">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(planPixPayload)}`} alt="QR Code PIX" className="w-[220px] h-[220px]" />
-                </div>
-                <Separator />
-                <div className="w-full space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
-                  <div className="flex gap-2">
-                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{planPixPayload}</code>
-                    <Button variant="outline" size="icon" onClick={() => copyPix(planPixPayload)}><Copy className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              </>
-            )}
-            {pixSettings && (
-              <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1 w-full">
-                <p className="font-medium text-foreground">Dados do recebedor:</p>
-                <p><strong>Nome:</strong> {pixSettings.pix_nome_recebedor}</p>
-                <p><strong>Chave ({pixSettings.pix_tipo_chave}):</strong> {pixSettings.pix_chave}</p>
-                <p><strong>Banco:</strong> {pixSettings.pix_banco}</p>
-              </div>
-            )}
-            <Separator />
-            <Button className="w-full" onClick={handleUploadPlanComprovante}>
-              <Upload className="h-4 w-4 mr-2" /> Enviar Comprovante
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Após enviar, o administrador aprovará manualmente e seu acesso será liberado.
-            </p>
-          </div>
+          <AsaasPixDetails
+            charge={planCharge}
+            error={planChargeError}
+            payment={asaasPayments.find((payment) => payment.id === planCharge?.paymentId)}
+            onCopy={(payload) => void copyPix(payload)}
+            onRefresh={() => void refetchAsaasPayments()}
+          />
         </DialogContent>
       </Dialog>
 
@@ -861,7 +1039,7 @@ export default function PlanoAssinatura() {
           <div className="flex-1 overflow-y-auto">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 py-4">
               {planos?.map((plano) => {
-                const periodicidade = (plano as any).periodicidade || "mensal";
+                const periodicidade = plano.periodicidade || "mensal";
                 const sufixo = periodicidade === "vitalicio" ? "" : periodicidade === "anual" ? "/ano" : "/mês";
                 return (
                   <Card
@@ -909,14 +1087,14 @@ export default function PlanoAssinatura() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ─── BATCH MODULE REQUEST DIALOG ─── */}
+      {/* ─── ASAAS MODULE BATCH SUMMARY ─── */}
       <Dialog open={showBatchSummary} onOpenChange={setShowBatchSummary}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" /> Resumo da Solicitação
+              <ShoppingCart className="h-5 w-5" /> Resumo dos módulos
             </DialogTitle>
-            <DialogDescription>Revise os módulos selecionados antes de enviar</DialogDescription>
+            <DialogDescription>Revise os módulos antes de gerar uma única cobrança PIX Asaas.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -928,104 +1106,40 @@ export default function PlanoAssinatura() {
               ))}
               <Separator />
               <div className="flex justify-between items-baseline font-bold">
-                <span>Total</span>
+                <span>Estimativa</span>
                 <span className="text-lg text-primary">R$ {totalSelectedValue.toFixed(2)}</span>
               </div>
             </div>
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground space-y-1">
-              <p>• Os módulos serão ativados após aprovação do administrador</p>
+              <p>• O valor final será calculado pelo servidor e exibido na cobrança Asaas</p>
               <p>• Dependências obrigatórias ausentes são incluídas automaticamente</p>
               <p>• O vencimento seguirá o mesmo ciclo do plano base</p>
-              <p>• Pagamento via PIX com envio de comprovante</p>
+              <p>• A ativação ocorrerá após confirmação do Asaas pelo servidor</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Observação (opcional)</label>
-              <Textarea value={batchObservacao} onChange={(e) => setBatchObservacao(e.target.value)} placeholder="Algo para o administrador..." />
-            </div>
+            {moduleChargeError && <p role="alert" className="text-sm text-destructive">{moduleChargeError}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowBatchSummary(false)}>Cancelar</Button>
-            <Button onClick={async () => {
-              setSubmittingBatch(true);
-              try {
-                const selectedMods = catalog.filter(c => selectedModuleIds.has(c.id));
-                const total = selectedMods.reduce((sum, m) => sum + Number(m.valor), 0);
-
-                const { data, error } = await supabase.rpc(
-                  "request_company_module_batch",
-                  {
-                    _module_ids: selectedMods.map((module) => module.id),
-                    _observacao: batchObservacao || null,
-                  },
-                );
-                if (error) throw error;
-                const batch = data as { id: string };
-
-                const moduleNames = selectedMods.map(m => m.nome).join(", ");
-                await supabase.from("notificacoes_master").insert({
-                  empresa_id: empresaId!,
-                  tipo: "solicitacao_modulos_lote",
-                  mensagem: `${empresa?.nome_empresa} solicitou ${selectedMods.length} módulo(s): ${moduleNames} — R$ ${total.toFixed(2)}`,
-                  dados: { batch_request_id: batch.id, module_count: selectedMods.length, valor_total: total },
-                });
-
-                queryClient.invalidateQueries({ queryKey: ["module-batch-requests"] });
-                setShowBatchSummary(false);
-                setShowModulePix(true);
-                setSelectedModuleIds(new Set());
-                setBatchObservacao("");
-                toast.success("Solicitação enviada! Veja os dados de pagamento.");
-              } catch (err: any) {
-                toast.error(err.message);
-              } finally {
-                setSubmittingBatch(false);
-              }
-            }} disabled={submittingBatch}>
-              {submittingBatch ? "Enviando..." : (
-                <><Send className="h-4 w-4 mr-1" /> Solicitar — R$ {totalSelectedValue.toFixed(2)}</>
-              )}
+            <Button variant="outline" onClick={() => setShowBatchSummary(false)} disabled={!!preparingCharge}>Cancelar</Button>
+            <Button onClick={() => void prepareCharge("modules")} disabled={!!preparingCharge || selectedModuleIds.size === 0}>
+              <Send className="h-4 w-4 mr-1" /> {preparingCharge === "modules" ? "Preparando cobrança..." : "Gerar cobrança PIX"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ─── MODULE PIX DIALOG (Manual) ─── */}
+      {/* ─── ASAAS MODULE PIX ─── */}
       <Dialog open={showModulePix} onOpenChange={setShowModulePix}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> PIX — Módulos Adicionais</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" /> PIX Asaas — Módulos Adicionais</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col items-center gap-4 py-4">
-            <p className="text-sm text-muted-foreground text-center">
-              Valor total: <strong className="text-foreground">R$ {totalSelectedValue.toFixed(2)}</strong>
-            </p>
-            {modulePixPayload && (
-              <>
-                <div className="bg-white p-4 rounded-lg">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(modulePixPayload)}`} alt="QR Code PIX" className="w-[220px] h-[220px]" />
-                </div>
-                <Separator />
-                <div className="w-full space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Código PIX Copia e Cola:</p>
-                  <div className="flex gap-2">
-                    <code className="flex-1 text-xs bg-muted p-3 rounded-md break-all max-h-20 overflow-auto">{modulePixPayload}</code>
-                    <Button variant="outline" size="icon" onClick={() => copyPix(modulePixPayload)}><Copy className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              </>
-            )}
-            {pixSettings && (
-              <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-1 w-full">
-                <p className="font-medium text-foreground">Dados do recebedor:</p>
-                <p><strong>Nome:</strong> {pixSettings.pix_nome_recebedor}</p>
-                <p><strong>Chave ({pixSettings.pix_tipo_chave}):</strong> {pixSettings.pix_chave}</p>
-              </div>
-            )}
-            <Separator />
-            <p className="text-xs text-muted-foreground text-center">
-              Após o pagamento, envie o comprovante na aba "Solicitações" ou aguarde a aprovação do administrador.
-            </p>
-          </div>
+          <AsaasPixDetails
+            charge={moduleCharge}
+            error={moduleChargeError}
+            payment={asaasPayments.find((payment) => payment.id === moduleCharge?.paymentId)}
+            onCopy={(payload) => void copyPix(payload)}
+            onRefresh={() => void refetchAsaasPayments()}
+          />
         </DialogContent>
       </Dialog>
     </div>

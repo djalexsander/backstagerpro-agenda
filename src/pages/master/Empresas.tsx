@@ -36,6 +36,7 @@ import {
   shouldApplyMasterPlanTransition,
 } from "@/lib/master-company-plan-edit";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
+import { getAuthRedirectOrigin } from "@/lib/auth-redirect";
 
 export default function Empresas() {
   const { toast } = useToast();
@@ -259,6 +260,7 @@ export default function Empresas() {
                   email,
                   full_name: fullName,
                   role: roleValue,
+                  redirect_origin: getAuthRedirectOrigin(),
                 },
               });
               if (res.error) {
@@ -299,54 +301,8 @@ export default function Empresas() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Get all event IDs for this empresa
-      const { data: events } = await supabase.from("events").select("id").eq("empresa_id", id);
-      const eventIds = (events || []).map((e: any) => e.id);
-
-      // Delete related data in correct order (FK constraints)
-      if (eventIds.length > 0) {
-        await supabase.from("event_funcionarios").delete().in("event_id", eventIds);
-        await supabase.from("event_files").delete().in("event_id", eventIds);
-        await supabase.from("event_days").delete().in("event_id", eventIds);
-        await supabase.from("financials").delete().in("event_id", eventIds);
-      }
-      await supabase.from("events").delete().eq("empresa_id", id);
-      await supabase.from("funcionarios").delete().eq("empresa_id", id);
-      await supabase.from("backups").delete().eq("empresa_id", id);
-      await supabase.from("generated_documents").delete().eq("empresa_id", id);
-      await supabase.from("document_templates").delete().eq("empresa_id", id);
-      await supabase.from("pagamentos").delete().eq("empresa_id", id);
-      await supabase.from("notificacoes_master").delete().eq("empresa_id", id);
-      await supabase.from("system_logs").delete().eq("empresa_id", id);
-
-      // Remove only this company's memberships. delete-user decides whether
-      // each global Auth identity is now orphaned.
-      const { data: memberships, error: membershipsError } = await supabase
-        .from("empresa_usuarios")
-        .select("user_id")
-        .eq("empresa_id", id);
-      if (membershipsError) throw membershipsError;
-      const userIds = (memberships || []).map((membership) => membership.user_id);
-      if (userIds.length > 0) {
-        for (const uid of userIds) {
-          const { data, error: unlinkError } = await supabase.functions.invoke(
-            "delete-user",
-            {
-              headers: {
-                Authorization: `Bearer ${await supabase.auth.getSession().then(({ data }) => data.session?.access_token ?? "")}`,
-              },
-              body: { user_id: uid, empresa_id: id },
-            },
-          );
-          if (unlinkError) {
-            throw new Error(
-              await getEdgeFunctionErrorMessage(unlinkError, "Erro ao remover usuário"),
-            );
-          }
-          if (data?.error) throw new Error(data.error);
-        }
-      }
-
+      // Tenant-owned rows are removed atomically by database FKs. Global Auth
+      // identities remain intact; profiles.empresa_id is cleared by SET NULL.
       const { error } = await supabase.from("empresas").delete().eq("id", id);
       if (error) throw error;
     },

@@ -84,6 +84,26 @@ describe("secure self-registration", () => {
     ).toThrow(/HTTPS/i);
   });
 
+  it("keeps local signup confirmation on localhost:8080", () => {
+    expect(
+      getSelfRegistrationRedirectUrl(
+        "https://backstagepro-agenda.alexproapps.com.br",
+        "http://localhost:8080",
+      ),
+    ).toBe("http://localhost:8080/escolher-plano");
+  });
+
+  it("falls back to APP_URL for an untrusted requested origin", () => {
+    expect(
+      getSelfRegistrationRedirectUrl(
+        "https://backstagepro-agenda.alexproapps.com.br",
+        "https://attacker.example",
+      ),
+    ).toBe(
+      "https://backstagepro-agenda.alexproapps.com.br/escolher-plano",
+    );
+  });
+
   it("uses keyed, deterministic hashes without retaining the identifier", async () => {
     const secret = "a-secure-test-secret-with-more-than-32-characters";
     const first = await hashRegistrationIdentifier(

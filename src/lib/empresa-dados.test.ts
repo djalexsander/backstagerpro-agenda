@@ -6,9 +6,11 @@ import {
   formatEmpresaCep,
   formatEmpresaCidadeUf,
   formatEmpresaDocumento,
+  formatEmpresaDocumentoInput,
   formatEmpresaEndereco,
   formatEmpresaEnderecoCompleto,
   isCompleteEmpresaCep,
+  isValidCpfCnpj,
   isValidEmpresaDocumento,
   normalizeEmpresaForm,
   type EmpresaDados,
@@ -116,6 +118,25 @@ describe("formatEmpresaDocumento", () => {
     expect(formatEmpresaDocumento("123")).toBe("123");
     expect(formatEmpresaDocumento(null)).toBe("");
     expect(formatEmpresaDocumento(undefined)).toBe("");
+  });
+});
+
+describe("isValidCpfCnpj", () => {
+  it("valida os dígitos verificadores de CPF e CNPJ", () => {
+    expect(isValidCpfCnpj("123.456.789-09")).toBe(true);
+    expect(isValidCpfCnpj("11.222.333/0001-81")).toBe(true);
+    expect(isValidCpfCnpj("123.456.789-00")).toBe(false);
+    expect(isValidCpfCnpj("12.345.678/0001-00")).toBe(false);
+    expect(isValidCpfCnpj("111.111.111-11")).toBe(false);
+  });
+});
+
+describe("formatEmpresaDocumentoInput", () => {
+  it("applies a visual CPF/CNPJ mask while typing and ignores non-digits", () => {
+    expect(formatEmpresaDocumentoInput("12345678909")).toBe("123.456.789-09");
+    expect(formatEmpresaDocumentoInput("12.345.678/0001-90")).toBe("12.345.678/0001-90");
+    expect(formatEmpresaDocumentoInput("12a345b67800019099")).toBe("12.345.678/0001-90");
+    expect(formatEmpresaDocumentoInput("1234")).toBe("123.4");
   });
 });
 

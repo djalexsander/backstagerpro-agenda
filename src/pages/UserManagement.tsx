@@ -24,6 +24,7 @@ import {
   saveUserModulePermissions,
   type ModulePermissionEntry,
 } from "@/lib/user-module-permissions-service";
+import { getAuthRedirectOrigin } from "@/lib/auth-redirect";
 
 export default function UserManagement() {
   const { toast } = useToast();
@@ -145,6 +146,7 @@ export default function UserManagement() {
           email: newEmail,
           full_name: newName,
           perfil: newRole,
+          redirect_origin: getAuthRedirectOrigin(),
         },
       });
       if (error) throw error;

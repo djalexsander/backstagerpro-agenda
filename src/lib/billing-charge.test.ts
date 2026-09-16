@@ -8,6 +8,7 @@ import {
 
 const planId = "123e4567-e89b-42d3-a456-426614174000";
 const moduleId = "223e4567-e89b-42d3-a456-426614174000";
+const secondModuleId = "323e4567-e89b-42d3-a456-426614174000";
 
 describe("Asaas billing security", () => {
   it("accepts exactly one server-resolved resource identifier", () => {
@@ -17,8 +18,19 @@ describe("Asaas billing security", () => {
     });
     expect(validateBillingChargeRequest({ modulo_id: moduleId })).toEqual({
       kind: "modules",
-      resourceId: moduleId,
+      resourceIds: [moduleId],
     });
+    expect(
+      validateBillingChargeRequest({
+        modulo_ids: [moduleId, secondModuleId],
+      }),
+    ).toEqual({
+      kind: "modules",
+      resourceIds: [moduleId, secondModuleId],
+    });
+    expect(
+      validateBillingChargeRequest({ tipo_cobranca: "renewal" }),
+    ).toEqual({ kind: "renewal" });
     expect(() => validateBillingChargeRequest({})).toThrow(/exatamente um/i);
     expect(() =>
       validateBillingChargeRequest({ plano_id: planId, modulo_id: moduleId }),
@@ -26,6 +38,21 @@ describe("Asaas billing security", () => {
     expect(() =>
       validateBillingChargeRequest({ plano_id: planId, modulo_id: null }),
     ).toThrow(/somente plano_id ou modulo_id/i);
+    expect(() =>
+      validateBillingChargeRequest({
+        modulo_id: moduleId,
+        modulo_ids: [secondModuleId],
+      }),
+    ).toThrow(/somente plano_id ou modulo_id/i);
+    expect(() =>
+      validateBillingChargeRequest({
+        tipo_cobranca: "renewal",
+        plano_id: planId,
+      }),
+    ).toThrow(/somente plano_id ou modulo_id/i);
+    expect(() =>
+      validateBillingChargeRequest({ tipo_cobranca: "base_plan" }),
+    ).toThrow(/exatamente 'renewal'/i);
   });
 
   it("rejects browser-controlled amount, description, due date and tenant", () => {
@@ -40,6 +67,12 @@ describe("Asaas billing security", () => {
       expect(() =>
         validateBillingChargeRequest({ plano_id: planId, [field]: "attacker" }),
       ).toThrow(/somente plano_id ou modulo_id/i);
+      expect(() =>
+        validateBillingChargeRequest({
+          tipo_cobranca: "renewal",
+          [field]: "attacker",
+        }),
+      ).toThrow(/somente plano_id ou modulo_id/i);
     }
   });
 
@@ -50,6 +83,25 @@ describe("Asaas billing security", () => {
     expect(() =>
       validateBillingChargeRequest({ modulo_id: "../other-company" }),
     ).toThrow(/válido/i);
+    expect(() =>
+      validateBillingChargeRequest({ modulo_ids: [moduleId, "invalid"] }),
+    ).toThrow(/uuids válidos/i);
+  });
+
+  it("rejects empty, duplicate and oversized module batches", () => {
+    expect(() =>
+      validateBillingChargeRequest({ modulo_ids: [] }),
+    ).toThrow(/ao menos um/i);
+    expect(() =>
+      validateBillingChargeRequest({ modulo_ids: [moduleId, moduleId] }),
+    ).toThrow(/duplicados/i);
+    expect(() =>
+      validateBillingChargeRequest({
+        modulo_ids: Array.from({ length: 51 }, (_, index) =>
+          `123e4567-e89b-42d3-a456-${String(index).padStart(12, "0")}`
+        ),
+      }),
+    ).toThrow(/limite de 50/i);
   });
 
   it("allows only company administrators to create charges", () => {

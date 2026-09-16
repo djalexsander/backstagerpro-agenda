@@ -78,7 +78,8 @@ Deno.serve(async (req) => {
       callerRoles?.map((item) => item.role) ?? [],
     );
 
-    const { email, full_name, empresa_id, perfil } = await req.json();
+    const { email, full_name, empresa_id, perfil, redirect_origin } =
+      await req.json();
     if (typeof email !== "string" || !email.trim()) {
       throw new Error("Email é obrigatório");
     }
@@ -106,7 +107,10 @@ Deno.serve(async (req) => {
 
     const normalizedEmail = email.trim().toLowerCase();
     const displayName = full_name || normalizedEmail;
-    const redirectTo = getActivationRedirectUrl(Deno.env.get("APP_URL"));
+    const redirectTo = getActivationRedirectUrl(
+      Deno.env.get("APP_URL"),
+      redirect_origin,
+    );
 
     let authUser = await findUserByEmail(supabaseAdmin, normalizedEmail);
     let isNewUser = false;

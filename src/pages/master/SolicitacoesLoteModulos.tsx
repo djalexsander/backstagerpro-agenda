@@ -35,9 +35,28 @@ export default function SolicitacoesLoteModulos() {
     },
   });
 
+  const { data: asaasLinks = [], isPending: isLoadingAsaasLinks, isError: asaasLinksError } = useQuery({
+    queryKey: ["master-asaas-module-batch-links"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("asaas_payments")
+        .select("related_batch_request_id")
+        .eq("payment_type", "modules")
+        .not("related_batch_request_id", "is", null);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const linkedBatchIds = new Set(asaasLinks.map((payment) => payment.related_batch_request_id));
+  const isAsaasBatch = (batch: { id: string; payment_method: string | null }) =>
+    batch.payment_method === "asaas" || linkedBatchIds.has(batch.id);
+
   const actionMutation = useMutation({
     mutationFn: async () => {
       if (!actionItem || !actionType) return;
+      if (asaasLinksError || isLoadingAsaasLinks || isAsaasBatch(actionItem)) {
+        throw new Error("Lotes Asaas só podem ser confirmados e ativados pelo webhook.");
+      }
       const now = new Date().toISOString();
 
       if (actionType === "approve") {
@@ -124,8 +143,10 @@ export default function SolicitacoesLoteModulos() {
         </TabsList>
 
         <TabsContent value={tab}>
-          {isLoading ? (
+          {isLoading || isLoadingAsaasLinks ? (
             <p className="text-muted-foreground py-8 text-center">Carregando...</p>
+          ) : asaasLinksError ? (
+            <p role="alert" className="text-destructive py-8 text-center">Não foi possível verificar os lotes Asaas. As ações manuais estão indisponíveis.</p>
           ) : filtered.length === 0 ? (
             <p className="text-muted-foreground py-8 text-center">Nenhuma solicitação encontrada.</p>
           ) : (
@@ -144,6 +165,7 @@ export default function SolicitacoesLoteModulos() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-primary">R$ {Number(batch.valor_total).toFixed(2)}</span>
                         {statusBadge(batch.status)}
+                        {isAsaasBatch(batch) && <Badge variant="outline">Asaas · confirmação automática</Badge>}
                       </div>
                     </div>
 
@@ -167,7 +189,7 @@ export default function SolicitacoesLoteModulos() {
                           <Eye className="h-4 w-4 mr-1" /> Comprovante
                         </Button>
                       )}
-                      {(batch.status === "pending" || batch.status === "paid") && (
+                      {!isAsaasBatch(batch) && (batch.status === "pending" || batch.status === "paid") && (
                         <>
                           <Button size="sm" variant="outline" className="text-green-600" onClick={() => {
                             setActionItem(batch); setActionType("approve"); setAdminObs("");

@@ -133,6 +133,28 @@ export function isValidEmpresaDocumento(digits: string | null): boolean {
   return digits.length === 11 || digits.length === 14;
 }
 
+function calculateDocumentoDigit(base: string, weights: number[]): number {
+  const sum = weights.reduce((total, weight, index) => total + Number(base[index]) * weight, 0);
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
+}
+
+/** Validação fiscal estrita para o fluxo de cobrança: formato e dígitos verificadores. */
+export function isValidCpfCnpj(value: string): boolean {
+  const digits = value.replace(NON_DIGITS, "");
+  if (![11, 14].includes(digits.length) || /^(\d)\1+$/.test(digits)) return false;
+
+  if (digits.length === 11) {
+    const firstDigit = calculateDocumentoDigit(digits.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    const secondDigit = calculateDocumentoDigit(`${digits.slice(0, 9)}${firstDigit}`, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    return digits.endsWith(`${firstDigit}${secondDigit}`);
+  }
+
+  const firstDigit = calculateDocumentoDigit(digits.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const secondDigit = calculateDocumentoDigit(`${digits.slice(0, 12)}${firstDigit}`, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return digits.endsWith(`${firstDigit}${secondDigit}`);
+}
+
 export function isCompleteEmpresaCep(digits: string | null): boolean {
   return digits === null || digits.length === 8;
 }
@@ -158,6 +180,23 @@ export function formatEmpresaDocumento(digits: string | null | undefined): strin
     return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
   }
   return digits;
+}
+
+/** Máscara progressiva para inputs de CPF/CNPJ. Remove qualquer caractere
+ *  não numérico e limita o valor aos 14 dígitos armazenados no banco. */
+export function formatEmpresaDocumentoInput(value: string): string {
+  const digits = value.replace(NON_DIGITS, "").slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3/$4")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, "$1.$2.$3/$4-$5");
 }
 
 /** "12345-678" — devolve o valor cru se não tiver 8 dígitos. */

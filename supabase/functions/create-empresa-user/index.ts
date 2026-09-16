@@ -63,7 +63,8 @@ Deno.serve(async (req) => {
       throw new Error("Acesso negado: apenas master admin");
     }
 
-    const { empresa_id, email, full_name, role } = await req.json();
+    const { empresa_id, email, full_name, role, redirect_origin } =
+      await req.json();
     if (!email || !empresa_id) {
       throw new Error("Email e empresa são obrigatórios");
     }
@@ -71,7 +72,10 @@ Deno.serve(async (req) => {
     const normalizedEmail = email.trim().toLowerCase();
     const displayName = full_name || normalizedEmail;
     const targetRole = normalizeCompanyRole(role);
-    const redirectTo = getActivationRedirectUrl(Deno.env.get("APP_URL"));
+    const redirectTo = getActivationRedirectUrl(
+      Deno.env.get("APP_URL"),
+      redirect_origin,
+    );
     let authUser = await findUserByEmail(supabaseAdmin, normalizedEmail);
     let isNewUser = false;
 

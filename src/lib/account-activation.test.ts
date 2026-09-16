@@ -80,6 +80,39 @@ describe("account activation security", () => {
     );
   });
 
+  it("honors the localhost frontend origin for activation emails", () => {
+    expect(
+      getActivationRedirectUrl(
+        "https://backstagepro-agenda.alexproapps.com.br",
+        "http://localhost:8080",
+      ),
+    ).toBe("http://localhost:8080/primeiro-acesso");
+    expect(
+      getActivationRedirectUrl(
+        "https://backstagepro-agenda.alexproapps.com.br",
+        "http://127.0.0.1:8080",
+      ),
+    ).toBe("http://127.0.0.1:8080/primeiro-acesso");
+  });
+
+  it("uses only the configured production origin or the local development origin", () => {
+    const appUrl = "https://backstagepro-agenda.alexproapps.com.br/app";
+
+    expect(getActivationRedirectUrl(appUrl, appUrl)).toBe(
+      "https://backstagepro-agenda.alexproapps.com.br/primeiro-acesso",
+    );
+    expect(
+      getActivationRedirectUrl(appUrl, "https://attacker.example"),
+    ).toBe(
+      "https://backstagepro-agenda.alexproapps.com.br/primeiro-acesso",
+    );
+    expect(
+      getActivationRedirectUrl(appUrl, "http://localhost:3000"),
+    ).toBe(
+      "https://backstagepro-agenda.alexproapps.com.br/primeiro-acesso",
+    );
+  });
+
   it("always targets /primeiro-acesso on the configured APP_URL host, even if it is a supabase.co domain", () => {
     // APP_URL must be the frontend's own domain. If it is ever misconfigured
     // to the Supabase project URL, this must still resolve to /primeiro-acesso

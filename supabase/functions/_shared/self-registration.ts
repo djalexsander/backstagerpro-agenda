@@ -1,3 +1,5 @@
+import { buildTrustedAuthRedirectUrl } from "./auth-redirect.ts";
+
 export const selfRegistrationGenericMessage =
   "Se o cadastro puder ser iniciado, enviaremos um link de confirmação para o email informado.";
 
@@ -73,25 +75,14 @@ export function validateSelfRegistrationInput(
 
 export function getSelfRegistrationRedirectUrl(
   appUrl: string | undefined,
+  requestedOrigin?: unknown,
 ): string {
-  if (!appUrl) {
-    throw new Error("APP_URL não configurada para confirmação de cadastro");
-  }
-
-  const parsed = new URL(appUrl);
-  const isLocalhost =
-    parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  if (
-    parsed.protocol !== "https:" &&
-    !(isLocalhost && parsed.protocol === "http:")
-  ) {
-    throw new Error("APP_URL deve usar HTTPS, exceto em localhost");
-  }
-
-  parsed.pathname = "/escolher-plano";
-  parsed.search = "";
-  parsed.hash = "";
-  return parsed.toString();
+  return buildTrustedAuthRedirectUrl(
+    appUrl,
+    requestedOrigin,
+    "/escolher-plano",
+    "APP_URL não configurada para confirmação de cadastro",
+  );
 }
 
 export function getRegistrationClientIdentifier(req: Request): string {

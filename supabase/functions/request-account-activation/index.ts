@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email } = await req.json();
+    const { email, redirect_origin } = await req.json();
     const normalizedEmail =
       typeof email === "string" ? email.trim().toLowerCase() : "";
 
@@ -82,7 +82,10 @@ Deno.serve(async (req) => {
             supabaseUrl,
             Deno.env.get("SUPABASE_ANON_KEY")!,
           );
-          const redirectTo = getActivationRedirectUrl(Deno.env.get("APP_URL"));
+          const redirectTo = getActivationRedirectUrl(
+            Deno.env.get("APP_URL"),
+            redirect_origin,
+          );
           const { error: resetError } =
             await publicClient.auth.resetPasswordForEmail(normalizedEmail, {
               redirectTo,

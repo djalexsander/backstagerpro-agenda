@@ -51,7 +51,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const input = validateSelfRegistrationInput(await req.json());
+    const body = await req.json();
+    const input = validateSelfRegistrationInput(body);
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAdmin = createClient(
       supabaseUrl,
@@ -98,6 +99,7 @@ Deno.serve(async (req) => {
 
     const redirectTo = getSelfRegistrationRedirectUrl(
       Deno.env.get("APP_URL"),
+      body.redirect_origin,
     );
     const { data: existingUser, error: existingUserError } =
       await supabaseAdmin

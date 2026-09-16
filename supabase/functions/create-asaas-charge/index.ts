@@ -17,7 +17,7 @@ const ASAAS_API_URL = "https://api.asaas.com/v3";
 
 type PreparedCharge = {
   payment_id: string;
-  payment_type: "base_plan" | "modules";
+  payment_type: "base_plan" | "modules" | "renewal";
   amount: number | string;
   due_date: string;
   empresa_id: string;
@@ -29,6 +29,12 @@ type PreparedCharge = {
   related_batch_request_id: string | null;
   related_plano_id: string | null;
   related_module_id: string | null;
+  renewal_competence?: string | null;
+  base_plan_amount?: number | string | null;
+  modules_amount?: number | string | null;
+  module_count?: number | null;
+  module_ids?: string[] | null;
+  module_set_key?: string | null;
 };
 
 type SupabaseAdmin = ReturnType<typeof createClient>;
@@ -194,17 +200,20 @@ Deno.serve(async (req) => {
     }
 
     const { data: preparation, error: preparationError } =
-      await supabaseAdmin.rpc("prepare_asaas_charge", {
-        _actor_id: user.id,
-        _plan_id:
-          chargeRequest.kind === "base_plan"
-            ? chargeRequest.resourceId
-            : null,
-        _module_id:
-          chargeRequest.kind === "modules"
-            ? chargeRequest.resourceId
-            : null,
-      });
+      chargeRequest.kind === "renewal"
+        ? await supabaseAdmin.rpc("prepare_asaas_renewal_charge", {
+          _actor_id: user.id,
+        })
+        : chargeRequest.kind === "modules"
+        ? await supabaseAdmin.rpc("prepare_asaas_module_batch_charge", {
+          _actor_id: user.id,
+          _module_ids: chargeRequest.resourceIds,
+        })
+        : await supabaseAdmin.rpc("prepare_asaas_charge", {
+          _actor_id: user.id,
+          _plan_id: chargeRequest.resourceId,
+          _module_id: null,
+        });
 
     if (preparationError || !preparation) {
       console.error("Asaas charge preparation failed:", preparationError);
@@ -284,10 +293,19 @@ Deno.serve(async (req) => {
       asaasCustomerId = customerData.id;
     }
 
-    const resourceLabel =
-      prepared.payment_type === "base_plan" ? "Plano" : "Módulo";
+    const resourceLabel = prepared.payment_type === "base_plan"
+      ? "Plano"
+      : prepared.payment_type === "renewal"
+      ? "Renovação"
+      : (prepared.module_count ?? 1) > 1
+      ? "Módulos"
+      : "Módulo";
+    const competenceLabel =
+      prepared.payment_type === "renewal" && prepared.renewal_competence
+        ? ` - competência ${prepared.renewal_competence}`
+        : "";
     const description =
-      `[Backstage Pro] ${resourceLabel} ${prepared.resource_name} - ${prepared.empresa_nome}`;
+      `[Backstage Pro] ${resourceLabel} ${prepared.resource_name}${competenceLabel} - ${prepared.empresa_nome}`;
 
     const chargeResponse = await fetch(`${ASAAS_API_URL}/payments`, {
       method: "POST",
@@ -347,6 +365,20 @@ Deno.serve(async (req) => {
           resource_id: prepared.resource_id,
           resource_name: prepared.resource_name,
           prepared_by: user.id,
+          ...(prepared.payment_type === "renewal"
+            ? {
+              renewal_competence: prepared.renewal_competence,
+              base_plan_amount: prepared.base_plan_amount,
+              modules_amount: prepared.modules_amount,
+              module_count: prepared.module_count,
+            }
+            : prepared.payment_type === "modules"
+            ? {
+              module_ids: prepared.module_ids,
+              module_count: prepared.module_count,
+              module_set_key: prepared.module_set_key,
+            }
+            : {}),
         },
       })
       .eq("id", prepared.payment_id)
@@ -381,6 +413,9 @@ Deno.serve(async (req) => {
         payment_id: prepared.payment_id,
         asaas_payment_id: asaasPaymentId,
         resource_id: prepared.resource_id,
+        module_ids: prepared.module_ids ?? null,
+        payment_type: prepared.payment_type,
+        renewal_competence: prepared.renewal_competence ?? null,
         amount,
         pix_qr_code: pixQrCode,
         pix_copy_paste: pixCopyPaste,

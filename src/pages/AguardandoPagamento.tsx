@@ -34,7 +34,7 @@ export default function AguardandoPagamento() {
     : "Aguardando Pagamento";
 
   const statusDescription = statusPagamento === "pagamento_em_analise"
-    ? "Seu comprovante foi recebido e está sendo analisado. O acesso será liberado automaticamente após a confirmação."
+    ? "Seu pagamento está em análise. O acesso será liberado automaticamente após a confirmação."
     : "Estamos aguardando a confirmação do seu pagamento. Assim que for confirmado, seu acesso será liberado automaticamente.";
 
   return (

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Upload, Globe, Shield, Image, Settings } from "lucide-react";
+import { Save, Upload, Globe, Shield, Image } from "lucide-react";
 import { toast } from "sonner";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,11 +23,6 @@ const SAVEABLE_KEYS = [
   "platform_logo_url",
   "maintenance_mode",
   "update_mode",
-  "pix_tipo_chave",
-  "pix_chave",
-  "pix_nome_recebedor",
-  "pix_cidade",
-  "pix_banco",
 ];
 
 export default function ConfiguracoesSistema() {
@@ -216,79 +211,6 @@ export default function ConfiguracoesSistema() {
                 <Upload className="h-4 w-4 mr-1" />
                 {isUploadingLogo ? "Enviando..." : "Enviar"}
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* PIX */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Settings className="h-5 w-5 text-primary" />
-              Configuração PIX
-            </CardTitle>
-            <CardDescription>Dados para geração de QR Code PIX nas cobranças.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="pix_tipo_chave">Tipo da Chave</Label>
-              <Select
-                value={form.pix_tipo_chave ?? "celular"}
-                onValueChange={(val) => updateField("pix_tipo_chave", val)}
-              >
-                <SelectTrigger id="pix_tipo_chave">
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cpf">CPF</SelectItem>
-                  <SelectItem value="cnpj">CNPJ</SelectItem>
-                  <SelectItem value="celular">Celular</SelectItem>
-                  <SelectItem value="email">E-mail</SelectItem>
-                  <SelectItem value="aleatoria">Chave Aleatória</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pix_chave">Chave PIX</Label>
-              <Input
-                id="pix_chave"
-                value={form.pix_chave ?? ""}
-                onChange={(e) => updateField("pix_chave", e.target.value)}
-                placeholder={
-                  form.pix_tipo_chave === "cpf" ? "000.000.000-00" :
-                  form.pix_tipo_chave === "cnpj" ? "00.000.000/0000-00" :
-                  form.pix_tipo_chave === "email" ? "email@exemplo.com" :
-                  form.pix_tipo_chave === "aleatoria" ? "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :
-                  "+5544999999999"
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pix_nome_recebedor">Nome do Recebedor</Label>
-              <Input
-                id="pix_nome_recebedor"
-                value={form.pix_nome_recebedor ?? ""}
-                onChange={(e) => updateField("pix_nome_recebedor", e.target.value)}
-                placeholder="Backstage Pro Sistemas"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pix_cidade">Cidade</Label>
-              <Input
-                id="pix_cidade"
-                value={form.pix_cidade ?? ""}
-                onChange={(e) => updateField("pix_cidade", e.target.value)}
-                placeholder="Maringá"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pix_banco">Banco</Label>
-              <Input
-                id="pix_banco"
-                value={form.pix_banco ?? ""}
-                onChange={(e) => updateField("pix_banco", e.target.value)}
-                placeholder="Nubank, Itaú, etc."
-              />
             </div>
           </CardContent>
         </Card>

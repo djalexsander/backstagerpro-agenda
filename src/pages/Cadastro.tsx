@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Music, ArrowLeft, MailCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePlatformBranding } from "@/hooks/useSystemSettings";
+import { getAuthRedirectOrigin } from "@/lib/auth-redirect";
 
 export default function Cadastro() {
   const [nomeEmpresa, setNomeEmpresa] = useState("");
@@ -41,6 +42,7 @@ export default function Cadastro() {
           telefone,
           password,
           website,
+          redirect_origin: getAuthRedirectOrigin(),
         },
       });
 
