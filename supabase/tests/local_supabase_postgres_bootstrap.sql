@@ -53,6 +53,7 @@ SET search_path = pg_catalog
 AS $$
   SELECT COALESCE(
     NULLIF(current_setting('request.jwt.claim.role', true), ''),
+    NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'role',
     current_user
   )
 $$;

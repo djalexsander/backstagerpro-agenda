@@ -326,11 +326,11 @@ SELECT is(
     WHERE id = 'a5300000-0000-4000-8000-000000000001'
   ),
   (
-    SELECT vencimento + interval '30 days'
+    SELECT public.next_monthly_due_date(vencimento, EXTRACT(DAY FROM vencimento)::integer)
     FROM renewal_initial_company_state
     WHERE id = 'a5300000-0000-4000-8000-000000000001'
   ),
-  'an early payment extends from the still-future current due date'
+  'an early payment extends by one calendar month, anchored to the same day (data_contrato is unset in this fixture, so the anchor falls back to the cycle-start day)'
 );
 
 SELECT is(
@@ -494,8 +494,11 @@ SELECT is(
     FROM public.empresas
     WHERE id = 'a5300000-0000-4000-8000-000000000002'
   ),
-  (SELECT confirmed_at + interval '30 days' FROM late_confirmation_time),
-  'an overdue renewal expires 30 days after confirmation'
+  (
+    SELECT public.next_monthly_due_date(confirmed_at, EXTRACT(DAY FROM confirmed_at)::integer)
+    FROM late_confirmation_time
+  ),
+  'an overdue renewal expires one calendar month after confirmation (data_contrato unset in this fixture, anchor falls back to confirmation day)'
 );
 
 SELECT is(
