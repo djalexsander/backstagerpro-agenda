@@ -57,6 +57,26 @@ describe("lifetime subscription helpers", () => {
     });
   });
 
+  it("shows Expirado (not Bloqueado) for a paid plan still inside its grace period", () => {
+    expect(getCustomerPlanPresentation({
+      plan: { nome: "Plano Base", periodicidade: "mensal", valor: 99.9 },
+      isOnTrial: false,
+      isLifetime: false,
+      isExpired: true,
+      isReadOnly: false,
+    })).toMatchObject({ status: "Expirado" });
+  });
+
+  it("shows Bloqueado once the grace period is over, even though isExpired is also true", () => {
+    expect(getCustomerPlanPresentation({
+      plan: { nome: "Plano Base", periodicidade: "mensal", valor: 99.9 },
+      isOnTrial: false,
+      isLifetime: false,
+      isExpired: true,
+      isReadOnly: true,
+    })).toMatchObject({ status: "Bloqueado" });
+  });
+
   it("shows trial status and deadline independently from a paid plan", () => {
     expect(getCustomerPlanPresentation({
       plan: null,

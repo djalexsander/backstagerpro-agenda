@@ -119,10 +119,15 @@ export function getCustomerPlanPresentation({
   isReadOnly,
   trialExpiresAt = null,
 }: CustomerPlanPresentationInput): CustomerPlanPresentation {
-  const status = isExpired
-    ? "Expirado"
-    : isReadOnly
-      ? "Bloqueado"
+  // isReadOnly takes precedence: during the post-vencimento grace period a
+  // paid plan is isExpired but NOT isReadOnly (access-control.ts's
+  // inGracePeriod), and should read "Expirado" (a heads-up), not
+  // "Bloqueado" (which is reserved for once the grace period is actually
+  // over and writes are cut).
+  const status = isReadOnly
+    ? "Bloqueado"
+    : isExpired
+      ? "Expirado"
       : plan || isOnTrial
         ? "Ativo"
         : "Sem plano";

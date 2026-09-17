@@ -16,6 +16,7 @@ import type { SubscriptionSummary } from "@/types/subscription";
 import { useMemo } from "react";
 import type { Tables } from "@/integrations/supabase/types";
 import { isLifetimePlan } from "@/lib/subscription-license";
+import { getCompanyAccessState } from "@/lib/access-control";
 
 export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boolean } {
   const { empresaId } = useAuth();
@@ -58,13 +59,16 @@ export function useSubscriptionSummary(): SubscriptionSummary & { isLoading: boo
     const hasPlano = !!empresa?.plano_id;
     const isLifetime = isLifetimePlan(planoBase);
     const isOnTrial = !hasPlano && !!empresa?.trial_expires_at;
-    const isExpired = isLifetime
-      ? false
-      : hasPlano
-        ? !!empresa?.vencimento && new Date(empresa.vencimento) < now
-        : !!empresa?.trial_expires_at && new Date(empresa.trial_expires_at) < now;
-    const isReadOnly =
-      !!empresa?.plano_bloqueado || isExpired || empresa?.status === "inativo";
+    // Shared with AuthContext/ProtectedRoute so /plano's own status badge and
+    // the rest of the app agree on the grace period - see access-control.ts.
+    const access = empresa
+      ? getCompanyAccessState(
+          { ...empresa, plan_periodicity: planoBase?.periodicidade ?? null },
+          now,
+        )
+      : null;
+    const isExpired = access?.expired ?? false;
+    const isReadOnly = access?.blocked ?? false;
 
     // Capacidades consolidadas
     const capabilities = computeConsolidatedCapabilities(planoBase, activeModules);

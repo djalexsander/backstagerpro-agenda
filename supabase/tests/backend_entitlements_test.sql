@@ -46,10 +46,13 @@ VALUES
     now() + interval '30 days', NULL
   ),
   (
+    -- Comfortably past the 3-day grace period (20260917090000), not just
+    -- past the raw vencimento instant - this fixture exists to prove a
+    -- company is blocked once grace is truly over, not merely overdue.
     '22000000-0000-4000-8000-000000000003',
     '__expired_paid__', 'ativo',
     '21000000-0000-4000-8000-000000000001',
-    false, false, 'pago', now() - interval '1 second', NULL
+    false, false, 'pago', now() - interval '10 days', NULL
   ),
   (
     '22000000-0000-4000-8000-000000000004',
@@ -171,9 +174,10 @@ VALUES
     'active', now() + interval '1 day'
   ),
   (
+    -- Same "comfortably past grace" rationale as the company fixture above.
     '22000000-0000-4000-8000-000000000003',
     '23000000-0000-4000-8000-000000000001',
-    'active', now() - interval '1 second'
+    'active', now() - interval '10 days'
   );
 
 SELECT throws_ok(

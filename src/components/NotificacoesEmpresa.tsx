@@ -29,9 +29,15 @@ interface Alerta {
 }
 
 export function NotificacoesEmpresa() {
-  const { empresaId } = useAuth();
+  const { empresaId, role, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
   const today = startOfToday();
+  // Financial/billing status is admin-only content (mensalidade, pagamento,
+  // bloqueio por inadimplência) - a plain "usuario" teammate must not see
+  // it here, mirroring the backend rule already enforced by
+  // criar_notificacao's categoria='financeiro' fan-out for the persisted
+  // notifications below.
+  const canViewBillingAlerts = role === "admin_empresa" || isMasterAdmin;
 
   const { data: events = [] } = useQuery({
     queryKey: ["events-alertas", empresaId],
@@ -178,41 +184,27 @@ export function NotificacoesEmpresa() {
         }
       }
 
-      // Only show vencimento alerts if payment status is not 'pago'
-      const isPago = empresa.status_pagamento === "pago";
-      if (empresa.vencimento && !isPago) {
-        const venc = new Date(empresa.vencimento);
-        const diasVenc = differenceInDays(venc, today);
-        if (diasVenc < 0) {
-          list.unshift({
-            id: "plano-vencido",
-            tipo: "plano_vencido",
-            titulo: "Plano vencido!",
-            descricao: "Seu plano expirou. Realize o pagamento para evitar o bloqueio.",
-            icone: CreditCard,
-            cor: "text-destructive",
-            acao: () => navigate("/plano"),
-          });
-        } else if (diasVenc <= 7) {
-          list.unshift({
-            id: "plano-vencendo",
-            tipo: "plano_vencendo",
-            titulo: `Plano vence em ${diasVenc} dia${diasVenc !== 1 ? "s" : ""}`,
-            descricao: `Vencimento em ${format(venc, "dd/MM/yyyy", { locale: ptBR })}. Renove para evitar bloqueio.`,
-            icone: CreditCard,
-            cor: "text-[hsl(var(--warning))]",
-            acao: () => navigate("/plano"),
-          });
-        }
-      }
+      // Vencimento/carencia/bloqueio-por-inadimplencia alerts used to be
+      // computed here client-side, gated on status_pagamento !== 'pago' -
+      // that condition never becomes true again once a company completes
+      // its first payment, so it silently never fired for a lapsed monthly
+      // renewal (the common case). That whole lifecycle is now handled
+      // server-side by scan_subscription_billing_notifications() via
+      // criar_notificacao(categoria='financeiro'), which already only
+      // fans out to admin_empresa/master_admin (enforced in the DB, not
+      // just hidden here) - those notifications show up in the
+      // `notificacoes` list rendered below.
 
-      // Bloqueio alert
-      if (empresa.plano_bloqueado) {
+      // Bloqueio manual (Master desligou plano_bloqueado diretamente): não
+      // é coberto pelo scan acima (que ignora empresas já com
+      // plano_bloqueado=true) e continua sendo um sinal financeiro -
+      // visível apenas para quem pode agir sobre ele.
+      if (empresa.plano_bloqueado && canViewBillingAlerts) {
         list.unshift({
           id: "empresa-bloqueada",
           tipo: "plano_vencido",
           titulo: "Empresa Bloqueada!",
-          descricao: "Sua empresa foi bloqueada por falta de pagamento. Regularize para continuar.",
+          descricao: "Sua empresa foi bloqueada. Regularize em Plano & Assinatura para continuar.",
           icone: AlertTriangle,
           cor: "text-destructive",
           acao: () => navigate("/plano"),
@@ -221,7 +213,7 @@ export function NotificacoesEmpresa() {
     }
 
     return list;
-  }, [events, empresa, today, navigate]);
+  }, [events, empresa, today, navigate, canViewBillingAlerts]);
 
   const alertas = allAlertas.filter((a) => !dismissed.has(a.id));
 

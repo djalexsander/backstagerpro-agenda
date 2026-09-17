@@ -432,6 +432,26 @@ Deno.serve(async (req) => {
       results.push({ empresa: empresa.nome_empresa, dias: diffDays, tipo });
     }
 
+    // Ciclo de vencimento/carencia/bloqueio da PROPRIA assinatura Backstage
+    // Pro, agora tambem visivel para admin_empresa (nao so para o Master
+    // acima): scan_subscription_billing_notifications() classifica cada
+    // empresa paga em vencendo/vence_hoje/carencia/bloqueada e chama
+    // criar_notificacao(categoria='financeiro'), cujo fan-out ja restringe
+    // a admin_empresa/master_admin (ver
+    // 20260917090000_subscription_grace_period_and_billing_notifications.sql
+    // e push_notifications_test.sql secao 2d). Complementa, nao substitui,
+    // o bloco notificacoes_master acima (esse continua so para o Master).
+    const { data: billingNotifications, error: billingError } = await supabase.rpc(
+      "scan_subscription_billing_notifications",
+    );
+    if (billingError) {
+      console.error("Error scanning subscription billing notifications:", billingError);
+    } else {
+      for (const row of (billingNotifications ?? []) as { empresa_id: string; tipo: string; dias: number }[]) {
+        results.push({ empresa: row.empresa_id, dias: row.dias, tipo: row.tipo });
+      }
+    }
+
     // Push Notifications Fase 1, itens 5/7/8/12: alertas baseados em tempo
     // (nada "acontece" no banco no instante do vencimento, entao nao ha
     // gatilho possivel - so varredura). Cada funcao chama criar_notificacao
